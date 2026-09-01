@@ -1,0 +1,492 @@
+;; Events and event series.
+;;
+;; # An occurrence is an event
+;;
+;; A series does not exist alongside its occurrences as a second kind of
+;; thing the UI has to special-case. A series is a RULE plus the template
+;; fields; the occurrences it produces are ordinary rows in the same event
+;; table, carrying `series_id`. That is what "they look just like events"
+;; means literally: attendance, the start-time lock, search by time and
+;; search by place all work on one shape, and no code path has to ask
+;; whether the event in hand came from a rule.
+;;
+;; The api materializes occurrences out to a bounded horizon and extends
+;; that horizon on demand (EventService/expand-series). An open-ended series
+;; is therefore finite on disk at all times.
+;;
+;; # Attendance is per occurrence
+;;
+;; A person joins a GATHERING, then marks attendance on individual EVENTS.
+;; There is deliberately no way to mark attendance on a series: committing
+;; to every future instance of an open-ended rule is not something a person
+;; can honestly do, so each occurrence is answered on its own.
+;;
+;; # Times are UTC
+;;
+;; Every instant here — starts_at, ends_at, starts_on, ends_on — is UTC. A
+;; `timezone` is for display and for entry, never an offset folded into a
+;; stored time. The one exception is EventSeries.start_time, which is not an
+;; instant at all; see the note on that field.
+;;
+;; # The start-time lock
+;;
+;; The moment `starts_at` passes, an event freezes: no field can be edited,
+;; attendance cannot be added or withdrawn, and `description` reads as
+;; absent for EVERY caller, admins included. `locked` says so explicitly so
+;; a client does not have to compare clocks with the server to find out.
+;;
+;; Does not include common.csil — see the note at the top of that file.
+
+;;; A day of the week, spelled in English regardless of the caller's locale
+;;; — this is a wire value, not display text. The UI translates it.
+Weekday = "monday" / "tuesday" / "wednesday" / "thursday" / "friday" / "saturday" / "sunday"
+
+;;; The period a recurrence rule repeats over.
+RecurrenceFreq = "weekly" / "monthly" / "quarterly" / "yearly"
+
+;;; When a series happens. One rule per series; a gathering that needs
+;;; "every second Thursday" AND "every fourth Wednesday" holds two series,
+;;; which is why multiple series in one gathering is the normal case rather
+;;; than an edge case.
+;;;
+;;; The three worked examples from the domain:
+;;;
+;;;   every second Thursday   -> freq monthly,   interval 1, ordinal 2,  weekday thursday
+;;;   every fourth Wednesday  -> freq monthly,   interval 1, ordinal 4,  weekday wednesday
+;;;   first Saturday of the quarter
+;;;                           -> freq quarterly, interval 1, ordinal 1,  weekday saturday
+;;;
+;;; "Every other Thursday" is the weekly form instead: freq weekly,
+;;; interval 2, weekday thursday. The ordinal reading of "every second
+;;; Thursday" (the 2nd Thursday of each month) and the interval reading
+;;; (every 14 days) are both expressible, and they are different rules.
+RecurrenceRule = {
+    freq: RecurrenceFreq,
+
+    ;;; Repeat every N periods. 1 means every period. Zero is read as 1.
+    interval: uint,
+
+    ;;; Which weekday the occurrence lands on. Required for every freq
+    ;;; except a monthly rule that uses `day_of_month` instead.
+    ? weekday: Weekday,
+
+    ;;; Which occurrence of `weekday` within the period: 1 through 5, or -1
+    ;;; for the last one. Required for monthly, quarterly and yearly rules
+    ;;; that use `weekday`; meaningless for weekly rules, which have exactly
+    ;;; one of each weekday per period.
+    ;;;
+    ;;; An ordinal of 5 in a period that has only four of that weekday
+    ;;; produces no occurrence for that period. It is not an error and it is
+    ;;; not rounded down to the fourth — a rule that says "the fifth
+    ;;; Thursday" means the fifth one.
+    ? ordinal: int,
+
+    ;;; Day of the month, 1-31, as an alternative to weekday + ordinal.
+    ;;; A day past the end of a short month produces no occurrence for that
+    ;;; month, for the same reason.
+    ? day_of_month: uint
+}
+
+;;; Where an in-person event is. Every field is optional so a location can
+;;; be as vague as a city or as exact as a street address; the server only
+;;; insists that an in-person event have SOMETHING here.
+;;;
+;;; Coordinates drive proximity search. They are plain columns compared as
+;;; numbers, not a geometry type, because the same schema has to run on
+;;; SQLite as well as Postgres — see docs/OPERATING.md.
+Location = {
+    ;;; Name of the venue ("Ada Lovelace Library").
+    name: text .size (0..200),
+
+    ;;; Street address, one line.
+    address: text .size (0..300),
+
+    ;;; City or town.
+    locality: text .size (0..120),
+
+    ;;; State, province or equivalent.
+    region: text .size (0..120),
+
+    postal_code: text .size (0..32),
+
+    ;;; ISO 3166-1 alpha-2, uppercase.
+    country: text .size (0..2),
+
+    ? latitude: float,
+
+    ? longitude: float
+}
+
+;;; One event: a single dated thing, whether it stands alone or is an
+;;; occurrence of a series.
+Event = {
+    @receive-only
+    id: EventID,
+
+    @receive-only
+    gathering_id: GatheringID,
+
+    ;;; The series this occurrence came from, absent for a standalone event.
+    @receive-only
+    ? series_id: EventSeriesID,
+
+    title: text .size (1..200),
+
+    ;;; Absent once the event has started — see the start-time lock above.
+    ;;; Absent and empty are the same thing to a reader, which is why the
+    ;;; lock can be implemented by simply not sending it.
+    ? description: text .size (0..10000),
+
+    ;;; An event can be online, in person, or both. At least one must be
+    ;;; true, and in-person requires a location.
+    is_online: bool,
+
+    is_in_person: bool,
+
+    ;;; Where to attend online. Withheld exactly as `description` is once
+    ;;; the event has started.
+    ? online_url: text .size (0..2000),
+
+    ? location: Location,
+
+    starts_at: timestamp,
+
+    ends_at: timestamp,
+
+    ;;; IANA name of the zone the event was scheduled in ("America/Denver").
+    ;;; `starts_at` is the authoritative instant; this is what a UI needs to
+    ;;; say "7pm local" and mean the organizer's local, not the reader's.
+    timezone: text .size (1..64),
+
+    ;;; True once `starts_at` has passed. Frozen: no edits, no attendance
+    ;;; change, no description.
+    @receive-only
+    locked: bool,
+
+    @receive-only
+    attendee_count: uint,
+
+    @receive-only
+    viewer_attending: bool,
+
+    ;;; Which domain owns this. Always shown, so a familiar name that
+    ;;; belongs to somebody else cannot be mistaken for a local one.
+    @receive-only
+    origin: Origin,
+
+    @receive-only
+    viewer: ViewerContext,
+
+    @receive-only
+    created_at: timestamp,
+
+    @receive-only
+    updated_at: timestamp
+}
+
+;;; A recurring set of events: the template fields, plus the rule, plus the
+;;; window the rule applies over. Editing a series rewrites its future
+;;; occurrences and leaves started ones alone — a started event is frozen,
+;;; and being produced by a rule does not exempt it.
+EventSeries = {
+    @receive-only
+    id: EventSeriesID,
+
+    @receive-only
+    gathering_id: GatheringID,
+
+    title: text .size (1..200),
+
+    description: text .size (0..10000),
+
+    is_online: bool,
+
+    is_in_person: bool,
+
+    ? online_url: text .size (0..2000),
+
+    ? location: Location,
+
+    recurrence: RecurrenceRule,
+
+    ;;; First date the rule may produce an occurrence on, as a UTC instant
+    ;;; at midnight of the local date.
+    starts_on: timestamp,
+
+    ;;; Last date the rule may produce an occurrence on. Absent means the
+    ;;; series is open-ended, and the api keeps a bounded horizon
+    ;;; materialized rather than an infinite one.
+    ? ends_on: timestamp,
+
+    ;;; Local clock time each occurrence begins, "HH:MM" on a 24-hour clock,
+    ;;; interpreted in `timezone`.
+    ;;;
+    ;;; WHY THIS IS NOT UTC, when every other time in tinku is: this pair is
+    ;;; the RULE, not a time. "The second Thursday at 19:00 in Denver" is
+    ;;; 01:00 UTC in September and 02:00 UTC in November — one rule, two UTC
+    ;;; answers — so holding it as UTC would make it wrong twice a year. The
+    ;;; instants the rule PRODUCES are stored in UTC like everything else.
+    start_time: text .size (5..5) .regex "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+
+    ;;; How long each occurrence runs.
+    duration_minutes: uint,
+
+    timezone: text .size (1..64),
+
+    ;;; How many occurrences are materialized right now.
+    @receive-only
+    occurrence_count: uint,
+
+    ;;; When the next occurrence that has not started begins. Absent for a
+    ;;; series whose materialized occurrences have all started.
+    @receive-only
+    ? next_occurrence_at: timestamp,
+
+    ;;; Which domain owns this. Always shown, so a familiar name that
+    ;;; belongs to somebody else cannot be mistaken for a local one.
+    @receive-only
+    origin: Origin,
+
+    @receive-only
+    viewer: ViewerContext,
+
+    @receive-only
+    created_at: timestamp,
+
+    @receive-only
+    updated_at: timestamp
+}
+
+;;; A role held on one event or on one series. Ownership is not here: owners
+;;; are a property of the GATHERING and reach every event under it.
+;;;
+;;; A presenter carries exactly a member's permissions today. The role is
+;;; stored anyway because who presents is information the gathering wants to
+;;; show, and because giving presenters their own permissions later should
+;;; not need a migration.
+EventRole = "organizer" / "presenter"
+
+;;; One person holding a role on an event or a series.
+EventRoleAssignment = {
+    @receive-only
+    ? event_id: EventID,
+
+    @receive-only
+    ? series_id: EventSeriesID,
+
+    @receive-only
+    user_id: UserID,
+
+    @receive-only
+    handle: text,
+
+    @receive-only
+    linkkeys_domain: text,
+
+    @receive-only
+    display_name: text,
+
+    @receive-only
+    role: EventRole,
+
+    @receive-only
+    assigned_at: timestamp
+}
+
+;;; One person who said they are attending.
+Attendee = {
+    @receive-only
+    user_id: UserID,
+
+    @receive-only
+    handle: text,
+
+    @receive-only
+    linkkeys_domain: text,
+
+    @receive-only
+    display_name: text,
+
+    @receive-only
+    marked_at: timestamp
+}
+
+CreateEventRequest = {
+    gathering_id: GatheringID,
+    title: text .size (1..200),
+    description: text .size (0..10000),
+    is_online: bool,
+    is_in_person: bool,
+    ? online_url: text .size (0..2000),
+    ? location: Location,
+    starts_at: timestamp,
+    ends_at: timestamp,
+    timezone: text .size (1..64)
+}
+
+;;; Change an event. Absent fields are left alone. Refused once the event
+;;; has started.
+UpdateEventRequest = {
+    id: EventID,
+    ? title: text .size (1..200),
+    ? description: text .size (0..10000),
+    ? is_online: bool,
+    ? is_in_person: bool,
+    ? online_url: text .size (0..2000),
+    ? location: Location,
+    ? starts_at: timestamp,
+    ? ends_at: timestamp,
+    ? timezone: text .size (1..64)
+}
+
+GetEventRequest = {
+    id: EventID
+}
+
+;;; Destroy one event. A gathering owner or an event organizer may delete an
+;;; event that has not started. An event that HAS started is history, and
+;;; only an admin can remove history.
+DeleteEventRequest = {
+    id: EventID
+}
+
+;;; List events, newest start first for past windows and soonest first for
+;;; future ones. With no time bounds the api returns events that have not
+;;; ended, which is what a calendar view wants.
+ListEventsRequest = {
+    ? gathering_id: GatheringID,
+
+    ;;; Only events starting at or after this instant.
+    ? starts_after: timestamp,
+
+    ;;; Only events starting at or before this instant.
+    ? starts_before: timestamp,
+
+    ;;; Only events the caller has marked attendance on. Requires a session.
+    ? attending_only: bool,
+
+    ;;; Include events that have already started. Off by default.
+    ? include_started: bool,
+
+    ? page: Page
+}
+
+EventList = {
+    events: [* Event],
+    total: uint
+}
+
+CreateEventSeriesRequest = {
+    gathering_id: GatheringID,
+    title: text .size (1..200),
+    description: text .size (0..10000),
+    is_online: bool,
+    is_in_person: bool,
+    ? online_url: text .size (0..2000),
+    ? location: Location,
+    recurrence: RecurrenceRule,
+    starts_on: timestamp,
+    ? ends_on: timestamp,
+    start_time: text .size (5..5) .regex "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+    duration_minutes: uint,
+    timezone: text .size (1..64)
+}
+
+;;; Change a series. Rewrites every occurrence that has not started; the
+;;; ones that have are left exactly as they are.
+UpdateEventSeriesRequest = {
+    id: EventSeriesID,
+    ? title: text .size (1..200),
+    ? description: text .size (0..10000),
+    ? is_online: bool,
+    ? is_in_person: bool,
+    ? online_url: text .size (0..2000),
+    ? location: Location,
+    ? recurrence: RecurrenceRule,
+    ? starts_on: timestamp,
+    ? ends_on: timestamp,
+    ? start_time: text .size (5..5) .regex "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+    ? duration_minutes: uint,
+    ? timezone: text .size (1..64)
+}
+
+GetEventSeriesRequest = {
+    id: EventSeriesID
+}
+
+;;; Destroy a series and every one of its occurrences that has not started.
+;;; Occurrences that have started survive, detached from the rule, because
+;;; they are history and deleting history is an admin's power alone.
+DeleteEventSeriesRequest = {
+    id: EventSeriesID
+}
+
+ListEventSeriesRequest = {
+    ? gathering_id: GatheringID,
+    ? page: Page
+}
+
+EventSeriesList = {
+    series: [* EventSeries],
+    total: uint
+}
+
+;;; Materialize this series' occurrences out to `through`, then return every
+;;; occurrence it now has. Idempotent: occurrences already on disk are left
+;;; alone, so calling this twice does not duplicate anything.
+ExpandEventSeriesRequest = {
+    series_id: EventSeriesID,
+
+    ;;; How far to materialize. Clamped to the api's maximum horizon.
+    ? through: timestamp
+}
+
+;;; Mark the caller as attending. Requires membership of the event's
+;;; gathering, and refused once the event has started. Idempotent.
+AttendEventRequest = {
+    event_id: EventID
+}
+
+;;; Withdraw the caller's attendance. Refused once the event has started.
+;;; Idempotent.
+UnattendEventRequest = {
+    event_id: EventID
+}
+
+ListAttendeesRequest = {
+    event_id: EventID,
+    ? page: Page
+}
+
+AttendeeList = {
+    event_id: EventID,
+    attendees: [* Attendee],
+    total: uint
+}
+
+;;; Give someone a role on one event or one series. Exactly one of
+;;; `event_id` and `series_id` must be set. Gathering owners only.
+;;; Idempotent.
+SetEventRoleRequest = {
+    ? event_id: EventID,
+    ? series_id: EventSeriesID,
+    user_id: UserID,
+    role: EventRole
+}
+
+;;; Take a role away. Exactly one of `event_id` and `series_id` must be set.
+RemoveEventRoleRequest = {
+    ? event_id: EventID,
+    ? series_id: EventSeriesID,
+    user_id: UserID,
+    role: EventRole
+}
+
+ListEventRolesRequest = {
+    ? event_id: EventID,
+    ? series_id: EventSeriesID
+}
+
+EventRoleList = {
+    roles: [* EventRoleAssignment]
+}

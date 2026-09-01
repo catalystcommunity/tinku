@@ -1,0 +1,126 @@
+;; The global admin role.
+;;
+;; Admin is deliberately thin. It is not a super-user that owns everything;
+;; it is the answer to one question — who may destroy a record that other
+;; people's records point at. Admins are the only ones who can delete an
+;; organization, and the only ones who can delete an event that has already
+;; started. Everything else an admin can do, some owner can also do.
+;;
+;; The first admin cannot be granted through this service, because there is
+;; nobody to grant it. Bootstrap one from the command line instead:
+;; `tinku admin grant <handle>` — see docs/OPERATING.md.
+;;
+;; Does not include common.csil — see the note at the top of that file.
+
+;;; A person holding the global admin role.
+AdminUser = {
+    @receive-only
+    user_id: UserID,
+
+    @receive-only
+    handle: text,
+
+    @receive-only
+    linkkeys_domain: text,
+
+    @receive-only
+    display_name: text,
+
+    @receive-only
+    granted_at: timestamp
+}
+
+AdminList = {
+    admins: [* AdminUser]
+}
+
+;;; Grant or revoke the global admin role. Admins only. Revoking the last
+;;; admin is refused: a deployment with no admin has no way to delete an
+;;; organization and no way to make an admin again.
+SetAdminRequest = {
+    user_id: UserID,
+
+    ;;; True to grant, false to revoke.
+    granted: bool
+}
+
+;;; Look a person up by their federated address, so an admin can grant the
+;;; role without having to learn a ULID first.
+FindUserRequest = {
+    handle: text .size (1..64),
+    domain: text .size (1..253)
+}
+
+;;; A person, as an admin or a roster editor sees them.
+UserRef = {
+    @receive-only
+    user_id: UserID,
+
+    @receive-only
+    handle: text,
+
+    @receive-only
+    linkkeys_domain: text,
+
+    @receive-only
+    display_name: text,
+
+    @receive-only
+    is_admin: bool
+}
+
+UserRefList = {
+    users: [* UserRef]
+}
+
+;;; Search people by handle prefix, so member pickers can offer completions.
+SearchUsersRequest = {
+    query: text .size (1..64),
+    ? page: Page
+}
+
+;;; Settings an administrator changes while the service runs. They live in
+;;; the database rather than the environment, so a change needs no restart
+;;; and every replica sees the same value.
+InstanceSettings = {
+    ;;; What a gathering publishes when nothing below has said otherwise.
+    ;;; Defaults to `in`: an instance that has switched federation on and
+    ;;; approved a directory has already made the interesting choice.
+    publish_default: PublishSetting,
+
+    ;;; Whether an organization may override the instance default.
+    organization_override_allowed: bool,
+
+    ;;; Whether a gathering may override what is above it.
+    gathering_override_allowed: bool,
+
+    ;;; How long a directory keeps what a peer sent, after the event ends.
+    ;;; Zero keeps everything.
+    retention_days: uint,
+
+    ;;; How many events one peer may have accepted per minute. Zero means no
+    ;;; limit. A peer that exceeds it has the rest of its batch refused,
+    ;;; which is what stops a peer that has lost control of itself from
+    ;;; filling this instance's directory.
+    peer_rate_limit_per_minute: uint,
+
+    ;;; How many events one ORGANIZATION inside a peer may have accepted per
+    ;;; minute. Zero means no limit.
+    ;;;
+    ;;; The limit exists at both levels because a peer's allowance is
+    ;;; shared. Without this one, a single organization inside a peer can
+    ;;; spend the whole budget, and that peer's other organizations are then
+    ;;; refused for something they did not do. Set it below the peer limit
+    ;;; or it has no effect.
+    origin_rate_limit_per_minute: uint
+}
+
+;;; Change one or more settings. An absent field is left alone.
+UpdateInstanceSettingsRequest = {
+    ? publish_default: PublishSetting,
+    ? organization_override_allowed: bool,
+    ? gathering_override_allowed: bool,
+    ? retention_days: uint,
+    ? peer_rate_limit_per_minute: uint,
+    ? origin_rate_limit_per_minute: uint
+}

@@ -1,0 +1,18 @@
+# The marketing site has its own workflow and its own paths filter, so a
+# change to the API does not pay for a PySocha run and a change to the site
+# does not pay for the Go and web suites.
+id: tinku-pr-website
+name: Tinku PR website
+description: "Rebuild the marketing site and check the committed output matches."
+on:
+  events:
+    - pull_request_opened
+    - pull_request_updated
+  branches:
+    - main
+paths:
+  include:
+    - "website/**"
+jobs:
+  website:
+    job_file: website.yaml

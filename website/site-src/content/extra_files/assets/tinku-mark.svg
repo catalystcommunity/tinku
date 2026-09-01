@@ -1,0 +1,10 @@
+<!--
+  Two rings meeting: "tinku" is a Quechua word for an encounter, the place
+  where two things come together. It reads at 32px and it is one file with
+  no bitmap, so it works as a favicon and as page furniture.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Tinku">
+  <circle cx="24" cy="32" r="15" fill="none" stroke="#c04058" stroke-width="5"/>
+  <circle cx="40" cy="32" r="15" fill="none" stroke="#e0445f" stroke-width="5" opacity="0.85"/>
+  <circle cx="32" cy="32" r="3.5" fill="#c04058"/>
+</svg>

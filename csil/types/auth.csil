@@ -1,0 +1,64 @@
+;; Types for AuthService and DevAuthService — linkkeys-backed login.
+;;
+;; Flow: the SPA calls begin-login with the linkkeys domain the user is
+;; authenticating against. The api asks its relying-party (RP) sidecar to
+;; sign an auth request bound to a self-verifying nonce, and returns the IDP
+;; URL for the SPA to open. The IDP redirects the browser back to the
+;; HTTP-native `GET /auth/callback` route (an IDP can only redirect a
+;; browser to a plain GET URL, never POST a CSIL-RPC envelope), which
+;; decrypts and verifies the assertion, upserts the `users` row, and mints
+;; tinku's own session cookie. whoami then reflects that cookie.
+;;
+;; Does not include common.csil — see the note at the top of that file.
+
+;;; Who a `users` row represents. `human` is a linkkeys-authenticated
+;;; person; `system` is a non-interactive actor.
+UserKind = "human" / "system"
+
+;;; Request to start a login: the linkkeys domain half of the user's
+;;; `user@domain` identity, so the api knows which IDP to redirect to.
+BeginLoginRequest = {
+    ;;; The linkkeys domain to authenticate against (e.g. "todandlorna.com").
+    domain: text .size (1..253)
+}
+
+;;; Where the SPA must navigate the browser to continue the login flow. The
+;;; signed request inside this URL carries the self-verifying nonce.
+BeginLoginResponse = {
+    ;;; Absolute URL of the identity provider's authorize page.
+    redirect_url: text
+}
+
+;;; The caller's own profile, as returned by whoami. Every field is
+;;; server-derived, so the whole shape is receive-only.
+UserProfile = {
+    @receive-only
+    id: UserID,
+
+    @receive-only
+    linkkeys_domain: text,
+
+    @receive-only
+    handle: text,
+
+    @receive-only
+    display_name: text,
+
+    @receive-only
+    kind: UserKind,
+
+    @receive-only
+    created_at: timestamp
+}
+
+;;; Request to mint a session without an identity assertion. DevAuthService
+;;; refuses every call unless TINKU_ENV is dev or nonprod AND
+;;; TINKU_DEV_AUTH_ENABLED is true, so this cannot be reached in
+;;; production even though it is declared in the same schema.
+DevLoginRequest = {
+    ;;; The handle to log in as. The user is created on first use.
+    handle: text .size (1..64) .regex "^[a-z0-9]+(-[a-z0-9]+)*$",
+
+    ;;; The linkkeys domain to attribute the fake identity to.
+    domain: text .size (1..253)
+}

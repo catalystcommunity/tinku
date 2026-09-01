@@ -1,0 +1,17 @@
+# The version file is the release trigger. A change to the copy or to the
+# styles goes to main without a deploy; a deploy happens when somebody
+# raises the version.
+id: tinku-website-deploy
+name: Tinku website deploy
+description: "Deploy the marketing site when its version changes."
+on:
+  events:
+    - push
+  branches:
+    - main
+paths:
+  include:
+    - "website/VERSION.txt"
+jobs:
+  website-deploy:
+    job_file: website-deploy.yaml

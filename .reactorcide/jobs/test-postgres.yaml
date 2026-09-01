@@ -1,0 +1,16 @@
+name: tinku-test-postgres
+description: "The Go suite against PostgreSQL, the backend production uses."
+job:
+  image: containers.catalystsquad.com/public/reactorcide/runnerbase:latest
+  command: "runnerlib run --job-command true"
+  # Longer than test-go: this job installs and initialises a Postgres
+  # cluster before it runs a line of test.
+  timeout: 2400
+  priority: 10
+  working_dir: /job
+  # The cluster is installed with apt and started with pg_ctl, so this job
+  # needs to be able to install packages. It is the only one that does.
+  run_as:
+    user: runner
+environment:
+  TINKU_JOB: test-postgres

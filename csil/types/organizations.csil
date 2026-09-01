@@ -1,0 +1,159 @@
+;; Organizations: a named set of people that can own gatherings. An
+;; organization is the only thing in tinku that is not a gathering and not an
+;; event, and it exists for exactly one reason — so that ownership of a
+;; gathering can outlive any one person.
+;;
+;; Federation shape: an organization is addressed as `slug@origin_domain`,
+;; the same way a person is addressed as `handle@linkkeys_domain`.
+;; `origin_domain` is the node that holds the authoritative row. Nothing
+;; federates yet; the field is here so that a row which later arrives from a
+;; peer can say where it came from, which a configuration value cannot.
+;;
+;; Does not include common.csil — see the note at the top of that file.
+
+;;; A member's standing in an organization. Owners can edit it, manage its
+;;; membership, and act as the organization in every place an organization
+;;; can own something. Members carry no authority; they are the roster.
+OrganizationRole = "owner" / "member"
+
+;;; An organization, as read.
+Organization = {
+    @receive-only
+    id: OrganizationID,
+
+    ;;; Local part of the organization's federated address, derived from the
+    ;;; name on creation and stable afterwards. Unique per origin domain.
+    @receive-only
+    slug: text,
+
+    ;;; The node that holds the authoritative row for this organization.
+    @receive-only
+    origin_domain: text,
+
+    name: text .size (1..120),
+
+    ;;; A short statement of what the organization is. The limit that
+    ;;; matters is 300 WORDS, which no CSIL size constraint can express —
+    ;;; the byte ceiling here only stops an abusive payload, and the server
+    ;;; counts words itself.
+    blurb: text .size (0..4000),
+
+    ;;; The long form. Plain text; tinku does not render markup.
+    description: text .size (0..10000),
+
+    @receive-only
+    member_count: uint,
+
+    @receive-only
+    owner_count: uint,
+
+    ;;; Whether this organization's gatherings publish to peer directories.
+    ;;; `unset` defers to the instance. Ignored entirely when the instance
+    ;;; has withdrawn the right to override at this level.
+    publish_events: PublishSetting,
+
+    ;;; Which domain owns this. Always shown, so a familiar name that
+    ;;; belongs to somebody else cannot be mistaken for a local one.
+    @receive-only
+    origin: Origin,
+
+    @receive-only
+    viewer: ViewerContext,
+
+    @receive-only
+    created_at: timestamp,
+
+    @receive-only
+    updated_at: timestamp
+}
+
+;;; One row of an organization's roster.
+OrganizationMember = {
+    @receive-only
+    user_id: UserID,
+
+    @receive-only
+    handle: text,
+
+    @receive-only
+    linkkeys_domain: text,
+
+    @receive-only
+    display_name: text,
+
+    @receive-only
+    role: OrganizationRole,
+
+    @receive-only
+    joined_at: timestamp
+}
+
+;;; Start an organization. The caller becomes its first owner.
+CreateOrganizationRequest = {
+    name: text .size (1..120),
+    blurb: text .size (0..4000),
+    description: text .size (0..10000)
+}
+
+;;; Change an organization. Every field is optional: an absent field is left
+;;; alone, which is what lets a caller send only what it edited. Owners only.
+UpdateOrganizationRequest = {
+    id: OrganizationID,
+    ? name: text .size (1..120),
+    ? blurb: text .size (0..4000),
+    ? description: text .size (0..10000),
+    ? publish_events: PublishSetting
+}
+
+GetOrganizationRequest = {
+    id: OrganizationID
+}
+
+;;; Destroy an organization and everything that hangs off it. Admins only —
+;;; see the note on DeleteEventRequest for why deletion is the one power
+;;; reserved to the global role.
+DeleteOrganizationRequest = {
+    id: OrganizationID
+}
+
+ListOrganizationsRequest = {
+    ;;; Restrict to organizations the caller belongs to. Requires a session;
+    ;;; an anonymous caller asking for `mine` gets an empty list, not an
+    ;;; error.
+    ? mine: bool,
+    ? page: Page
+}
+
+OrganizationList = {
+    organizations: [* Organization],
+
+    ;;; How many rows match before paging. Lets a UI render "1-25 of 340".
+    total: uint
+}
+
+OrganizationMemberList = {
+    organization_id: OrganizationID,
+    members: [* OrganizationMember],
+    total: uint
+}
+
+ListOrganizationMembersRequest = {
+    organization_id: OrganizationID,
+    ? page: Page
+}
+
+;;; Add a person to an organization, or change the standing of someone
+;;; already on the roster. Owners only. Idempotent.
+SetOrganizationMemberRequest = {
+    organization_id: OrganizationID,
+    user_id: UserID,
+    role: OrganizationRole
+}
+
+;;; Take a person off an organization's roster. Owners only, except that
+;;; anyone may remove themselves. An organization must keep at least one
+;;; owner, so removing the last one is refused.
+RemoveOrganizationMemberRequest = {
+    organization_id: OrganizationID,
+    user_id: UserID
+}

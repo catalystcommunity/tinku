@@ -1,0 +1,107 @@
+# The local dev stack: Postgres, the API, and the SPA behind nginx.
+#
+#   ./tools.sh dev          (or `docker compose up`)
+#
+# The webapp serves the SPA on :8081 and proxies /csil and /auth to the api
+# container, which is the same one-origin shape a real deployment has behind
+# a gateway. The api's ops port is published separately on :9090 so you can
+# curl /metrics and /readyz, and is NOT proxied through the webapp.
+#
+# For a stack with no containers at all, use `./tools.sh serve-local`
+# instead: the api on SQLite, which needs nothing installed.
+#
+# The project name is pinned rather than taken from the directory name, so
+# the container, network and volume names stay the same if this checkout is
+# ever moved or its directory renamed. Without it, a rename orphans the
+# running containers and the data volume under the old project name.
+name: tinku
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: tinku-postgres-dev
+    environment:
+      POSTGRES_USER: tinku
+      POSTGRES_PASSWORD: devpass123
+      POSTGRES_DB: tinku_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - tinku_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tinku"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tinku
+
+  # Uncomment once the TINKU_LINKKEYS_* settings below are filled in for a
+  # local relying party. Until then dev auth is how you log in.
+  # linkkeys-rp:
+  #   image: containers.catalystsquad.com/public/linkkeys:latest
+  #   container_name: tinku-linkkeys-rp-dev
+  #   environment:
+  #     ENABLE_RP_ENDPOINTS: "true"
+  #   ports:
+  #     - "8082:8080"
+  #   networks:
+  #     - tinku
+
+  # tinku-api. Built from the repository root so api/Dockerfile can reach
+  # the sibling coredb module api/go.mod replaces onto ../coredb.
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    image: tinku/api:dev
+    container_name: tinku-api-dev
+    command: ["serve"]
+    environment:
+      TINKU_DB_URI: "postgresql://tinku:devpass123@postgres:5432/tinku_db?sslmode=disable"
+      TINKU_API_PORT: "8080"
+      TINKU_OPS_PORT: "9090"
+      TINKU_ENV: "dev"
+      TINKU_CORS_ORIGINS: "*"
+      # Nobody can log in without either this or a linkkeys relying party.
+      TINKU_DEV_AUTH_ENABLED: "true"
+      # The stack serves plain HTTP on localhost, so a Secure cookie would
+      # never be sent back.
+      TINKU_SESSION_COOKIE_SECURE: "false"
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No healthcheck: the api image is distroless, so there is no shell,
+    # curl or wget in it to run one with. Nothing here needs it — the webapp
+    # resolves and proxies to the api at request time (webapp/nginx.conf), so
+    # it starts fine against an api that is still migrating, and individual
+    # requests 502 until readiness opens. Curl the real gate from the host
+    # instead: `curl -i localhost:9090/readyz`.
+    networks:
+      - tinku
+
+  # The SolidJS SPA behind nginx-unprivileged.
+  webapp:
+    build:
+      context: .
+      dockerfile: webapp/Dockerfile
+    image: tinku/webapp:dev
+    container_name: tinku-webapp-dev
+    environment:
+      TINKU_API_URL: "http://api:8080"
+    ports:
+      - "8081:8080"
+    depends_on:
+      - api
+    networks:
+      - tinku
+
+networks:
+  tinku:
+    driver: bridge
+
+volumes:
+  tinku_postgres_data:

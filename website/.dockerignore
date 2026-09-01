@@ -1,0 +1,4 @@
+.git
+# `site/` is committed, but the image builds it from source rather than
+# trusting the checkout — so the stale copy must not be shipped in.
+site

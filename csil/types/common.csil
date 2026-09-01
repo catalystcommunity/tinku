@@ -1,0 +1,163 @@
+;; Shared scalar types for every tinku service. No imports — this is the
+;; bottom of the CSIL import DAG. csil/tinku.csil includes it exactly once,
+;; before every other types file (csilgen emits a type twice if it is
+;; reachable through two include edges in one compilation, so no types file
+;; includes another).
+;;
+;; Convention: every entity id is a ULID minted in Go (api/internal/store's
+;; NewID), carried on the wire as opaque `text`. The api mints ids instead of
+;; the database because the same schema runs on Postgres and on SQLite, and
+;; only one of those has a usable id-generating function. Timestamps use the
+;; CSIL core `timestamp` type (CBOR tag 0, RFC3339 UTC), so generated code
+;; gets a real time.Time / Date instead of a string the caller must parse.
+
+;;; A user's id (ULID).
+UserID = text
+
+;;; A greeting's id (ULID).
+GreetingID = text
+
+;;; An organization's id (ULID).
+OrganizationID = text
+
+;;; A gathering's id (ULID).
+GatheringID = text
+
+;;; An event's id (ULID). Every occurrence of a series has one of these,
+;;; because an occurrence IS an event.
+EventID = text
+
+;;; An event series' id (ULID).
+EventSeriesID = text
+
+;;; The empty payload. Ops that take no input and ops that return nothing
+;;; both use it, so every op still has a declared request and response type.
+Empty = {}
+
+;;; What the calling session may do with the resource carried alongside this
+;;; block. The server resolves the whole permission model once and reports
+;;; the answer, so a client never re-implements it — a client that decides
+;;; for itself drifts from the server the first time a rule changes, and the
+;;; server is the only side that can be trusted anyway.
+;;;
+;;; Flags a given resource cannot have are always false: an organization
+;;; has no organizers, so `is_organizer` is false on every organization.
+ViewerContext = {
+    ;;; The caller holds the global admin role.
+    @receive-only
+    is_admin: bool,
+
+    ;;; The caller owns this resource, directly or through an organization
+    ;;; that owns it.
+    @receive-only
+    is_owner: bool,
+
+    ;;; The caller is an organizer of this event or series, or of its parent
+    ;;; series.
+    @receive-only
+    is_organizer: bool,
+
+    ;;; The caller is a presenter. Presenters carry no permission beyond a
+    ;;; member's; the flag exists so the UI can show the billing.
+    @receive-only
+    is_presenter: bool,
+
+    ;;; The caller has a member's ACCESS. Owners and organizers do, whether
+    ;;; or not they ever joined, because every power a member has they have
+    ;;; too. Read this to decide what somebody may DO.
+    @receive-only
+    is_member: bool,
+
+    ;;; The caller is on the roster: they joined, and leaving would remove a
+    ;;; row. This is NOT is_member — an owner has a member's access without
+    ;;; having joined anything. Read this to decide what a Join or Leave
+    ;;; control should say, or it will offer "Leave" to somebody who never
+    ;;; joined and can never make it change.
+    @receive-only
+    has_joined: bool,
+
+    ;;; The caller may change this resource's own fields.
+    @receive-only
+    can_edit: bool,
+
+    ;;; The caller may destroy this resource. Deleting an organization, or
+    ;;; an event that has already started, is reserved to admins.
+    @receive-only
+    can_delete: bool,
+
+    ;;; The caller may add and remove this resource's members and roles.
+    @receive-only
+    can_manage_members: bool
+}
+
+;;; How far into a list to read. Every list and search op takes one so that
+;;; no op can be made to return an unbounded result set; the server clamps
+;;; `limit` to its own maximum regardless of what is asked for.
+Page = {
+    ;;; How many rows to return. Defaults to 25 when zero, capped at 100.
+    ? limit: uint,
+
+    ;;; How many rows to skip. Offset paging, not cursor paging: this is a
+    ;;; prototype, and an offset is the honest shape for one. A real
+    ;;; deployment wants a cursor before the first table gets large.
+    ? offset: uint
+}
+
+;;; Whether a thing's events are published to the directories this instance
+;;; peers with.
+;;;
+;;; `unset` is a THIRD state, not a synonym for `out`: it means this level
+;;; has said nothing and the level above decides. A boolean could not carry
+;;; it, which is why this is an enumeration.
+PublishSetting = "unset" / "in" / "out"
+
+;;; Where an effective publish decision came from, so a screen can say
+;;; "your organization decided this" instead of showing a control that
+;;; silently does nothing.
+PublishSource = "instance" / "organization" / "gathering"
+
+;;; The resolved publish decision for one gathering, with its reason.
+PublishDecision = {
+    ;;; Whether events under this gathering are published.
+    @receive-only
+    publishing: bool,
+
+    ;;; The level that decided.
+    @receive-only
+    source: PublishSource,
+
+    ;;; Whether this level may still change it. False when the instance has
+    ;;; withdrawn the right to override, which is the case a UI must not
+    ;;; present as an editable control.
+    @receive-only
+    can_override: bool
+}
+
+;;; Which domain owns a record, and whether that domain is this one.
+;;;
+;;; Two instances can hold an organization with the same name, and a
+;;; directory can hold several at once. The NAME is not an identity; the
+;;; domain is. So the domain travels with every record a client can display,
+;;; and a client shows it — which turns "is this the group I think it is?"
+;;; into a question the screen has already answered.
+;;;
+;;; This block is NOT part of a federated event. A receiving instance
+;;; derives it: the delivery came in, and the verified signature says which
+;;; domain it came from. A field inside the message could say anything the
+;;; sender liked, so the sender is not asked.
+Origin = {
+    ;;; The domain that owns this record.
+    @receive-only
+    domain: text,
+
+    ;;; True when `domain` is not this instance's own. A client should mark
+    ;;; these: a name that looks familiar and belongs to somebody else is
+    ;;; the case this field exists for.
+    @receive-only
+    is_external: bool,
+
+    ;;; The peer this record arrived from, when it is external and this
+    ;;; instance knows. Absent for anything local.
+    @receive-only
+    ? peer_address: text
+}

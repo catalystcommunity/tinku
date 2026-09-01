@@ -1,0 +1,534 @@
+;; Federation: authenticated delivery of events between instances.
+;;
+;; The model is email's. An instance is an account — `handle@domain` — and
+;; it hands signed batches of events to other instances that have agreed to
+;; receive them. A receiving instance is a DIRECTORY: it holds what peers
+;; sent, makes it searchable, and links back to the origin for anything more
+;; than a summary.
+;;
+;; # Both sides opt in
+;;
+;; A peer row carries two independent statuses, because the two directions
+;; are two different decisions:
+;;
+;;   inbound_status   do we ACCEPT what this peer sends us
+;;   outbound_status  do we DELIVER our events to this peer
+;;
+;; Both start at "none". Neither becomes "approved" without an administrator
+;; on that side saying so. An instance therefore cannot be listed somewhere
+;; it did not choose, and a directory cannot be filled by somebody it did
+;; not admit.
+;;
+;; # What travels
+;;
+;; A summary and a link, never a description. The origin stays the only
+;; place the full text lives, which keeps one copy authoritative and means
+;; the start-time lock never has to be reasoned about across a domain
+;; boundary — there is nothing withheld to leak.
+;;
+;; # What is signed
+;;
+;; The signature is detached, over OPAQUE BYTES. A delivery carries `body`
+;; as `bytes`; the receiver verifies the signature against exactly the bytes
+;; it received and only then decodes them. Signing a decoded structure would
+;; need both sides to re-encode it identically, and any disagreement about
+;; encoding would read as a forged signature.
+;;
+;; Does not include common.csil — see the note at the top of that file.
+
+;;; A peer's standing in one direction.
+;;;
+;;; `none` is the resting state: no agreement either way. `pending` is a
+;;; request an administrator has not answered. `blocked` is a decision, and
+;;; differs from `none` in that it survives a further request.
+PeerStatus = "none" / "pending" / "approved" / "blocked"
+
+;;; Another instance, as this one sees it.
+Peer = {
+    @receive-only
+    id: text,
+
+    ;;; The peer's account address, `handle@domain`. This is the identity a
+    ;;; signature is checked against, not the URL it is reached at — a peer
+    ;;; that moves host keeps its name.
+    @receive-only
+    address: text,
+
+    @receive-only
+    handle: text,
+
+    @receive-only
+    domain: text,
+
+    ;;; The peer's canonical linkkeys identity: one account, one
+    ;;; application, one application instance. Resolved and stored the first
+    ;;; time a signed request from this address verifies, or set by an
+    ;;; administrator at approval time. Empty until then.
+    ;;;
+    ;;; This, not `address`, is what a delivery is actually checked against.
+    ;;; A handle can move to a different account or be reused; this cannot,
+    ;;; because it is bound by a cryptographic signature, not merely typed
+    ;;; in.
+    @receive-only
+    ? subject_user_id: text,
+
+    @receive-only
+    ? subject_domain: text,
+
+    @receive-only
+    ? application_id: text,
+
+    @receive-only
+    ? instance_id: text,
+
+    ;;; Where to reach this peer's CSIL-RPC endpoint, and the base a
+    ;;; canonical event link is resolved against.
+    base_url: text .size (0..2000),
+
+    ;;; Do we accept what this peer sends us.
+    @receive-only
+    inbound_status: PeerStatus,
+
+    ;;; Do we deliver our events to this peer.
+    @receive-only
+    outbound_status: PeerStatus,
+
+    ;;; An administrator's own note about why this peer is here.
+    note: text .size (0..1000),
+
+    ;;; True when delivery to this peer has stopped. Retries do not resume
+    ;;; on their own — an administrator has to restart the peer, which is
+    ;;; the point: a peer that has been failing for a day is a thing a
+    ;;; person should look at, not a thing to keep hammering.
+    @receive-only
+    suspended: bool,
+
+    @receive-only
+    ? suspended_at: timestamp,
+
+    ;;; When the current run of failures began. Absent once a delivery
+    ;;; succeeds, because the run is over.
+    @receive-only
+    ? first_failure_at: timestamp,
+
+    @receive-only
+    ? last_failure_at: timestamp,
+
+    ;;; What went wrong last, for an administrator to read. Never matched on.
+    @receive-only
+    last_failure_reason: text,
+
+    @receive-only
+    ? last_success_at: timestamp,
+
+    ;;; How many deliveries are waiting for this peer.
+    @receive-only
+    pending_deliveries: uint,
+
+    ;;; How many events a minute this peer may have accepted. Absent means
+    ;;; the instance-wide limit applies.
+    ? rate_limit_per_minute: uint,
+
+    ;;; How many events this peer has ever had refused for exceeding its
+    ;;; allowance. An administrator needs to see that a peer is being
+    ;;; throttled, not merely that it has gone quiet.
+    @receive-only
+    rate_limited_total: uint,
+
+    @receive-only
+    created_at: timestamp,
+
+    @receive-only
+    updated_at: timestamp
+}
+
+PeerList = {
+    peers: [* Peer],
+    total: uint
+}
+
+ListPeersRequest = {
+    ? page: Page
+}
+
+;;; Register another instance as a directory to publish to, and ask it to
+;;; accept us. Administrators only. Sets our outbound status to `pending`
+;;; until the peer answers.
+AddPeerRequest = {
+    ;;; The peer's account address, `handle@domain`.
+    address: text .size (3..317),
+
+    ;;; The peer's base URL.
+    base_url: text .size (1..2000),
+
+    note: text .size (0..1000)
+}
+
+;;; Answer a peer's request, or change our mind about one. Administrators
+;;; only. An absent status is left as it is.
+;;;
+;;; The four identity fields are all-or-nothing: give none to leave the
+;;; peer's stored identity as it is, or give all four to set or replace it.
+;;; Approving inbound requires the peer to already have an identity, or for
+;;; this request to supply one — see the note on `Peer.subject_user_id`.
+SetPeerStatusRequest = {
+    peer_id: text,
+    ? inbound_status: PeerStatus,
+    ? outbound_status: PeerStatus,
+    ? subject_user_id: text,
+    ? subject_domain: text,
+    ? application_id: text,
+    ? instance_id: text
+}
+
+;;; Restart delivery to a suspended peer. Administrators only. Clears the
+;;; failure run and makes every waiting delivery due immediately.
+ResumePeerRequest = {
+    peer_id: text
+}
+
+;;; Give one peer its own allowance, or take it away. Administrators only.
+;;; An absent limit restores the instance-wide one.
+SetPeerRateLimitRequest = {
+    peer_id: text,
+    ? rate_limit_per_minute: uint
+}
+
+;;; Forget a peer and everything it sent. Administrators only.
+RemovePeerRequest = {
+    peer_id: text
+}
+
+;;; One event as it travels between instances: a summary and a link.
+;;;
+;;; There is no description and no attendance. A reader who wants either
+;;; follows `canonical_url` to the instance that owns the event, which is
+;;; the only place either is true.
+FederatedEvent = {
+    ;;; The event's id at its origin. Unique per peer, and the key an
+    ;;; update or a deletion refers to.
+    remote_id: text,
+
+    ;;; Absolute URL of the event at its origin.
+    canonical_url: text .size (1..2000),
+
+    title: text .size (1..200),
+
+    is_online: bool,
+
+    is_in_person: bool,
+
+    ? location: Location,
+
+    starts_at: timestamp,
+
+    ends_at: timestamp,
+
+    timezone: text .size (1..64),
+
+    ;;; Display context, so a directory can say what this event belongs to
+    ;;; without a second call.
+    gathering_name: text .size (0..120),
+
+    organization_name: text .size (0..120),
+
+    ;;; True when this is a tombstone: the origin deleted the event and the
+    ;;; directory should forget it. A deletion has to travel as a message
+    ;;; like any other, because a directory cannot tell absence from silence.
+    deleted: bool
+}
+
+;;; The decoded contents of a delivery. This is what `SignedDelivery.body`
+;;; holds once its signature has been checked.
+EventBatch = {
+    ;;; Where these came from. Checked against the verified signer, so a
+    ;;; batch cannot claim an origin its signature does not support.
+    origin_domain: text,
+
+    ;;; A value the sender never repeats. The receiver remembers it, so a
+    ;;; captured delivery replayed later is refused rather than applied a
+    ;;; second time.
+    ;;;
+    ;;; A signature alone cannot stop a replay: it stays valid forever, so
+    ;;; an old envelope resent would silently revert a peer's newer update,
+    ;;; and an old tombstone would delete an event that was republished.
+    batch_id: text .size (1..64),
+
+    ;;; When the sender made this batch. The receiver refuses one that is
+    ;;; too old or too far ahead, which is what bounds how long it must
+    ;;; remember a batch_id.
+    sent_at: timestamp,
+
+    events: [* FederatedEvent]
+}
+
+;;; A batch of events, signed by the instance that sends it.
+;;;
+;;; This op is called BY another instance, not by a person, and carries no
+;;; session. The signature is the authentication.
+SignedDelivery = {
+    ;;; Who signed, as `handle@domain`.
+    sender_address: text .size (3..317),
+
+    ;;; Names the signing scheme, so a scheme can be added without a new op
+    ;;; and an old one can be refused by name.
+    algorithm: text .size (1..64),
+
+    ;;; Which of the sender's currently valid signing keys made this
+    ;;; signature. All of a sender's valid keys are equal — there is no
+    ;;; preferred one — so the receiver needs this to know which public key
+    ;;; to check the signature against.
+    key_id: text .size (1..128),
+
+    signature: text .size (1..4000),
+
+    ;;; The CBOR encoding of an EventBatch. Verified as bytes, then decoded
+    ;;; — see the note at the top of this file.
+    body: bytes
+}
+
+;;; What a directory answers a delivery with.
+DeliveryReceipt = {
+    accepted: uint,
+
+    ;;; How many were refused: a tombstone for something never held, an
+    ;;; event outside the window a directory keeps, a malformed row.
+    rejected: uint,
+
+    ;;; Why, when anything was refused. For an operator to read.
+    ? message: text,
+
+    ;;; How many were refused specifically for exceeding this peer's
+    ;;; allowance. Reported separately so a sender can tell "you are sending
+    ;;; too fast" from "that row was malformed" and slow down rather than
+    ;;; retry.
+    rate_limited: uint
+}
+
+;;; The decoded contents of a peering request.
+PeeringBody = {
+    base_url: text .size (1..2000),
+    note: text .size (0..1000),
+    requested_at: timestamp
+}
+
+;;; Ask a directory to accept us. Called BY another instance and signed, the
+;;; same way a delivery is. The directory records it as `pending`; an
+;;; administrator there decides.
+;;;
+;;; Unlike a delivery, the sender is usually unknown here — this may be the
+;;; first the directory has ever heard of it, so there is no stored peer row
+;;; to check the signature against yet. The four identity fields carry the
+;;; sender's canonical linkkeys identity in the envelope, alongside
+;;; `sender_address`, so the directory can look up the sender's attested
+;;; keys and verify the signature before it has ever seen this sender
+;;; before. They are checked as received, the same as everything else in
+;;; this envelope — never taken from the decoded body, which is verified
+;;; only after the signature over it has already passed.
+SignedPeeringRequest = {
+    sender_address: text .size (3..317),
+    algorithm: text .size (1..64),
+    key_id: text .size (1..128),
+    subject_user_id: text .size (1..128),
+    subject_domain: text .size (1..253),
+    application_id: text .size (1..128),
+    instance_id: text .size (1..128),
+    signature: text .size (1..4000),
+    body: bytes
+}
+
+;;; What a directory answers a peering request with. `pending` is the normal
+;;; answer: nobody is admitted without an administrator.
+PeeringReceipt = {
+    status: PeerStatus
+}
+
+;;; One event held on behalf of a peer. It is deliberately NOT an Event: it
+;;; has no gathering here, nobody can edit it, nobody can attend it, and it
+;;; carries no permissions. Giving it the same type would mean every rule
+;;; that holds for a local event would have to be re-checked for one that
+;;; cannot obey it.
+RemoteEvent = {
+    @receive-only
+    id: text,
+
+    ;;; The peer that sent it.
+    @receive-only
+    peer_address: text,
+
+    ;;; Always external, by construction: a foreign event is a RemoteEvent
+    ;;; and never an Event. The block is here anyway so a client rendering a
+    ;;; mixed list has one shape to read rather than two.
+    @receive-only
+    origin: Origin,
+
+    @receive-only
+    origin_domain: text,
+
+    @receive-only
+    remote_id: text,
+
+    ;;; Where to read the whole thing.
+    @receive-only
+    canonical_url: text,
+
+    @receive-only
+    title: text,
+
+    @receive-only
+    is_online: bool,
+
+    @receive-only
+    is_in_person: bool,
+
+    @receive-only
+    ? location: Location,
+
+    @receive-only
+    starts_at: timestamp,
+
+    @receive-only
+    ends_at: timestamp,
+
+    @receive-only
+    timezone: text,
+
+    @receive-only
+    gathering_name: text,
+
+    @receive-only
+    organization_name: text,
+
+    @receive-only
+    received_at: timestamp
+}
+
+RemoteEventList = {
+    events: [* RemoteEvent],
+    total: uint
+}
+
+ListRemoteEventsRequest = {
+    ? query: text .size (0..200),
+    ? starts_after: timestamp,
+    ? starts_before: timestamp,
+    ? page: Page
+}
+
+;;; What this instance is, as a peer would address it. Anyone may read it:
+;;; it is the information somebody needs in order to ask for peering, and
+;;; it is not a secret — it is a name.
+FederationIdentity = {
+    ;;; This instance's account address, `handle@domain`. Empty when
+    ;;; federation is switched off.
+    @receive-only
+    address: text,
+
+    ;;; Whether this instance federates at all.
+    @receive-only
+    enabled: bool,
+
+    ;;; The signing scheme this instance uses.
+    @receive-only
+    algorithm: text,
+
+    ;;; This instance's canonical linkkeys identity. A peer records these,
+    ;;; not just `address`, so its approval of this instance survives a
+    ;;; handle change. Empty when federation is switched off.
+    @receive-only
+    subject_user_id: text,
+
+    @receive-only
+    subject_domain: text,
+
+    @receive-only
+    application_id: text,
+
+    @receive-only
+    instance_id: text
+}
+
+;;; How much one originating organization is sending, and what its peer's
+;;; throttle is doing.
+;;;
+;;; The limit is enforced per PEER — a peer is what a signature identifies
+;;; and what can be suspended. A peer carries many organizations, so
+;;; "this peer is throttled" does not say which origin is responsible. This
+;;; is the row that does.
+OriginVolume = {
+    @receive-only
+    peer_id: text,
+
+    @receive-only
+    peer_address: text,
+
+    ;;; The name as the peer sent it. Display text from another instance,
+    ;;; not a key into anything here. Empty when the far end had no owning
+    ;;; organization to name.
+    @receive-only
+    organization_name: text,
+
+    ;;; Events from this organization the directory currently holds.
+    @receive-only
+    held: uint,
+
+    ;;; Events ever accepted from it.
+    @receive-only
+    accepted_total: uint,
+
+    ;;; Events accepted in the current minute, measured the same way the
+    ;;; peer's own limiter measures, so the two numbers on one screen mean
+    ;;; the same thing.
+    @receive-only
+    accepted_this_minute: uint,
+
+    @receive-only
+    ? last_received_at: timestamp,
+
+    ;;; The peer's allowance and throttle state, carried here so an operator
+    ;;; reading this list does not have to cross-reference the peer list to
+    ;;; find out whether the volume is being refused.
+    @receive-only
+    peer_rate_limit_per_minute: uint,
+
+    @receive-only
+    peer_rate_limited_total: uint,
+
+    @receive-only
+    peer_suspended: bool,
+
+    ;;; This origin's own allowance. Absent means the instance-wide origin
+    ;;; limit applies.
+    @receive-only
+    ? rate_limit_per_minute: uint,
+
+    ;;; The allowance actually in force, after the override is resolved.
+    ;;; Sent so a screen does not have to repeat the resolution.
+    @receive-only
+    effective_rate_limit_per_minute: uint,
+
+    ;;; Events refused for exceeding THIS origin's allowance, as distinct
+    ;;; from the peer's.
+    @receive-only
+    rate_limited_total: uint
+}
+
+;;; Give one origin its own allowance, or take it away. Administrators only.
+;;; An absent limit restores the instance-wide one.
+SetOriginRateLimitRequest = {
+    peer_id: text,
+    organization_name: text,
+    ? rate_limit_per_minute: uint
+}
+
+OriginVolumeList = {
+    origins: [* OriginVolume],
+    total: uint
+}
+
+;;; Busiest first. Narrow to one peer to answer "which of this peer's
+;;; organizations is the noisy one".
+ListOriginVolumeRequest = {
+    ? peer_id: text,
+    ? page: Page
+}

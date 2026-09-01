@@ -1,0 +1,215 @@
+;; Gatherings: the container every event and every event series belongs to,
+;; and the thing a person joins. A gathering is what a meetup.com "group"
+;; is. Tinku's `organization` is a separate idea — a set of people that can
+;; hold ownership — which is why the two are not interchangeable here.
+;;
+;; Ownership is many-to-many and polymorphic: a gathering is owned by any
+;; number of individuals AND any number of organizations, and a person owns
+;; a gathering either directly or by being an owner of an organization that
+;; owns it. OwnerRef is the one shape that carries either.
+;;
+;; Does not include common.csil — see the note at the top of that file.
+
+;;; What an owner reference points at.
+OwnerKind = "user" / "organization"
+
+;;; A person's standing in a gathering. Ownership is NOT in this enum,
+;;; because ownership can arrive through an organization and so is not a row
+;;; on the roster — read `viewer.is_owner`, or the `owners` list.
+GatheringRole = "member"
+
+;;; One owner of a gathering: either an individual or an organization. `id`
+;;; is a UserID when kind is "user" and an OrganizationID when kind is
+;;; "organization"; both are ULIDs in the same space, so one field carries
+;;; either.
+OwnerRef = {
+    kind: OwnerKind,
+
+    id: text,
+
+    ;;; The owner's name for display — a user's display name, or an
+    ;;; organization's name.
+    @receive-only
+    display_name: text,
+
+    ;;; Local part of the owner's federated address: a user's handle, or an
+    ;;; organization's slug.
+    @receive-only
+    handle: text,
+
+    ;;; The owner's home node.
+    @receive-only
+    origin_domain: text
+}
+
+;;; An owner to add or remove, without the display fields the server fills in.
+OwnerRefInput = {
+    kind: OwnerKind,
+    id: text
+}
+
+;;; A gathering, as read.
+Gathering = {
+    @receive-only
+    id: GatheringID,
+
+    ;;; Local part of the gathering's federated address.
+    @receive-only
+    slug: text,
+
+    @receive-only
+    origin_domain: text,
+
+    name: text .size (1..120),
+
+    ;;; Short statement of what this gathering is. Word-limited to 300 by
+    ;;; the server, exactly as an organization's blurb is.
+    blurb: text .size (0..4000),
+
+    description: text .size (0..10000),
+
+    @receive-only
+    owners: [* OwnerRef],
+
+    @receive-only
+    member_count: uint,
+
+    ;;; How many events and series hang off this gathering, counting a
+    ;;; series once rather than once per occurrence.
+    @receive-only
+    event_count: uint,
+
+    ;;; The next event that has not started yet, in UTC. Absent when the
+    ;;; gathering has nothing scheduled ahead of it.
+    @receive-only
+    ? next_event_at: timestamp,
+
+    ;;; Whether this gathering's events publish to peer directories.
+    ;;; `unset` defers to its owning organization, then to the instance.
+    publish_events: PublishSetting,
+
+    ;;; What that resolves to, and why. The server decides; a client renders
+    ;;; the answer rather than re-deriving a three-level rule.
+    @receive-only
+    publish: PublishDecision,
+
+    ;;; Which domain owns this. Always shown, so a familiar name that
+    ;;; belongs to somebody else cannot be mistaken for a local one.
+    @receive-only
+    origin: Origin,
+
+    @receive-only
+    viewer: ViewerContext,
+
+    @receive-only
+    created_at: timestamp,
+
+    @receive-only
+    updated_at: timestamp
+}
+
+;;; One row of a gathering's roster. Owners appear here only when they own
+;;; the gathering directly AND joined it; an organization's owner who never
+;;; joined is an owner without being a member, which is why `viewer.is_owner`
+;;; and `viewer.is_member` are separate flags.
+GatheringMember = {
+    @receive-only
+    user_id: UserID,
+
+    @receive-only
+    handle: text,
+
+    @receive-only
+    linkkeys_domain: text,
+
+    @receive-only
+    display_name: text,
+
+    @receive-only
+    joined_at: timestamp
+}
+
+;;; Start a gathering. When `owner` is absent the caller becomes its sole
+;;; individual owner; when it names an organization, the caller must own
+;;; that organization.
+CreateGatheringRequest = {
+    name: text .size (1..120),
+    blurb: text .size (0..4000),
+    description: text .size (0..10000),
+    ? owner: OwnerRefInput
+}
+
+UpdateGatheringRequest = {
+    id: GatheringID,
+    ? name: text .size (1..120),
+    ? blurb: text .size (0..4000),
+    ? description: text .size (0..10000),
+    ? publish_events: PublishSetting
+}
+
+GetGatheringRequest = {
+    id: GatheringID
+}
+
+;;; Destroy a gathering and every event under it. An owner may do this, and
+;;; so may an admin — unlike an organization, which only an admin can
+;;; destroy.
+DeleteGatheringRequest = {
+    id: GatheringID
+}
+
+ListGatheringsRequest = {
+    ;;; Only gatherings the caller belongs to or owns.
+    ? mine: bool,
+
+    ;;; Only gatherings this organization owns.
+    ? owned_by_organization: OrganizationID,
+
+    ? page: Page
+}
+
+GatheringList = {
+    gatherings: [* Gathering],
+    total: uint
+}
+
+ListGatheringMembersRequest = {
+    gathering_id: GatheringID,
+    ? page: Page
+}
+
+GatheringMemberList = {
+    gathering_id: GatheringID,
+    members: [* GatheringMember],
+    total: uint
+}
+
+;;; Join a gathering. Any authenticated caller may join any gathering;
+;;; membership is what makes marking attendance on its events possible.
+;;; Idempotent.
+JoinGatheringRequest = {
+    gathering_id: GatheringID
+}
+
+;;; Leave a gathering. Idempotent. Leaving does not withdraw attendance
+;;; already marked on events that have started, because a started event
+;;; cannot be changed at all.
+LeaveGatheringRequest = {
+    gathering_id: GatheringID
+}
+
+;;; Add an owner — an individual or an organization — to a gathering.
+;;; Existing owners only. Adding an organization requires the caller to own
+;;; it, so that ownership cannot be handed to a set of people who did not
+;;; agree to it.
+AddGatheringOwnerRequest = {
+    gathering_id: GatheringID,
+    owner: OwnerRefInput
+}
+
+;;; Drop an owner. A gathering must keep at least one owner, so removing
+;;; the last one is refused.
+RemoveGatheringOwnerRequest = {
+    gathering_id: GatheringID,
+    owner: OwnerRefInput
+}

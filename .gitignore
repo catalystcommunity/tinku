@@ -1,0 +1,35 @@
+# Go
+/api/tinku
+/api/api
+*.test
+
+# Local SQLite databases created by ./tools.sh serve-local and migrate
+/local.db
+/local.db-shm
+/local.db-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Node / Vite
+node_modules/
+/webapp/dist/
+/webapp/node_modules/.tmp/
+
+# csilgen writes these next to the spec while splicing per-language options
+# blocks; ./tools.sh gen removes them on the way out, but a killed run can
+# leave one behind.
+/csil/.gen-tmp-*.csil
+
+# Python. The reactorcide job bodies are a runnerlib plugin, so importing
+# one leaves bytecode next to it.
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Editor and OS noise
+.DS_Store
+*.swp

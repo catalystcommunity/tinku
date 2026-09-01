@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ Title }}</title>
+    <meta name="description" content="{{ Description }}">
+    {#
+      Two theme colours, so a browser's own chrome follows the reader's
+      setting instead of picking one and being wrong half the time.
+    #}
+    <meta name="theme-color" content="#c04058" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#171013" media="(prefers-color-scheme: dark)">
+    <meta property="og:title" content="Tinku">
+    <meta property="og:description" content="{{ SocialDescription }}">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary">
+    <link rel="icon" href="assets/tinku-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header" data-header>
+      <a class="brand" href="#top" aria-label="Tinku home">
+        <img class="brand__mark" src="assets/tinku-mark.svg" alt="" width="32" height="32">
+        <span>Tinku</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a href="#own">Own it</a>
+        <a href="#how">How it works</a>
+        <a href="#directories">Directories</a>
+        <a class="nav-cta" href="#join">Join in <span aria-hidden="true">↓</span></a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero__glow" aria-hidden="true"></div>
+        <div class="hero__content">
+          <p class="eyebrow"><span aria-hidden="true"></span> {{ HeroEyebrow }}</p>
+          <h1 id="hero-title">
+            {{ HeroTitleLead }}<br>
+            <em>{{ HeroTitleEmphasis }}</em>
+          </h1>
+          <p class="hero__lede">{{ HeroLead }}</p>
+          <div class="hero__actions">
+            <a class="button button--primary" href="#join">
+              Join the community
+              <span aria-hidden="true">↓</span>
+            </a>
+            <a
+              class="button button--secondary"
+              href="https://github.com/catalystcommunity/tinku"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Read the code
+              <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+
+        {#
+          A worked example rather than a screenshot: it says what the product
+          does in the product's own vocabulary, and it cannot go out of date
+          with the UI.
+        #}
+        <div class="calendar-card" aria-hidden="true">
+          <div class="calendar-card__heading">
+            <span>Thursday Bouldering</span>
+            <small>climbers@saltflats.example</small>
+          </div>
+          <div class="calendar-row">
+            <span>10 Sep</span>
+            <p><small>19:00 America/Denver</small>Second Thursday Session</p>
+          </div>
+          <div class="calendar-row">
+            <span>08 Oct</span>
+            <p><small>19:00 America/Denver</small>Second Thursday Session</p>
+          </div>
+          <div class="calendar-row calendar-row--remote">
+            <span>12 Oct</span>
+            <p><small>from forge.example</small>Autumn Climb Meetup</p>
+          </div>
+          <p class="calendar-card__stamp">One rule. Every second Thursday.</p>
+        </div>
+      </section>
+
+      <section class="manifesto" id="own" aria-labelledby="own-title">
+        <div class="section-label">
+          <span>01</span>
+          <p>Own it</p>
+        </div>
+        <div class="manifesto__body">
+          <h2 id="own-title">
+            Your community’s events<br>
+            belong to <em>your community.</em>
+          </h2>
+          <div class="manifesto__copy">
+            <p>
+              Most events live on somebody else’s platform. They set the rules,
+              they own the list, and they can change either one — or close the
+              door and take the calendar with them.
+            </p>
+            <p>
+              Tinku is open source and runs anywhere. One community, one
+              instance, one group of people who decide how it works. Nothing
+              about it needs anyone’s permission to keep going.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="platform" id="how" aria-labelledby="how-title">
+        <div class="platform__intro">
+          <div class="section-label section-label--light">
+            <span>02</span>
+            <p>How it works</p>
+          </div>
+          <div>
+            <h2 id="how-title">Built the way<br><em>groups actually meet.</em></h2>
+            <p>
+              A gathering is the thing people join. Events hang off it — one
+              night, or a rule that keeps making them.
+            </p>
+          </div>
+        </div>
+
+        <div class="capability-grid">
+          <article class="capability">
+            <span class="capability__number">01</span>
+            <div class="capability__icon" aria-hidden="true">◷</div>
+            <h3>Events that repeat</h3>
+            <p>
+              “The second Thursday at 19:00” is a rule, not fifty copies. It
+              stays 19:00 when the clocks change.
+            </p>
+          </article>
+          <article class="capability">
+            <span class="capability__number">02</span>
+            <div class="capability__icon" aria-hidden="true">◎</div>
+            <h3>Gatherings and organizations</h3>
+            <p>
+              People join a gathering. An organization can own one, so it
+              outlives whoever started it.
+            </p>
+          </article>
+          <article class="capability">
+            <span class="capability__number">03</span>
+            <div class="capability__icon" aria-hidden="true">◈</div>
+            <h3>Find it by place and time</h3>
+            <p>
+              Search by city, by distance, by when it starts — across
+              everything the instance knows about.
+            </p>
+          </article>
+          <article class="capability capability--accent">
+            <span class="capability__number">04</span>
+            <div class="capability__icon" aria-hidden="true">✦</div>
+            <h3>Yours to change</h3>
+            <p>
+              Open source, an open API, and a schema you can read. Run it, fork
+              it, or build something else on it.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="directories" id="directories" aria-labelledby="directories-title">
+        <div class="section-label">
+          <span>03</span>
+          <p>Cross-domain directories</p>
+        </div>
+        <div class="directories__body">
+          <h2 id="directories-title">
+            Small and separate,<br>
+            still <em>easy to find.</em>
+          </h2>
+          <div class="directories__copy">
+            <p>
+              Running your own calendar usually means nobody finds it. Tinku
+              fixes that the way email does: instances hand signed copies of
+              their events to directories that have agreed to take them.
+            </p>
+            <p>
+              One search then covers many communities at once. Every result
+              shows the domain it came from, so a familiar name from somewhere
+              else is never mistaken for yours — and the full details always
+              live at the source.
+            </p>
+            <p>
+              Both sides opt in. Nothing leaves your instance until you say so,
+              and no directory fills up with events it did not agree to carry.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="invitation" id="join" aria-labelledby="join-title">
+        <div class="invitation__graphic" aria-hidden="true">
+          <div class="emblem">
+            <span class="emblem__rivet emblem__rivet--one"></span>
+            <span class="emblem__rivet emblem__rivet--two"></span>
+            <span class="emblem__rivet emblem__rivet--three"></span>
+            <span class="emblem__rivet emblem__rivet--four"></span>
+            <p>Tinku</p>
+            <img class="core-mark" src="assets/tinku-mark.svg" alt="" width="120" height="120">
+            <small>Come and meet</small>
+          </div>
+        </div>
+        <div class="invitation__content">
+          <p class="eyebrow eyebrow--dark"><span aria-hidden="true"></span> Everyone is welcome</p>
+          <h2 id="join-title">Bring your<br>community.</h2>
+          <p>
+            Tinku is early and built in the open. If you run a community, help
+            us find out what it still needs. If you write code, there is plenty
+            to do.
+          </p>
+          <div class="invitation__links">
+            <a
+              class="button button--dark"
+              href="https://forgeutah.tech"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Forge Utah on Slack
+              <span aria-hidden="true">↗</span>
+            </a>
+            <a
+              class="button button--ghost"
+              href="https://discord.gg/sfNb9xRjPn"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Catalyst Community Discord
+              <span aria-hidden="true">↗</span>
+            </a>
+            <a
+              class="button button--ghost"
+              href="https://github.com/catalystcommunity/tinku"
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub
+              <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="brand brand--footer" href="#top">
+        <img class="brand__mark" src="assets/tinku-mark.svg" alt="" width="32" height="32">
+        <span>Tinku</span>
+      </a>
+      <p>Open source community events. &copy; <span data-year>2026</span></p>
+      <div class="footer-links">
+        <a href="https://forgeutah.tech" target="_blank" rel="noreferrer">Slack ↗</a>
+        <a href="https://discord.gg/sfNb9xRjPn" target="_blank" rel="noreferrer">Discord ↗</a>
+        <a href="https://github.com/catalystcommunity/tinku" target="_blank" rel="noreferrer">GitHub ↗</a>
+      </div>
+    </footer>
+
+    <script src="site.js"></script>
+  </body>
+</html>

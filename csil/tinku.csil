@@ -1,0 +1,378 @@
+;; Tinku CSIL entry point — THE contract. Every client (the SolidJS SPA,
+;; and anything added later) is a generated consumer of this file; nothing
+;; talks to tinku-api except CSIL-RPC (CBOR over `POST /csil/v1/rpc`)
+;; dispatched by (service, op) exactly as declared here. The one exception is
+;; `GET /auth/callback`, which an identity provider must be able to reach as
+;; a plain browser redirect.
+;;
+;; Layout: this file includes the shared types under csil/types/*.csil and
+;; declares every service. The types files include nothing themselves —
+;; csilgen emits a type twice when it is reachable through two include edges
+;; in one compilation, so every include lives here and happens exactly once.
+;;
+;; Regenerate everything derived from this file with `./tools.sh gen`. Never
+;; hand-edit generated output (api/internal/csil, webapp/src/gen, clients/).
+;;
+;; `@wire-id` ordinals attach to service and operation declarations (CSIL has
+;; no per-field wire ids, unlike protobuf). They are assigned once and never
+;; renumbered: append new services and ops with new ordinals, never reuse or
+;; renumber an existing one. Service ordinal 0 is reserved for the transport
+;; control plane, so application services start at 1; operation ordinals
+;; start at 0 within their own service. Tinku serves CSIL-RPC's HTTP
+;; carrier only, so these ordinals are not on the wire today — they exist so
+;; that adopting a compact profile later is additive rather than breaking.
+
+include "types/common.csil"
+include "types/errors.csil"
+include "types/auth.csil"
+include "types/greetings.csil"
+include "types/organizations.csil"
+include "types/gatherings.csil"
+include "types/events.csil"
+include "types/search.csil"
+include "types/admin.csil"
+include "types/federation.csil"
+
+options {
+    package: "tinku",
+    version: "v1alpha",
+    package_name: "csil",
+    go_package: "github.com/catalystcommunity/tinku/api/internal/csil"
+}
+
+;;; Login via linkkeys (`user@domain` identity) and session lifecycle. Only
+;;; begin-login, logout and whoami ride CSIL-RPC; the callback itself is the
+;;; HTTP-native `GET /auth/callback` route, outside this schema.
+@wire-id(1)
+service AuthService {
+    ;;; Start a login. The api signs a self-verifying nonce and returns the
+    ;;; identity-provider URL for the browser to open.
+    @wire-id(0)
+    begin-login: BeginLoginRequest -> BeginLoginResponse / ServiceError,
+
+    ;;; Clear the caller's session cookie. Idempotent; never fails, even when
+    ;;; the caller was already logged out.
+    @wire-id(1)
+    logout: Empty -> Empty,
+
+    ;;; The caller's own profile, derived from the session cookie.
+    @wire-id(2)
+    whoami: Empty -> UserProfile / ServiceError
+}
+
+;;; Local-development login that skips the identity provider entirely, so the
+;;; stack runs with no linkkeys RP configured. Every op refuses unless
+;;; TINKU_ENV is dev or nonprod AND TINKU_DEV_AUTH_ENABLED is true; when
+;;; the gates are shut the ops are not registered at all and answer with
+;;; transport status 2 (unknown service or op).
+@wire-id(2)
+service DevAuthService {
+    ;;; Mint a session for `handle@domain`, creating the user on first use.
+    @wire-id(0)
+    dev-login: DevLoginRequest -> UserProfile / ServiceError
+}
+
+;;; The hello-world domain. Reading is anonymous; writing needs a session.
+@wire-id(3)
+service GreetingService {
+    ;;; Every greeting, newest first. Anonymous callers are allowed.
+    @wire-id(0)
+    list-greetings: Empty -> GreetingList,
+
+    ;;; One greeting by id. Anonymous callers are allowed.
+    @wire-id(1)
+    get-greeting: GetGreetingRequest -> Greeting / ServiceError,
+
+    ;;; Leave a greeting. Requires a session.
+    @wire-id(2)
+    create-greeting: CreateGreetingRequest -> Greeting / ServiceError
+}
+
+;;; Organizations: a named set of people that can hold ownership of a
+;;; gathering. Anyone with a session may start one and becomes its first
+;;; owner. Only an admin may delete one — see types/admin.csil for why
+;;; deletion is the one power the global role reserves.
+;;;
+;;; The service keeps ordinal 4, which it held when it was called
+;;; GroupService. An ordinal belongs to the declaration, and renaming a
+;;; declaration does not renumber it. The wire KEY does change, because the
+;;; HTTP carrier routes on the service name — that is a breaking change, and
+;;; an acceptable one only because nothing has been released yet.
+@wire-id(4)
+service OrganizationService {
+    ;;; Every organization, newest first, or only the caller's with `mine`.
+    ;;; Anonymous callers are allowed.
+    @wire-id(0)
+    list-organizations: ListOrganizationsRequest -> OrganizationList / ServiceError,
+
+    ;;; One organization by id. Anonymous callers are allowed.
+    @wire-id(1)
+    get-organization: GetOrganizationRequest -> Organization / ServiceError,
+
+    ;;; Start an organization. The caller becomes its first owner.
+    @wire-id(2)
+    create-organization: CreateOrganizationRequest -> Organization / ServiceError,
+
+    ;;; Change an organization's own fields. Owners only.
+    @wire-id(3)
+    update-organization: UpdateOrganizationRequest -> Organization / ServiceError,
+
+    ;;; Destroy an organization. Admins only.
+    @wire-id(4)
+    delete-organization: DeleteOrganizationRequest -> Empty / ServiceError,
+
+    ;;; An organization's roster. Anonymous callers are allowed.
+    @wire-id(5)
+    list-organization-members: ListOrganizationMembersRequest -> OrganizationMemberList / ServiceError,
+
+    ;;; Add somebody, or change their standing. Owners only.
+    @wire-id(6)
+    set-organization-member: SetOrganizationMemberRequest -> OrganizationMemberList / ServiceError,
+
+    ;;; Take somebody off the roster. Owners, or the person themselves.
+    @wire-id(7)
+    remove-organization-member: RemoveOrganizationMemberRequest -> OrganizationMemberList / ServiceError
+}
+
+;;; Gatherings: what people join, and what every event hangs off. Ownership
+;;; is many-to-many over both individuals and organizations.
+@wire-id(5)
+service GatheringService {
+    ;;; Every gathering, or only the caller's with `mine`. Anonymous
+    ;;; callers are allowed.
+    @wire-id(0)
+    list-gatherings: ListGatheringsRequest -> GatheringList / ServiceError,
+
+    ;;; One gathering by id. Anonymous callers are allowed.
+    @wire-id(1)
+    get-gathering: GetGatheringRequest -> Gathering / ServiceError,
+
+    ;;; Start a gathering, owned by the caller or by an organization the
+    ;;; caller owns.
+    @wire-id(2)
+    create-gathering: CreateGatheringRequest -> Gathering / ServiceError,
+
+    ;;; Change a gathering's own fields. Owners only.
+    @wire-id(3)
+    update-gathering: UpdateGatheringRequest -> Gathering / ServiceError,
+
+    ;;; Destroy a gathering and every event under it. Owners or an admin.
+    @wire-id(4)
+    delete-gathering: DeleteGatheringRequest -> Empty / ServiceError,
+
+    ;;; A gathering's roster. Anonymous callers are allowed.
+    @wire-id(5)
+    list-gathering-members: ListGatheringMembersRequest -> GatheringMemberList / ServiceError,
+
+    ;;; Join. Any authenticated caller. Idempotent.
+    @wire-id(6)
+    join-gathering: JoinGatheringRequest -> Gathering / ServiceError,
+
+    ;;; Leave. Idempotent.
+    @wire-id(7)
+    leave-gathering: LeaveGatheringRequest -> Gathering / ServiceError,
+
+    ;;; Add an individual or an organization as an owner. Existing owners
+    ;;; only.
+    @wire-id(8)
+    add-gathering-owner: AddGatheringOwnerRequest -> Gathering / ServiceError,
+
+    ;;; Drop an owner. The last owner cannot be dropped.
+    @wire-id(9)
+    remove-gathering-owner: RemoveGatheringOwnerRequest -> Gathering / ServiceError
+}
+
+;;; Events and event series. An occurrence of a series is an ordinary event
+;;; with `series_id` set, so every op here that names an event also works on
+;;; an occurrence.
+@wire-id(6)
+service EventService {
+    ;;; Events matching a time window. Anonymous callers are allowed.
+    @wire-id(0)
+    list-events: ListEventsRequest -> EventList / ServiceError,
+
+    ;;; One event by id. Anonymous callers are allowed. `description` is
+    ;;; absent once the event has started.
+    @wire-id(1)
+    get-event: GetEventRequest -> Event / ServiceError,
+
+    ;;; Schedule a single event. Gathering owners only — organizer is a
+    ;;; role held on an event that already exists, so it cannot be what
+    ;;; authorizes making one.
+    @wire-id(2)
+    create-event: CreateEventRequest -> Event / ServiceError,
+
+    ;;; Change an event. Refused once it has started.
+    @wire-id(3)
+    update-event: UpdateEventRequest -> Event / ServiceError,
+
+    ;;; Destroy an event. Owners and organizers before it starts; admins
+    ;;; only afterwards.
+    @wire-id(4)
+    delete-event: DeleteEventRequest -> Empty / ServiceError,
+
+    ;;; Mark the caller attending. Needs gathering membership; refused once
+    ;;; the event has started.
+    @wire-id(5)
+    attend-event: AttendEventRequest -> Event / ServiceError,
+
+    ;;; Withdraw the caller's attendance. Refused once the event has started.
+    @wire-id(6)
+    unattend-event: UnattendEventRequest -> Event / ServiceError,
+
+    ;;; Who is attending. Anonymous callers are allowed.
+    @wire-id(7)
+    list-attendees: ListAttendeesRequest -> AttendeeList / ServiceError,
+
+    ;;; Every series under a gathering. Anonymous callers are allowed.
+    @wire-id(8)
+    list-event-series: ListEventSeriesRequest -> EventSeriesList / ServiceError,
+
+    ;;; One series by id. Anonymous callers are allowed.
+    @wire-id(9)
+    get-event-series: GetEventSeriesRequest -> EventSeries / ServiceError,
+
+    ;;; Schedule a recurring set. Gathering owners only, for the same
+    ;;; reason create-event is.
+    @wire-id(10)
+    create-event-series: CreateEventSeriesRequest -> EventSeries / ServiceError,
+
+    ;;; Change a series, rewriting the occurrences that have not started.
+    @wire-id(11)
+    update-event-series: UpdateEventSeriesRequest -> EventSeries / ServiceError,
+
+    ;;; Destroy a series and its occurrences that have not started.
+    @wire-id(12)
+    delete-event-series: DeleteEventSeriesRequest -> Empty / ServiceError,
+
+    ;;; Materialize further occurrences and return them all. Idempotent.
+    @wire-id(13)
+    expand-event-series: ExpandEventSeriesRequest -> EventList / ServiceError,
+
+    ;;; Give somebody organizer or presenter on an event or a series.
+    ;;; Gathering owners only.
+    @wire-id(14)
+    set-event-role: SetEventRoleRequest -> EventRoleList / ServiceError,
+
+    ;;; Take a role away. Gathering owners only.
+    @wire-id(15)
+    remove-event-role: RemoveEventRoleRequest -> EventRoleList / ServiceError,
+
+    ;;; Who holds roles on an event or a series. Anonymous callers allowed.
+    @wire-id(16)
+    list-event-roles: ListEventRolesRequest -> EventRoleList / ServiceError
+}
+
+;;; One search across every kind. Anonymous callers are allowed — discovery
+;;; is the thing a person does before they have an account.
+@wire-id(7)
+service SearchService {
+    ;;; Search organizations, gatherings, events and series at once.
+    @wire-id(0)
+    search: SearchRequest -> SearchResults / ServiceError
+}
+
+;;; The global admin role, and the people lookups a roster editor needs.
+;;; Only the admin ops require the role; user lookup needs a session but
+;;; nothing more, because every roster editor has to resolve a handle.
+@wire-id(8)
+service AdminService {
+    ;;; Everybody holding the admin role. Admins only.
+    @wire-id(0)
+    list-admins: Empty -> AdminList / ServiceError,
+
+    ;;; Grant or revoke the role. Admins only. The last admin cannot be
+    ;;; revoked.
+    @wire-id(1)
+    set-admin: SetAdminRequest -> AdminList / ServiceError,
+
+    ;;; Resolve one federated address to a user. Requires a session.
+    @wire-id(2)
+    find-user: FindUserRequest -> UserRef / ServiceError,
+
+    ;;; Complete a handle prefix. Requires a session.
+    @wire-id(3)
+    search-users: SearchUsersRequest -> UserRefList / ServiceError,
+
+    ;;; The settings an administrator can change while the service runs.
+    ;;; Admins only.
+    @wire-id(4)
+    get-instance-settings: Empty -> InstanceSettings / ServiceError,
+
+    ;;; Change them. An absent field is left alone. Admins only.
+    @wire-id(5)
+    update-instance-settings: UpdateInstanceSettingsRequest -> InstanceSettings / ServiceError
+}
+
+;;; Federation: authenticated delivery of events between instances.
+;;;
+;;; The ops split into two groups that are authenticated differently, which
+;;; is why they can share a service without sharing a gate:
+;;;
+;;;   * The administrative ops need an administrator's session. They are how
+;;;     a person on THIS instance decides who to trust.
+;;;   * deliver-events and request-peering are called by another INSTANCE
+;;;     and carry no session at all. A signature over opaque bytes is the
+;;;     authentication, checked inside the op.
+;;;
+;;; Every op refuses unless federation is switched on. When it is off the
+;;; service is not registered, so the wire answers "unknown service or op" —
+;;; the honest answer for an instance that does not federate.
+@wire-id(9)
+service FederationService {
+    ;;; What this instance is, as a peer would address it. Anonymous callers
+    ;;; are allowed: an address is a name, not a secret.
+    @wire-id(0)
+    federation-identity: Empty -> FederationIdentity / ServiceError,
+
+    ;;; Every peer and its standing in both directions. Admins only.
+    @wire-id(1)
+    list-peers: ListPeersRequest -> PeerList / ServiceError,
+
+    ;;; Register a directory to publish to, and ask it to accept us.
+    ;;; Admins only.
+    @wire-id(2)
+    add-peer: AddPeerRequest -> Peer / ServiceError,
+
+    ;;; Answer a peer's request, or change our mind. Admins only.
+    @wire-id(3)
+    set-peer-status: SetPeerStatusRequest -> Peer / ServiceError,
+
+    ;;; Restart delivery to a suspended peer. Admins only.
+    @wire-id(4)
+    resume-peer: ResumePeerRequest -> Peer / ServiceError,
+
+    ;;; Forget a peer and everything it sent. Admins only.
+    @wire-id(5)
+    remove-peer: RemovePeerRequest -> Empty / ServiceError,
+
+    ;;; Accept a signed batch from a peer. Called by an instance, not a
+    ;;; person. Refused unless the peer's inbound status is approved.
+    @wire-id(6)
+    deliver-events: SignedDelivery -> DeliveryReceipt / ServiceError,
+
+    ;;; Ask to be accepted as a peer. Called by an instance, not a person.
+    ;;; Recorded as pending; an administrator here decides.
+    @wire-id(7)
+    request-peering: SignedPeeringRequest -> PeeringReceipt / ServiceError,
+
+    ;;; What peers have sent. Anonymous callers are allowed — a directory
+    ;;; exists to be read.
+    @wire-id(8)
+    list-remote-events: ListRemoteEventsRequest -> RemoteEventList / ServiceError,
+
+    ;;; Give one peer its own events-per-minute allowance, or restore the
+    ;;; instance-wide one. Admins only.
+    @wire-id(9)
+    set-peer-rate-limit: SetPeerRateLimitRequest -> Peer / ServiceError,
+
+    ;;; How much each originating organization is sending, busiest first.
+    ;;; Admins only — it is operational detail, not a public listing.
+    @wire-id(10)
+    list-origin-volume: ListOriginVolumeRequest -> OriginVolumeList / ServiceError,
+
+    ;;; Give one originating organization its own events-per-minute
+    ;;; allowance, or restore the instance-wide one. Admins only.
+    @wire-id(11)
+    set-origin-rate-limit: SetOriginRateLimitRequest -> OriginVolume / ServiceError
+}

@@ -1,0 +1,631 @@
+@import url("https://fonts.googleapis.com/css2?family=Bitter:ital,wght@0,600;0,700;0,800;1,500;1,600&family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap");
+
+/*
+ * Two themes, one set of names.
+ *
+ * The LIGHT palette is defined on bare :root and the dark one only
+ * overrides the tokens inside a media query — so every rule below names a
+ * token and no rule below knows which theme is running.
+ *
+ * The accent differs between them on purpose. #C04058 has enough weight to
+ * read against a near-white page; on a near-black one it goes muddy, so the
+ * dark theme lifts to #E0445F. Both clear 4.5:1 against their own
+ * background, and the text ON the accent flips with it.
+ */
+:root {
+  color-scheme: light dark;
+
+  --bg: #fbf8f9;
+  --bg-deep: #f3ebee;
+  --surface: #ffffff;
+  --ink: #1b1418;
+  --muted: #6b5b61;
+  --line: rgba(27, 20, 24, 0.12);
+
+  --accent: #c04058;
+  --accent-hover: #a63449;
+  --accent-soft: rgba(192, 64, 88, 0.12);
+  /* What text sits on top of --accent. */
+  --accent-ink: #ffffff;
+
+  /* The dark band used for the closing section, in BOTH themes: it is a
+     deliberate inversion, not a theme. */
+  --band: #1b1216;
+  --band-ink: #f6ecef;
+  --band-muted: #b9a3aa;
+
+  font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  font-synthesis: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171013;
+    --bg-deep: #120c0f;
+    --surface: #211a1d;
+    --ink: #f4ebee;
+    --muted: #ab99a0;
+    --line: rgba(244, 235, 238, 0.14);
+
+    --accent: #e0445f;
+    --accent-hover: #ec6178;
+    --accent-soft: rgba(224, 68, 95, 0.16);
+    /* Near-black rather than white: white on #E0445F is under 4.5:1. */
+    --accent-ink: #130a0d;
+
+    --band: #241a1e;
+    --band-ink: #f6ecef;
+    --band-muted: #b9a3aa;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* An anchor jump must not land under the fixed header. */
+:target {
+  scroll-margin-top: 6rem;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+a {
+  color: inherit;
+}
+
+/* One visible ring for every focusable thing. Nothing removes it. */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Off screen until focused, then the first thing in view. */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 0.15s ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* ---- Header ---- */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem clamp(1.25rem, 5vw, 4rem);
+  border-bottom: 1px solid transparent;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  transition: border-color 0.2s ease;
+}
+
+.site-header.is-scrolled {
+  border-bottom-color: var(--line);
+}
+
+.brand {
+  display: inline-flex;
+  gap: 0.6rem;
+  align-items: center;
+  font-family: "Bitter", Georgia, serif;
+  font-weight: 700;
+  font-size: 1.15rem;
+  text-decoration: none;
+}
+
+.brand__mark {
+  display: block;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: center;
+  font-size: 0.95rem;
+}
+
+.site-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding-bottom: 2px;
+  border-bottom: 2px solid transparent;
+}
+
+.site-nav a:hover {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.site-nav .nav-cta {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---- Shared pieces ---- */
+
+.eyebrow {
+  display: inline-flex;
+  gap: 0.55rem;
+  align-items: center;
+  margin: 0 0 1.25rem;
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.eyebrow span {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.eyebrow--dark {
+  color: var(--band-muted);
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Bitter", Georgia, serif;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+}
+
+h1 em,
+h2 em {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.button {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem 1.35rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.button--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.button--primary:hover {
+  background: var(--accent-hover);
+}
+
+.button--secondary {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.button--secondary:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.button--dark {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.button--dark:hover {
+  background: var(--accent-hover);
+}
+
+.button--ghost {
+  border-color: rgba(246, 236, 239, 0.28);
+  color: var(--band-ink);
+}
+
+.button--ghost:hover {
+  border-color: var(--band-ink);
+}
+
+.section-label {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.section-label span {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.section-label p {
+  margin: 0;
+}
+
+/* ---- Hero ---- */
+
+.hero {
+  position: relative;
+  display: grid;
+  gap: clamp(2rem, 5vw, 4rem);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  align-items: center;
+  padding: clamp(3rem, 8vw, 6rem) clamp(1.25rem, 5vw, 4rem) clamp(3rem, 7vw, 5rem);
+}
+
+.hero__glow {
+  position: absolute;
+  z-index: -1;
+  top: -20%;
+  right: -10%;
+  width: 45rem;
+  height: 45rem;
+  background: radial-gradient(circle, var(--accent-soft), transparent 62%);
+  pointer-events: none;
+}
+
+.hero h1 {
+  margin: 0 0 1.25rem;
+  font-size: clamp(2.4rem, 6vw, 4rem);
+}
+
+.hero__lede {
+  max-width: 34rem;
+  margin: 0 0 2rem;
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.calendar-card {
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 20px 45px -32px rgba(27, 20, 24, 0.55);
+}
+
+.calendar-card__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+  font-family: "Bitter", Georgia, serif;
+  font-weight: 700;
+}
+
+.calendar-card__heading small {
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.calendar-row {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.calendar-row span {
+  min-width: 3.5rem;
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+.calendar-row p {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+.calendar-row small {
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* An event that arrived from another domain, marked as such. */
+.calendar-row--remote {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.85rem;
+  margin-left: -0.85rem;
+}
+
+.calendar-card__stamp {
+  margin: 1rem 0 0;
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* ---- Manifesto and directories ---- */
+
+.manifesto,
+.directories {
+  display: grid;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  grid-template-columns: minmax(0, 0.3fr) minmax(0, 1fr);
+  padding: clamp(3rem, 7vw, 5.5rem) clamp(1.25rem, 5vw, 4rem);
+  border-top: 1px solid var(--line);
+}
+
+.manifesto h2,
+.directories h2 {
+  margin: 0 0 1.5rem;
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+}
+
+.manifesto__copy,
+.directories__copy {
+  display: grid;
+  gap: 1rem;
+  max-width: 46rem;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.manifesto__copy p,
+.directories__copy p {
+  margin: 0;
+}
+
+/* ---- Capabilities ---- */
+
+.platform {
+  padding: clamp(3rem, 7vw, 5.5rem) clamp(1.25rem, 5vw, 4rem);
+  background: var(--bg-deep);
+  border-top: 1px solid var(--line);
+}
+
+.platform__intro {
+  display: grid;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  grid-template-columns: minmax(0, 0.3fr) minmax(0, 1fr);
+  margin-bottom: 3rem;
+}
+
+.platform__intro h2 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+}
+
+.platform__intro p {
+  max-width: 40rem;
+  margin: 0;
+  color: var(--muted);
+}
+
+.capability-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.capability {
+  position: relative;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.capability__number {
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.capability__icon {
+  margin: 0.75rem 0 0.9rem;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.capability h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+}
+
+.capability p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.98rem;
+}
+
+.capability--accent {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---- Invitation ---- */
+
+.invitation {
+  display: grid;
+  gap: clamp(2rem, 5vw, 4rem);
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  padding: clamp(3rem, 7vw, 5.5rem) clamp(1.25rem, 5vw, 4rem);
+  background: var(--band);
+  color: var(--band-ink);
+}
+
+.invitation h2 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.9rem, 4.5vw, 3rem);
+}
+
+.invitation h2 em {
+  color: var(--accent);
+}
+
+.invitation p {
+  max-width: 34rem;
+  color: var(--band-muted);
+}
+
+.invitation__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+.emblem {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 0.5rem;
+  aspect-ratio: 1;
+  max-width: 20rem;
+  margin: 0 auto;
+  padding: 2rem;
+  border: 1px solid rgba(246, 236, 239, 0.22);
+  border-radius: 20px;
+}
+
+.emblem p {
+  margin: 0;
+  font-family: "Bitter", Georgia, serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--band-ink);
+}
+
+.emblem small {
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--band-muted);
+}
+
+.emblem__rivet {
+  position: absolute;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.emblem__rivet--one { top: 0.9rem; left: 0.9rem; }
+.emblem__rivet--two { top: 0.9rem; right: 0.9rem; }
+.emblem__rivet--three { bottom: 0.9rem; left: 0.9rem; }
+.emblem__rivet--four { bottom: 0.9rem; right: 0.9rem; }
+
+/* ---- Footer ---- */
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2rem clamp(1.25rem, 5vw, 4rem);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.footer-links {
+  display: flex;
+  gap: 1rem;
+}
+
+.footer-links a {
+  text-decoration: none;
+}
+
+.footer-links a:hover {
+  color: var(--accent);
+}
+
+/* ---- Narrow screens ---- */
+
+@media (max-width: 900px) {
+  .hero,
+  .manifesto,
+  .directories,
+  .platform__intro,
+  .invitation {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hero {
+    padding-top: 2.5rem;
+  }
+
+  .invitation__graphic {
+    order: 2;
+  }
+}

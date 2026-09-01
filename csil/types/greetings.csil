@@ -1,0 +1,45 @@
+;; The hello-world domain: a greeting is a message somebody left. It exists
+;; to exercise every layer end to end — SPA -> generated TS client ->
+;; CSIL-RPC over CBOR -> dispatch -> service -> store -> the one migration —
+;; without any domain modeling worth arguing about.
+;;
+;; Does not include common.csil — see the note at the top of that file.
+
+;;; One greeting, as stored.
+Greeting = {
+    @receive-only
+    id: GreetingID,
+
+    ;;; Who left it. Null for greetings left by an anonymous caller.
+    @receive-only
+    ? author_id: UserID,
+
+    ;;; The author's handle at the time of reading, denormalized for display.
+    ;;; Null when the greeting was left anonymously.
+    @receive-only
+    ? author_handle: text,
+
+    ;;; The greeting text.
+    message: text .size (1..280),
+
+    @receive-only
+    created_at: timestamp
+}
+
+;;; Every greeting, newest first. The hello-world listing is deliberately
+;;; unpaginated: adding a cursor is the first thing a real service does, and
+;;; doing it here would obscure the shape this repo exists to demonstrate.
+GreetingList = {
+    greetings: [* Greeting]
+}
+
+;;; Leave a greeting. Requires a session; anonymous callers are refused with
+;;; ServiceError code 1 (unauthenticated).
+CreateGreetingRequest = {
+    message: text .size (1..280)
+}
+
+;;; Fetch one greeting by id.
+GetGreetingRequest = {
+    id: GreetingID
+}

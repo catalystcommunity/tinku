@@ -1,0 +1,99 @@
+;; Search across every kind of thing tinku holds, in one op.
+;;
+;; One heterogeneous result rather than four separate search ops: a person
+;; looking for "bouldering near Denver in April" does not know in advance
+;; whether the answer is an organization, a gathering or an event, and
+;; making them pick the kind before searching is making them answer the
+;; question they came to ask.
+;;
+;; Proximity is a centre and a radius, not a bounding box, because that is
+;; what a UI can offer ("within 25 km of here"). The api turns it into a
+;; latitude/longitude box for the SQL prefilter and then refines the box to
+;; a circle with a great-circle distance in Go. Doing the refinement in Go
+;; rather than SQL is what keeps the two backends identical — SQLite has no
+;; trigonometry a query can rely on, and PostGIS is not a dependency this
+;; prototype takes.
+;;
+;; Does not include common.csil — see the note at the top of that file.
+
+;;; What kind of thing a search should return. An empty `kinds` list means
+;;; every kind.
+SearchKind = "organization" / "gathering" / "event" / "series" / "remote-event"
+
+;;; A circle on the earth's surface.
+GeoCircle = {
+    latitude: float,
+    longitude: float,
+
+    ;;; Radius in kilometres. Clamped to the api's maximum.
+    radius_km: float
+}
+
+;;; Filter results by place. Every field is independent: naming a locality
+;;; and a circle requires a result to satisfy both.
+;;;
+;;; Text place fields match case-insensitively on equality, not on
+;;; substring — "Denver" must be the locality, not appear inside it.
+LocationFilter = {
+    ? locality: text .size (0..120),
+    ? region: text .size (0..120),
+    ? country: text .size (0..2),
+    ? near: GeoCircle
+}
+
+SearchRequest = {
+    ;;; Free text, matched case-insensitively against names, titles, blurbs
+    ;;; and descriptions. Absent or empty matches everything, which is how
+    ;;; a pure browse-by-place or browse-by-time query is expressed.
+    ? query: text .size (0..200),
+
+    ;;; Restrict to these kinds. Empty or absent means every kind.
+    ? kinds: [* SearchKind],
+
+    ? location: LocationFilter,
+
+    ;;; Only events and series with an occurrence starting at or after this.
+    ;;; Ignored for organizations, which have no time.
+    ? starts_after: timestamp,
+
+    ;;; Only events and series with an occurrence starting at or before this.
+    ? starts_before: timestamp,
+
+    ;;; Only things that can be attended online.
+    ? online_only: bool,
+
+    ;;; Only things that happen in person.
+    ? in_person_only: bool,
+
+    ;;; Include events that have already started. Off by default, because
+    ;;; the common search is for something still to come.
+    ? include_started: bool,
+
+    ;;; Applied to each kind independently, so asking for 25 results with no
+    ;;; `kinds` filter can return 25 of each.
+    ? page: Page
+}
+
+;;; What a search found, grouped by kind. A kind excluded by the request, or
+;;; with no matches, comes back as an empty list rather than being absent —
+;;; one shape for the client to render regardless of what matched.
+SearchResults = {
+    organizations: [* Organization],
+    gatherings: [* Gathering],
+    events: [* Event],
+    series: [* EventSeries],
+
+    ;;; Events peers sent, when this instance is a directory. They are a
+    ;;; separate list rather than mixed into `events` because they are a
+    ;;; different thing: a summary and a link, with nothing here to attend
+    ;;; and nobody here able to edit them.
+    remote_events: [* RemoteEvent],
+
+    ;;; Total matches per kind before paging, in the order organizations,
+    ;;; gatherings, events, series.
+    organization_total: uint,
+    gathering_total: uint,
+    event_total: uint,
+    series_total: uint,
+    remote_event_total: uint
+}

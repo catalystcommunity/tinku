@@ -1,0 +1,32 @@
+contentDir: "content"
+outputDir: "../site"
+templatesDir: "templates"
+siteTitle: "Tinku"
+defaultExtension: ".html"
+startPage: "index.html"
+
+markdown:
+  syntaxHighlighting:
+    enabled: false
+
+pageConfig:
+  pageTitle: "Tinku"
+  pageDefaultTemplate: "page.jinja2"
+
+# PySocha initializes its blog outputs even when there are no posts, so these
+# stay configured. The templates they name are one-line stubs.
+blogConfig:
+  title: "Tinku"
+  blogBaseDir: "blog"
+  blogTemplate: "blog.jinja2"
+  listingTemplate: "listing.jinja2"
+  listingPaginationNum: 10
+  listingKeysNeeded: []
+  atomFeeds: false
+  disableRSS: true
+  tagsTemplate: "tags.jinja2"
+  tagTemplate: "tag.jinja2"
+  tagPaginationNum: 10
+  authorsTemplate: "authors.jinja2"
+  authorTemplate: "author.jinja2"
+  authorPaginationNum: 10

@@ -1,0 +1,25 @@
+;; The single declared error arm shared by every fallible op. No service
+;; invents its own error shape, so client error handling is uniform.
+;;
+;; `code` is an APPLICATION error code. It is distinct from the CSIL-RPC
+;; transport `status` (csilgen/docs/csil-rpc-transport.md), which never
+;; carries application semantics: an application failure rides at transport
+;; status 0 as this declared arm, never as a non-zero transport status.
+;; Codes are a small fixed enumeration documented in docs/OPERATING.md, not a
+;; CSIL enum, so a new code is an additive change instead of a breaking one.
+
+;;; The declared error type for every op that can fail.
+ServiceError = {
+    ;;; Application error code. Branch on this, not on `message`.
+    code: uint,
+
+    ;;; Human-readable diagnostic. Safe to log; not stable enough to match on.
+    message: text,
+
+    ;;; The offending field name, when the failure is single-field validation.
+    ? field: text,
+
+    ;;; What kind of resource was being looked up ("greeting", "user"), when
+    ;;; the failure is a not-found case.
+    ? resource_type: text
+}

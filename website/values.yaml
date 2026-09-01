@@ -1,0 +1,15 @@
+# For the catalyst-helm/pysocha-site helm chart.
+# See https://github.com/catalystcommunity/chart-pysocha-site
+
+# TODO: the marketing site has no domain yet. The deploy job refuses to run
+# while this is still the placeholder, so a wrong ingress cannot be created
+# by forgetting to change it.
+domain: REPLACE-ME.example
+
+sitefilePath: "/site/root"
+image:
+  # Set by --set in the reactorcide job, which uses the internal registry.
+  #   Internal: 10.16.0.1:5000/private/catalystcommunity/tinku-website
+  #   External: containers.catalystsquad.com/private/catalystcommunity/tinku-website
+  repository: 10.16.0.1:5000/private/catalystcommunity/tinku-website
+  # tag is provided by --set image.tag=...

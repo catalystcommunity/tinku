@@ -1,0 +1,37 @@
+id: tinku-pr
+name: Tinku PR
+description: "Check the commits, then lint and test every part of the repository."
+on:
+  events:
+    - pull_request_opened
+    - pull_request_updated
+  branches:
+    - main
+jobs:
+  # Cheapest first and on its own: a branch whose commits are wrong should
+  # not spend a Postgres cluster finding that out.
+  conventional-commits:
+    job_file: conventional-commits.yaml
+
+  lint:
+    job_file: lint.yaml
+    depends_on:
+      - conventional-commits
+
+  # The two Go lanes run in parallel. SQLite is fast and catches almost
+  # everything; Postgres is slow and catches the dialect bugs SQLite cannot
+  # see — two of those have already reached this repository.
+  test-go:
+    job_file: test-go.yaml
+    depends_on:
+      - conventional-commits
+
+  test-postgres:
+    job_file: test-postgres.yaml
+    depends_on:
+      - conventional-commits
+
+  test-web:
+    job_file: test-web.yaml
+    depends_on:
+      - conventional-commits
