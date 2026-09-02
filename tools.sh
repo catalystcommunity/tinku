@@ -52,9 +52,11 @@ Commands:
   test-go            Go tests only
   test-web           Webapp tests only
   test-pg            The Go tests against the compose Postgres, not SQLite
-  lint               go vet (api, coredb) + tsc --noEmit (webapp)
+  lint               go vet (api, coredb) + tsc --noEmit (webapp) +
+                     ruff (the CI plugin)
   lint-go            go vet only
   lint-web           tsc --noEmit only
+  lint-ci            ruff over .reactorcide/plugins only
   migrate [verb]     Run goose against \$TINKU_DB_URI (default: the local
                      SQLite database). verb is up, down or status.
   serve-local        Run the api on SQLite with dev auth enabled. No docker,
@@ -280,9 +282,26 @@ cmd_lint_web() {
     ( cd "$SCRIPT_DIR/webapp" && npm run typecheck )
 }
 
+# The CI plugin is Python and runs only in CI, so nothing else would ever
+# catch a name that does not exist. One did: a refactor left `home`
+# referenced in the deploy job after the binding moved into a helper, every
+# local check passed, and the job died in production having already pushed
+# the image. `ruff --select F` is pyflakes' rule set — undefined names,
+# unused imports — which is exactly the class a test suite cannot reach for
+# code no test imports.
+cmd_lint_ci() {
+    log_status "ruff (.reactorcide/plugins)"
+    if ! command -v uv >/dev/null 2>&1; then
+        err "uv is not installed; skipping the CI plugin check. See https://docs.astral.sh/uv/"
+        return 0
+    fi
+    ( cd "$SCRIPT_DIR" && uv tool run ruff check --select F .reactorcide/plugins )
+}
+
 cmd_lint() {
     cmd_lint_go
     cmd_lint_web
+    cmd_lint_ci
     log_status "lint passed"
 }
 
@@ -439,6 +458,7 @@ case "${1:-}" in
     lint)              cmd_lint ;;
     lint-go)           cmd_lint_go ;;
     lint-web)          cmd_lint_web ;;
+    lint-ci)           cmd_lint_ci ;;
     migrate)           cmd_migrate "$@" ;;
     serve-local)       cmd_serve_local ;;
     admin)             cmd_admin "$@" ;;

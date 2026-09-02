@@ -359,6 +359,18 @@ def _lint(root: Path) -> None:
     _section("tsc --noEmit (webapp)")
     _run(["npm", "run", "typecheck"], cwd=root / "webapp")
 
+    # This file, and the rest of the plugin.
+    #
+    # It runs only in CI, so nothing else would ever catch a name that does
+    # not exist — and one did not: a refactor left `home` referenced in the
+    # deploy job after the binding moved into a helper. Every check passed
+    # and the job died in production, having already pushed the image.
+    # `--select F` is pyflakes' rules, which is that class exactly.
+    _section("ruff (.reactorcide/plugins)")
+    uv = _ensure_uv(root)
+    _run([str(uv), "tool", "run", "ruff", "check", "--select", "F", ".reactorcide/plugins"],
+         cwd=root)
+
 
 def _test_go(root: Path) -> None:
     """The Go suite on SQLite, with the race detector.
@@ -900,7 +912,7 @@ def _deploy_website(root: Path) -> None:
     image_tar.unlink()
 
     _section("Deploying")
-    kube_dir = home / ".kube"
+    kube_dir = Path(os.environ.get("HOME", "/root")) / ".kube"
     kube_dir.mkdir(parents=True, exist_ok=True)
     kubeconfig = kube_dir / "config"
     kubeconfig.write_text(kubeconfig_content)
