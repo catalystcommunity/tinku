@@ -491,6 +491,42 @@ The schema is the contract. Change it first.
 
 Never edit generated code. `./tools.sh gen` writes over it.
 
+## Releases
+
+A merge makes a release. Nothing is released by hand, and nothing is
+released by editing a version number.
+
+1. A pull request merges into `main`. `tinku-release-tag` runs
+   [semver-tags](https://github.com/catalystcommunity/semver-tags), which
+   reads the Conventional Commit subjects since the last tag and pushes the
+   next one — `v0.3.0` for a `feat:`, `v0.2.1` for a `fix:`. A merge that
+   carries no releasable change pushes no tag, and that is an answer rather
+   than a failure.
+2. The job then writes that number into `version/VERSION.txt` and pushes it
+   to `main`, so the repository states what it last released. This is a
+   RECORD, not the trigger.
+
+   The organisation's CI account is allowed past branch protection, so a
+   refused push means something is actually wrong — the token, the grant, or
+   the rule — and the job fails rather than continuing quietly. A `main`
+   that a concurrent merge advanced is a race, not a fault: the commit is
+   re-based onto the new tip and pushed again, up to three times.
+3. The TAG starts `tinku-release`, which publishes at one version:
+
+   | Job | What it does |
+   | --- | --- |
+   | `release-images` | Builds and pushes `tinku-api` and `tinku-webapp` to `containers.catalystsquad.com/public/catalystcommunity/`. |
+   | `website-deploy` | Builds the marketing site image and rolls the Helm release in the `tinku-website` namespace. |
+   | `release-github` | Cuts the GitHub release. It waits for the other two: a release that exists for artifacts that failed to build is a lie somebody has to undo. |
+
+Every job reads its version from the TAG, never from `version/VERSION.txt`.
+The tag sits on the merge commit and the version file is written after it,
+so a job that trusted the file would publish the previous number.
+
+The api and the web client are published as images and are not deployed
+anywhere yet — that waits on a domain for the application itself. The
+marketing site is deployed, at `tinkucommunities.com`.
+
 ## Documentation
 
 - `docs/OPERATING.md` — the settings, the error codes, and the procedures.

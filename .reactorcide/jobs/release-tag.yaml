@@ -1,0 +1,17 @@
+name: tinku-release-tag
+description: "Work out the next version from the commits and push its tag."
+job:
+  image: containers.catalystsquad.com/public/reactorcide/runnerbase:latest
+  command: "runnerlib run --job-command true"
+  timeout: 1800
+  working_dir: /job
+  # It pushes to main. Running it from a workstation would push from a
+  # workstation, which is never what somebody testing it meant.
+  disable_run_local: true
+environment:
+  TINKU_JOB: release-tag
+  TINKU_REPOSITORY: "catalystcommunity/tinku"
+  # The identity every other catalystcommunity job commits as.
+  GIT_USER_NAME: "Catalyst Community (automation)"
+  GIT_USER_EMAIL: "catalystcommunityci@todandlorna.com"
+  GITHUB_PAT: "${secret:catalystcommunity/ci:githubpat}"

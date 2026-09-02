@@ -1,14 +1,11 @@
 # For the catalyst-helm/pysocha-site helm chart.
 # See https://github.com/catalystcommunity/chart-pysocha-site
 
-# TODO: the marketing site has no domain yet. The deploy job refuses to run
-# while this is still the placeholder, so a wrong ingress cannot be created
-# by forgetting to change it.
-domain: REPLACE-ME.example
+domain: tinkucommunities.com
 
 sitefilePath: "/site/root"
 image:
   # The reactorcide deploy job sets both again with --set. They are here so
   # that a person can run the same helm command by hand.
   repository: containers.catalystsquad.com/public/catalystcommunity/tinku-website
-  # tag comes from website/VERSION.txt
+  # tag comes from the release tag, which the deploy job passes with --set

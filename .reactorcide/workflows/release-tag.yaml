@@ -1,0 +1,21 @@
+# What a merge does.
+#
+# semver-tags reads the Conventional Commit subjects since the last tag and
+# pushes the next one. Pushing the TAG is what starts the release; this
+# workflow's own job then writes the version into version/VERSION.txt so the
+# repository states the version it last released.
+#
+# Nothing here builds or deploys. A merge that carries no releasable change
+# — a docs-only branch, say — produces no tag and therefore no release, and
+# that is the intended answer rather than a failure.
+id: tinku-release-tag
+name: Tinku release tag
+description: "Work out the next version after a merge and push its tag."
+on:
+  events:
+    - pull_request_merged
+  branches:
+    - main
+jobs:
+  release-tag:
+    job_file: release-tag.yaml

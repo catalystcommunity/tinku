@@ -33,6 +33,9 @@ __pycache__/
 # Playwright MCP writes snapshots here when a browser drives the client.
 .playwright-mcp/
 
+# `reactorcide run-local` drops a run summary next to whatever it ran in.
+reactorcide-workflow-summary.json
+
 # Editor and OS noise
 .DS_Store
 *.swp

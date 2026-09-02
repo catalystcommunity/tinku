@@ -78,20 +78,23 @@ that `Dockerfile` builds. `values.yaml` configures the
 `catalyst-helm/pysocha-site` chart, and the release has its own namespace,
 `tinku-website`.
 
-CI does the work. A push to `main` that changes `VERSION.txt` runs the
-`tinku-website-deploy` workflow, which builds the image, pushes it to the
-internal registry, and runs `helm upgrade --install`. A change to the copy
-alone therefore reaches `main` without a deploy; raise `VERSION.txt` to
-release it.
+CI does the work, and it is the REPOSITORY's release that does it: a merge
+makes a tag, and the tag deploys the site at that version along with
+everything else the release publishes. See "Releases" in the root
+`README.md`.
 
-The deploy job refuses to run while `values.yaml` still holds the
-placeholder domain, because a real ingress for a name nobody owns is worse
-than no deployment.
+The site has no version of its own. It used to, which meant the repository
+carried two version numbers that had to be remembered separately and could
+disagree.
+
+The deploy job refuses to run while `values.yaml` holds a placeholder
+domain, because a real ingress for a name nobody owns is worse than no
+deployment.
 
 The job needs three values from the reactorcide secret store:
 
 | Environment | Secret |
 | --- | --- |
-| `REGISTRY_USER` | `tinku/registry:user` |
-| `REGISTRY_PASSWORD` | `tinku/registry:password` |
-| `KUBECONFIG_CONTENT` | `tinku/k8s:kubeconfig` |
+| `REGISTRY_USER` | `catalystcommunity/registry:user` |
+| `REGISTRY_PASSWORD` | `catalystcommunity/registry:password` |
+| `KUBECONFIG_CONTENT` | `catalystcommunity/k8s:kubeconfig` |

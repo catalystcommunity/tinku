@@ -1,5 +1,5 @@
 name: tinku-website-deploy
-description: "Build the marketing site image and roll the Helm release."
+description: "Build the marketing site image and roll the Helm release for one release tag."
 job:
   image: containers.catalystsquad.com/public/reactorcide/runnerbase:latest
   command: "runnerlib run --job-command true"
