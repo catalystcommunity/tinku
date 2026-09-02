@@ -1,0 +1,30 @@
+# What a release tag does.
+#
+# One tag, one version, everything at that version: the api image, the web
+# client image, the marketing site in Kubernetes, and the GitHub release.
+# The version is read from the TAG rather than from a file, because the tag
+# sits on the merge commit and the version file is written after it — a job
+# that trusted the file would publish the previous version's number.
+#
+# The GitHub release is last and depends on the rest: a release that exists
+# for artifacts that failed to build is a lie a person has to go and undo.
+id: tinku-release
+name: Tinku release
+description: "Publish the images, deploy the site, and cut the GitHub release."
+on:
+  events:
+    - tag_created
+  branches:
+    - "v*"
+jobs:
+  release-images:
+    job_file: release-images.yaml
+
+  website-deploy:
+    job_file: website-deploy.yaml
+
+  release-github:
+    job_file: release-github.yaml
+    depends_on:
+      - release-images
+      - website-deploy

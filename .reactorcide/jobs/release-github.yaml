@@ -1,0 +1,12 @@
+name: tinku-release-github
+description: "Cut the GitHub release for one tag, after its artifacts exist."
+job:
+  image: containers.catalystsquad.com/public/reactorcide/runnerbase:latest
+  command: "runnerlib run --job-command true"
+  timeout: 900
+  working_dir: /job
+  disable_run_local: true
+environment:
+  TINKU_JOB: release-github
+  TINKU_REPOSITORY: "catalystcommunity/tinku"
+  GITHUB_PAT: "${secret:catalystcommunity/ci:githubpat}"

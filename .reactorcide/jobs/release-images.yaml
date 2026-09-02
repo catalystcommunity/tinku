@@ -1,0 +1,18 @@
+name: tinku-release-images
+description: "Build and publish the api and web client images for one release tag."
+job:
+  image: containers.catalystsquad.com/public/reactorcide/runnerbase:latest
+  command: "runnerlib run --job-command true"
+  timeout: 3600
+  # A BuildKit sidecar builds them; the job container does not.
+  capabilities:
+    - builder
+  working_dir: /job
+  run_local:
+    user: host
+environment:
+  TINKU_JOB: release-images
+  REGISTRY: "containers.catalystsquad.com"
+  REGISTRY_PATH_PREFIX: "public/catalystcommunity/tinku"
+  REGISTRY_USER: "${secret:catalystcommunity/registry:user}"
+  REGISTRY_PASSWORD: "${secret:catalystcommunity/registry:password}"

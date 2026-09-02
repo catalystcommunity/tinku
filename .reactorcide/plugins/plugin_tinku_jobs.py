@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import tarfile
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import List, Mapping, Sequence
@@ -446,6 +447,290 @@ def _website(root: Path) -> None:
 
 
 
+
+# ---------------------------------------------------------------------------
+# Releasing
+# ---------------------------------------------------------------------------
+
+# The tag semver-tags pushes, and the only place a release version comes
+# from. The version file is written AFTER the tag, so a job that read the
+# file would publish the previous number.
+RELEASE_TAG = re.compile(r"^v(?P<version>(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$")
+
+GITHUB_API = "https://api.github.com"
+
+
+def _github(method: str, path: str, body: dict | None = None) -> dict:
+    """One call to the GitHub API with the job's token."""
+    token = _require("GITHUB_PAT")
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(GITHUB_API + path, data=data, method=method)
+    request.add_header("Authorization", f"Bearer {token}")
+    request.add_header("Accept", "application/vnd.github+json")
+    if data is not None:
+        request.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(request, timeout=60) as response:
+        payload = response.read().decode()
+    return json.loads(payload) if payload else {}
+
+
+def _release_version(root: Path) -> tuple[str, str]:
+    """The (tag, version) this release job is for.
+
+    The runner puts the tag in REACTORCIDE_BRANCH for a tag_created workflow.
+    Falling back to the tags on HEAD keeps `run-local` usable, and refusing
+    when there is no single release tag is deliberate: a release job with no
+    version has nothing correct to publish.
+    """
+    branch = os.environ.get("REACTORCIDE_BRANCH", "").strip()
+    candidates = [branch] if branch else []
+    if not candidates:
+        listed = _run(["git", "tag", "--points-at", "HEAD"], cwd=root, capture=True, check=False)
+        candidates = listed.stdout.split()
+
+    matches = [c for c in candidates if RELEASE_TAG.fullmatch(c)]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"a release job needs exactly one release tag, found {matches or 'none'}"
+        )
+    tag = matches[0]
+    return tag, RELEASE_TAG.fullmatch(tag).group("version")
+
+
+def _configure_git(root: Path) -> None:
+    repository = _require("TINKU_REPOSITORY")
+    token = _require("GITHUB_PAT")
+    _run(["git", "config", "user.name",
+          os.environ.get("GIT_USER_NAME", "Catalyst Community (automation)")], cwd=root)
+    _run(["git", "config", "user.email",
+          os.environ.get("GIT_USER_EMAIL", "catalystcommunityci@todandlorna.com")], cwd=root)
+    # The URL carries the token, so this one command is not logged.
+    result = subprocess.run(
+        ["git", "remote", "set-url", "origin",
+         f"https://x-access-token:{token}@github.com/{repository}.git"],
+        cwd=root, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("could not point the remote at the authenticated URL")
+    log_stdout("+ git remote set-url origin (token not shown)")
+
+
+def _release_tag(root: Path) -> None:
+    """Work out the next version and push its tag.
+
+    Three things have to be true before semver-tags can be trusted:
+    the checkout is on the real main tip, the history is complete, and the
+    tags are present. The runner prepares a merge ref with a shallow clone
+    and no tags, so all three have to be arranged here — a shallow history
+    silently produces the WRONG version rather than an error.
+    """
+    _configure_git(root)
+
+    _section("Putting the checkout on main, with its history and tags")
+    _run(["git", "fetch", "--unshallow", "origin"], cwd=root, check=False)
+    _run(["git", "fetch", "--tags", "--prune", "--force", "origin",
+          "+refs/heads/main:refs/remotes/origin/main"], cwd=root)
+    _run(["git", "checkout", "-B", "main", "origin/main"], cwd=root)
+
+    binary = _install_semver_tags()
+
+    _section("Working out the next version")
+    result = _run([str(binary), "run", "--output_json"], cwd=root, capture=True)
+    metadata = _last_json_object(result.stdout)
+    if metadata is None:
+        raise RuntimeError("semver-tags returned no release metadata")
+
+    published = str(metadata.get("New_release_published", "")).strip().lower() == "true"
+    if not published:
+        # Not a failure. A merge that carries no releasable change — docs, a
+        # chore — is allowed to produce nothing.
+        log_stdout("No releasable change in this merge; no tag was pushed.")
+        return
+
+    tag = str(metadata.get("New_release_git_tag", "")).strip()
+    if not RELEASE_TAG.fullmatch(tag):
+        raise RuntimeError(f"semver-tags produced a tag this repository does not use: {tag!r}")
+    version = RELEASE_TAG.fullmatch(tag).group("version")
+    log_stdout(f"Released {tag}")
+
+    # semver-tags pushed the tag, which is what starts the release. This
+    # commit records the number in the tree, so the repository states what
+    # it last released.
+    _section("Recording the version")
+    _push_version(root, version)
+
+
+# How many times to try the version push. More than one because a
+# concurrent merge can advance main between the sync above and the push;
+# that is a race, not a fault, and re-basing onto the new main fixes it.
+PUSH_ATTEMPTS = 3
+
+
+def _stamp_version(root: Path, version: str) -> bool:
+    """Write the version and stage it. False when it is already recorded.
+
+    Idempotent, so a retry can re-apply it after re-basing onto a main that
+    moved.
+    """
+    (root / "version" / "VERSION.txt").write_text(f"{version}\n")
+    _run(["git", "add", "version/VERSION.txt"], cwd=root)
+    staged = _run(["git", "diff", "--cached", "--quiet"], cwd=root, check=False)
+    return staged.returncode != 0
+
+
+def _push_version(root: Path, version: str) -> None:
+    """Commit the version and push it to main.
+
+    Failure here is FATAL. The org's CI account is allowed past branch
+    protection, so a refused push means something is actually wrong — the
+    token, the grant, or the protection rule — and swallowing it would leave
+    a repository whose recorded version silently stops matching its tags.
+    The tag is already pushed at this point, so the failure is loud rather
+    than damaging.
+    """
+    if not _stamp_version(root, version):
+        log_stdout(f"main already records {version}")
+        return
+    _run(["git", "commit", "-m", f"ci: record version {version}"], cwd=root)
+
+    for attempt in range(1, PUSH_ATTEMPTS + 1):
+        pushed = _run(["git", "push", "origin", "HEAD:main"], cwd=root, check=False)
+        if pushed.returncode == 0:
+            log_stdout(f"main records {version}")
+            return
+        if attempt == PUSH_ATTEMPTS:
+            raise RuntimeError(
+                f"could not push the version commit to main after {PUSH_ATTEMPTS} attempts. "
+                f"The tag for {version} is already pushed and its release is running, so "
+                "this is a recording failure rather than a release failure — check the "
+                "CI account's push permission on main."
+            )
+
+        # The re-base is tolerant on purpose. When the remote is
+        # unreachable or the credential is wrong, the fetch fails too — and
+        # raising THAT error would bury the useful one below, which names
+        # what an operator should go and look at.
+        log_stdout(f"main advanced; re-basing the version commit (attempt {attempt})")
+        fetched = _run(["git", "fetch", "--tags", "--prune", "--force", "origin",
+                        "+refs/heads/main:refs/remotes/origin/main"], cwd=root, check=False)
+        if fetched.returncode != 0:
+            raise RuntimeError(
+                f"could not reach the remote to record version {version}. The tag is "
+                "already pushed and its release is running, so this is a recording "
+                "failure — check the CI account's credential and its push permission "
+                "on main."
+            )
+        _run(["git", "reset", "--hard", "origin/main"], cwd=root)
+        if not _stamp_version(root, version):
+            log_stdout(f"a concurrent release already recorded {version}")
+            return
+        _run(["git", "commit", "-m", f"ci: record version {version}"], cwd=root)
+
+
+def _install_semver_tags() -> Path:
+    """Fetch the newest semver-tags release."""
+    if shutil.which("semver-tags"):
+        return Path(shutil.which("semver-tags"))
+
+    latest = _github("GET", "/repos/catalystcommunity/semver-tags/releases/latest")
+    url = next(
+        (asset.get("browser_download_url") for asset in latest.get("assets", [])
+         if isinstance(asset, dict) and asset.get("name") == "semver-tags.tar.gz"),
+        None,
+    )
+    if not isinstance(url, str) or not url.startswith(
+        "https://github.com/catalystcommunity/semver-tags/releases/download/"
+    ):
+        raise RuntimeError("the semver-tags release does not carry the expected archive")
+
+    log_stdout(f"Installing semver-tags {latest.get('tag_name')}")
+    archive = Path("/tmp/semver-tags.tar.gz")
+    urllib.request.urlretrieve(url, archive)
+    with tarfile.open(archive) as tar:
+        tar.extractall("/tmp", filter="data")
+    archive.unlink()
+    binary = Path("/tmp/semver-tags")
+    binary.chmod(0o755)
+    return binary
+
+
+def _last_json_object(output: str) -> dict | None:
+    """semver-tags prints its result as the last JSON object on stdout."""
+    for line in reversed(output.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+def _release_images(root: Path) -> None:
+    """Build and publish the api and web client images for one release tag."""
+    tag, version = _release_version(root)
+    registry = _require("REGISTRY")
+    prefix = _require("REGISTRY_PATH_PREFIX")
+
+    _install_build_tools()
+    _write_registry_auth(registry)
+    _wait_for_buildkit(root)
+
+    # Both images build from the REPOSITORY ROOT: the api image reaches the
+    # sibling coredb module, and the webapp image reaches version/.
+    for name, dockerfile in (("api", "api/Dockerfile"), ("webapp", "webapp/Dockerfile")):
+        image = f"{registry}/{prefix}-{name}"
+        _section(f"Building {image}:{version}")
+        image_tar = Path(f"/tmp/tinku-{name}.tar")
+        _run(
+            [
+                "buildctl", "build",
+                "--frontend", "dockerfile.v0",
+                "--local", "context=.",
+                "--local", f"dockerfile={Path(dockerfile).parent}",
+                "--opt", f"filename={Path(dockerfile).name}",
+                "--output", f"type=docker,name={image}:{version},dest={image_tar}",
+            ],
+            cwd=root,
+        )
+        for published in (version, "latest"):
+            _run(["crane", "push", str(image_tar), f"{image}:{published}"], cwd=root)
+        image_tar.unlink()
+        log_stdout(f"Published {image}:{version}")
+
+    log_stdout(f"{tag}: images published")
+
+
+def _release_github(root: Path) -> None:
+    """Cut the GitHub release for this tag.
+
+    It runs LAST, after the images and the deployment. A release that exists
+    for artifacts which failed to build is a lie somebody has to go and
+    undo.
+    """
+    tag, version = _release_version(root)
+    repository = _require("TINKU_REPOSITORY")
+
+    _section(f"Releasing {tag}")
+    try:
+        existing = _github("GET", f"/repos/{repository}/releases/tags/{tag}")
+        if existing.get("id"):
+            log_stdout(f"{tag} is already released; nothing to do")
+            return
+    except urllib.error.HTTPError as err:
+        if err.code != 404:
+            raise
+
+    release = _github("POST", f"/repos/{repository}/releases", {
+        "tag_name": tag,
+        "name": f"tinku {version}",
+        "generate_release_notes": True,
+    })
+    log_stdout(f"Released {release.get('html_url', tag)}")
+
 # ---------------------------------------------------------------------------
 # Deploying the marketing site
 # ---------------------------------------------------------------------------
@@ -455,6 +740,71 @@ def _website(root: Path) -> None:
 HELM_CHART_VERSION = "1.1.1"
 BUILDKIT_VERSION = "0.17.3"
 CRANE_VERSION = "0.20.3"
+
+
+
+def _install_build_tools() -> None:
+    """buildctl and crane, which the runner image does not carry."""
+    arch = platform.machine()
+    if arch != "x86_64":
+        raise RuntimeError(f"no pinned build tooling for {arch}")
+    _install_tool(
+        "buildctl",
+        f"https://github.com/moby/buildkit/releases/download/v{BUILDKIT_VERSION}"
+        f"/buildkit-v{BUILDKIT_VERSION}.linux-amd64.tar.gz",
+        "bin/buildctl",
+    )
+    _install_tool(
+        "crane",
+        f"https://github.com/google/go-containerregistry/releases/download/v{CRANE_VERSION}"
+        f"/go-containerregistry_Linux_x86_64.tar.gz",
+        "crane",
+    )
+
+
+def _install_deploy_tools(root: Path) -> None:
+    """helm and kubectl, for the jobs that touch the cluster."""
+    home = Path(os.environ.get("HOME", "/root"))
+    if not shutil.which("helm"):
+        log_stdout("Installing helm")
+        _run(
+            ["sh", "-c",
+             "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"],
+            cwd=root,
+            env={"USE_SUDO": "false", "HELM_INSTALL_DIR": str(home / ".local" / "bin")},
+        )
+    if not shutil.which("kubectl"):
+        log_stdout("Installing kubectl")
+        with urllib.request.urlopen("https://dl.k8s.io/release/stable.txt") as response:
+            kubectl_version = response.read().decode().strip()
+        kubectl = home / ".local" / "bin" / "kubectl"
+        urllib.request.urlretrieve(
+            f"https://dl.k8s.io/release/{kubectl_version}/bin/linux/amd64/kubectl", kubectl
+        )
+        kubectl.chmod(0o755)
+
+
+def _write_registry_auth(registry: str) -> None:
+    """Registry credentials, where buildctl and crane both look for them."""
+    home = Path(os.environ.get("HOME", "/root"))
+    docker_dir = home / ".docker"
+    docker_dir.mkdir(parents=True, exist_ok=True)
+    auth = base64.b64encode(
+        f"{_require('REGISTRY_USER')}:{_require('REGISTRY_PASSWORD')}".encode()
+    ).decode()
+    (docker_dir / "config.json").write_text(json.dumps({"auths": {registry: {"auth": auth}}}))
+    (docker_dir / "config.json").chmod(0o600)
+
+
+def _wait_for_buildkit(root: Path) -> None:
+    """The sidecar starts alongside the job, not before it."""
+    _section("Waiting for the BuildKit sidecar")
+    for _ in range(30):
+        probe = _run(["buildctl", "debug", "info"], cwd=root, capture=True, check=False)
+        if probe.returncode == 0:
+            return
+        time.sleep(1)
+    raise RuntimeError("the BuildKit sidecar was not ready within 30 seconds")
 
 
 def _install_tool(name: str, url: str, member: str | None) -> None:
@@ -490,14 +840,16 @@ def _require(name: str) -> str:
 def _deploy_website(root: Path) -> None:
     """Build the site image, push it, and roll the Helm release.
 
-    The same shape tnl-site uses — internal registry, the pysocha-site
-    chart — written here in Python rather than shell so it reads the same
-    way as every other job in this repository.
+    The shape tnl-site uses — the pysocha-site chart, one release per
+    version — written in Python here so it reads like every other job in
+    this repository.
+
+    The version is the RELEASE TAG. It used to be a VERSION.txt of the
+    site's own, which meant the repository had two version numbers that had
+    to be remembered separately; now one tag releases everything.
     """
     website = root / "website"
-    version = (website / "VERSION.txt").read_text().strip()
-    if not version:
-        raise RuntimeError("website/VERSION.txt is empty")
+    _tag, version = _release_version(root)
 
     # A placeholder domain would create a real ingress for a name nobody
     # owns. Refuse before anything is built.
@@ -519,61 +871,10 @@ def _deploy_website(root: Path) -> None:
     image = f"{registry}/{registry_path}"
 
     _section(f"Deploying {image}:{version}")
-
-    home = Path(os.environ.get("HOME", "/root"))
-    arch = platform.machine()
-    if arch != "x86_64":
-        raise RuntimeError(f"The deploy job has no pinned tooling for {arch}")
-
-    _install_tool(
-        "buildctl",
-        f"https://github.com/moby/buildkit/releases/download/v{BUILDKIT_VERSION}"
-        f"/buildkit-v{BUILDKIT_VERSION}.linux-amd64.tar.gz",
-        "bin/buildctl",
-    )
-    _install_tool(
-        "crane",
-        f"https://github.com/google/go-containerregistry/releases/download/v{CRANE_VERSION}"
-        f"/go-containerregistry_Linux_x86_64.tar.gz",
-        "crane",
-    )
-    if not shutil.which("helm"):
-        log_stdout("Installing helm")
-        _run(
-            ["sh", "-c",
-             "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"],
-            cwd=root,
-            env={"USE_SUDO": "false", "HELM_INSTALL_DIR": str(home / ".local" / "bin")},
-        )
-    if not shutil.which("kubectl"):
-        log_stdout("Installing kubectl")
-        with urllib.request.urlopen("https://dl.k8s.io/release/stable.txt") as response:
-            kubectl_version = response.read().decode().strip()
-        kubectl = home / ".local" / "bin" / "kubectl"
-        urllib.request.urlretrieve(
-            f"https://dl.k8s.io/release/{kubectl_version}/bin/linux/amd64/kubectl", kubectl
-        )
-        kubectl.chmod(0o755)
-
-    # Registry auth for buildctl and crane.
-    docker_dir = home / ".docker"
-    docker_dir.mkdir(parents=True, exist_ok=True)
-    auth = base64.b64encode(
-        f"{registry_user}:{registry_password}".encode()
-    ).decode()
-    (docker_dir / "config.json").write_text(
-        json.dumps({"auths": {registry: {"auth": auth}}})
-    )
-    (docker_dir / "config.json").chmod(0o600)
-
-    _section("Waiting for the BuildKit sidecar")
-    for _ in range(30):
-        probe = _run(["buildctl", "debug", "info"], cwd=root, capture=True, check=False)
-        if probe.returncode == 0:
-            break
-        time.sleep(1)
-    else:
-        raise RuntimeError("The BuildKit sidecar was not ready within 30 seconds")
+    _install_build_tools()
+    _install_deploy_tools(root)
+    _write_registry_auth(registry)
+    _wait_for_buildkit(root)
 
     _section("Building the image")
     image_tar = Path("/tmp/tinku-website.tar")
@@ -690,6 +991,12 @@ class TinkuJobsPlugin(Plugin):
             _website(root)
         elif job == "deploy-website":
             _deploy_website(root)
+        elif job == "release-tag":
+            _release_tag(root)
+        elif job == "release-images":
+            _release_images(root)
+        elif job == "release-github":
+            _release_github(root)
         else:
             raise RuntimeError(f"Unknown TINKU_JOB value: {job}")
 
