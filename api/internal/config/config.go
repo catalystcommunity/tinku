@@ -9,6 +9,7 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -60,6 +61,19 @@ type Config struct {
 	// Defaults to true; a plain-HTTP local run over http://localhost needs
 	// it false, which is the only reason it is configurable.
 	SessionCookieSecure bool
+
+	// SessionCookieSameSite is "lax" or "none".
+	//
+	// Lax is right whenever the client and the api are the same SITE, which
+	// includes different PORTS of one host: app on :8080 and api on :5080
+	// are two origins and one site, and a Lax cookie travels between them.
+	//
+	// "none" is for the case Lax genuinely blocks — a client on one
+	// registrable domain calling an api on another, say app.example.com to
+	// api.example.net. A browser refuses SameSite=None without Secure, so
+	// that combination needs HTTPS and this setting agrees: none forces
+	// Secure on regardless of SessionCookieSecure.
+	SessionCookieSameSite string
 
 	// LinkkeysDomain is tinku's own relying-party DNS identity — the
 	// audience linkkeys binds each assertion to.
@@ -190,7 +204,7 @@ type Config struct {
 func Load(flags map[string]string) Config {
 	cfg := Config{
 		Env:     getEnv("TINKU_ENV", "prod"),
-		APIPort: getEnvInt("TINKU_API_PORT", 8080),
+		APIPort: getEnvInt("TINKU_API_PORT", 5080),
 		OpsPort: getEnvInt("TINKU_OPS_PORT", 9090),
 
 		DBURI:         getEnv("TINKU_DB_URI", "postgresql://tinku:devpass123@localhost:5432/tinku_db?sslmode=disable"),
@@ -217,6 +231,7 @@ func Load(flags map[string]string) Config {
 		FederationEnabled:       getEnvBool("TINKU_FEDERATION_ENABLED", false),
 		FederationHandle:        getEnv("TINKU_FEDERATION_HANDLE", ""),
 		PublicBaseURL:           getEnv("TINKU_PUBLIC_BASE_URL", ""),
+		SessionCookieSameSite:   strings.ToLower(getEnv("TINKU_SESSION_COOKIE_SAMESITE", "lax")),
 		FederationFailureWindow: getEnvDuration("TINKU_FEDERATION_FAILURE_WINDOW", 24*time.Hour),
 		FederationPollInterval:  getEnvDuration("TINKU_FEDERATION_POLL_INTERVAL", 30*time.Second),
 		FederationRetryBase:     getEnvDuration("TINKU_FEDERATION_RETRY_BASE", 30*time.Second),
@@ -372,6 +387,21 @@ func (c Config) LinkkeysConfigured() bool {
 // DevAuthAllowed is the environment half of the dev-auth gate: the flag
 // alone is not enough, the deployment must also be a dev or nonprod one.
 // Both halves must pass before DevAuthService is registered at all.
+// SameSite resolves the cookie attribute, and CookieSecure resolves the
+// Secure flag alongside it: a browser drops a SameSite=None cookie that is
+// not Secure, so asking for one asks for the other.
+func (c Config) SameSite() http.SameSite {
+	if c.SessionCookieSameSite == "none" {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteLaxMode
+}
+
+// CookieSecure is SessionCookieSecure, forced on when SameSite is None.
+func (c Config) CookieSecure() bool {
+	return c.SessionCookieSecure || c.SessionCookieSameSite == "none"
+}
+
 func (c Config) DevAuthAllowed() bool {
 	switch strings.ToLower(c.Env) {
 	case "dev", "development", "nonprod", "test":

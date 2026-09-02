@@ -121,6 +121,15 @@ ListOrganizationsRequest = {
     ;;; an anonymous caller asking for `mine` gets an empty list, not an
     ;;; error.
     ? mine: bool,
+
+    ;;; Free text. It matches the name, the blurb and the description,
+    ;;; because a person looking for the climbing organization may remember
+    ;;; what it does rather than what it is called — but a name match ranks
+    ;;; above a description match, and only the name is shown. A typeahead
+    ;;; that offered a description match with no visible reason for it
+    ;;; reads as a wrong answer.
+    ? query: text .size (0..120),
+
     ? page: Page
 }
 

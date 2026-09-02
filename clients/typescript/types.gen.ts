@@ -34,6 +34,16 @@ export type EventID = string;
 export type EventSeriesID = string;
 
 /**
+ * A webhook's id (ULID).
+ */
+export type WebhookID = string;
+
+/**
+ * An offer's id (ULID). One gathering offered to one organization.
+ */
+export type GatheringOfferID = string;
+
+/**
  * The empty payload. Ops that take no input and ops that return nothing
  * both use it, so every op still has a declared request and response type.
  */
@@ -416,6 +426,15 @@ export interface ListOrganizationsRequest {
    * error.
    */
   mine?: boolean;
+  /**
+   * Free text. It matches the name, the blurb and the description,
+   * because a person looking for the climbing organization may remember
+   * what it does rather than what it is called — but a name match ranks
+   * above a description match, and only the name is shown. A typeahead
+   * that offered a description match with no visible reason for it
+   * reads as a wrong answer.
+   */
+  query?: string;
   page?: Page;
 }
 
@@ -663,6 +682,106 @@ export interface AddGatheringOwnerRequest {
 export interface RemoveGatheringOwnerRequest {
   gatheringId: GatheringID;
   owner: OwnerRefInput;
+}
+
+/**
+ * Where an offer stands. An offer is a two-sided move: a gathering's owner
+ * hands it to an organization, and an owner of that organization accepts.
+ * Neither side can do it alone — an owner cannot push a gathering into
+ * somebody else's organization, and an organization cannot take one.
+ */
+export type GatheringOfferStatus = "pending" | "accepted" | "declined" | "withdrawn";
+
+/**
+ * One offer of one gathering to one organization.
+ */
+export interface GatheringOffer {
+  id: GatheringOfferID;
+  gatheringId: GatheringID;
+  gatheringName: string;
+  organizationId: OrganizationID;
+  organizationName: string;
+  /**
+   * Who offered it. The gathering's owner at the time of the offer.
+   */
+  offeredBy: UserRef;
+  /**
+   * Why, in the offerer's words. An organization's owner is being asked
+   * to take on somebody else's gathering and deserves a sentence about
+   * it.
+   */
+  note: string;
+  status: GatheringOfferStatus;
+  createdAt: Date;
+  /**
+   * When it stopped being pending. Absent while it still is.
+   */
+  resolvedAt?: Date;
+  viewer: ViewerContext;
+}
+
+/**
+ * Offer a gathering to an organization. The caller must own the
+ * gathering. Offering the same gathering to the same organization twice
+ * while an offer is pending returns the pending one rather than making a
+ * second.
+ */
+export interface OfferGatheringRequest {
+  gatheringId: GatheringID;
+  organizationId: OrganizationID;
+  note: string;
+}
+
+/**
+ * Offers to an organization the caller owns, or offers of a gathering the
+ * caller owns. With neither field, every offer the caller can see.
+ */
+export interface ListGatheringOffersRequest {
+  organizationId?: OrganizationID;
+  gatheringId?: GatheringID;
+  /**
+   * Include offers that are no longer pending. Off by default.
+   */
+  includeResolved?: boolean;
+}
+
+export interface GatheringOfferList {
+  offers: GatheringOffer[];
+  total: number;
+}
+
+/**
+ * Accept or decline. An owner of the organization only.
+ * 
+ * Accepting makes the organization an owner of the gathering ALONGSIDE
+ * whoever owned it before — an offer is not a surrender — and puts the
+ * gathering's individual owners on the organization's roster, since they
+ * now hold ownership through it. The gathering's members are not touched:
+ * people join gatherings and attend events, and nobody is enrolled into an
+ * organization by a decision two other people made.
+ */
+export interface RespondToGatheringOfferRequest {
+  offerId: GatheringOfferID;
+  accept: boolean;
+}
+
+/**
+ * Take back an offer that is still pending. The offering side only.
+ */
+export interface WithdrawGatheringOfferRequest {
+  offerId: GatheringOfferID;
+}
+
+/**
+ * Put a gathering under an organization with no offer and no acceptance.
+ * Administrators only: this is the tool for a gathering that was started
+ * loose and belongs to an organization that already exists, and it is
+ * deliberately not available to anybody who could otherwise be tempted to
+ * take a gathering that is not theirs.
+ */
+export interface AdoptGatheringRequest {
+  gatheringId: GatheringID;
+  organizationId: OrganizationID;
 }
 
 /**
@@ -963,6 +1082,18 @@ export interface DeleteEventRequest {
  */
 export interface ListEventsRequest {
   gatheringId?: GatheringID;
+  /**
+   * Only events under gatherings this organization owns.
+   */
+  ownedByOrganization?: OrganizationID;
+  /**
+   * Only events under gatherings the caller belongs to or owns. Requires
+   * a session; an anonymous caller asking for `mine` gets an empty list.
+   * 
+   * This is a WIDER question than `attending_only`: what is on for the
+   * groups I am part of, rather than what I have said I am coming to.
+   */
+  mine?: boolean;
   /**
    * Only events starting at or after this instant.
    */
@@ -1822,6 +1953,150 @@ export interface ListOriginVolumeRequest {
   page?: Page;
 }
 
+/**
+ * What a webhook hangs off. An event or a series never carries one of its
+ * own: a webhook is set where a person holds ownership, and the things
+ * underneath it are what it reports on.
+ */
+export type WebhookOwnerKind = "organization" | "gathering";
+
+/**
+ * How much of what happens underneath is reported.
+ * 
+ * `all` is everything under the level, events included. `structure_only`
+ * is the organization and its gatherings, and no events at all — the
+ * setting for an integration that tracks WHAT EXISTS rather than what is
+ * scheduled. On a gathering, the two differ only in whether its events are
+ * reported, since a gathering has no gatherings under it.
+ */
+export type WebhookScope = "all" | "structure_only";
+
+/**
+ * What happened. A cancellation is not a deletion: a cancelled event still
+ * exists and still shows, which a receiver has to be able to tell apart
+ * from a record that went away.
+ */
+export type WebhookAction = "created" | "updated" | "cancelled" | "deleted";
+
+/**
+ * What it happened to.
+ */
+export type WebhookSubject = "organization" | "gathering" | "event" | "series";
+
+/**
+ * A webhook, as read. The secret is NOT here: it is returned once, by
+ * create-webhook, and never again — a value a server can hand back on
+ * demand is a value that leaks through any screen that shows it.
+ */
+export interface Webhook {
+  id: WebhookID;
+  ownerKind: WebhookOwnerKind;
+  ownerId: string;
+  /**
+   * Where deliveries are POSTed. HTTPS only, except in a dev
+   * environment, where a local http:// endpoint is the only way to try
+   * one at all.
+   */
+  url: string;
+  scope: WebhookScope;
+  /**
+   * A webhook that fails repeatedly is switched off rather than retried
+   * forever. An owner switches it back on after fixing the endpoint.
+   */
+  active: boolean;
+  /**
+   * Send the record, not only a pointer to it.
+   * 
+   * Off by default, and the default is the safe one: a delivery goes to
+   * a URL over which this server has no say, and a gathering's
+   * description or an address can be information its members did not
+   * expect to travel. With this on, a delivery carries the fields a
+   * reader of the record would see — description, times, location, link.
+   * 
+   * It is the OWNER's information to send. They are the same people who
+   * wrote it, and a directory that refused to tell them their own
+   * description would be pretending to a control it does not have. The
+   * client warns and asks them to accept it; the server records the
+   * choice.
+   */
+  includeDetails: boolean;
+  /**
+   * What this webhook is for, in the owner's own words. Shown in the
+   * list, so five of them are tellable apart.
+   */
+  note: string;
+  /**
+   * What the last attempt did. Absent until one has been made.
+   */
+  lastStatus?: number;
+  lastAttemptAt?: Date;
+  /**
+   * Consecutive failures. Reset by a success, and by an owner switching
+   * the webhook back on.
+   */
+  failureCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * A webhook and the signing secret that was minted with it. This shape is
+ * returned by create-webhook alone.
+ */
+export interface WebhookWithSecret {
+  webhook: Webhook;
+  /**
+   * The HMAC-SHA256 key that signs every delivery to this webhook, in
+   * the `X-Tinku-Signature` header. Shown once. A receiver that does not
+   * check it cannot tell a delivery from anybody else's POST.
+   */
+  secret: string;
+}
+
+export interface CreateWebhookRequest {
+  ownerKind: WebhookOwnerKind;
+  ownerId: string;
+  url: string;
+  scope: WebhookScope;
+  note: string;
+  /**
+   * See Webhook.include_details. A client sets this only after the
+   * person has been shown what it means and has accepted it.
+   */
+  includeDetails: boolean;
+}
+
+export interface UpdateWebhookRequest {
+  id: WebhookID;
+  url?: string;
+  scope?: WebhookScope;
+  note?: string;
+  /**
+   * Switching a webhook back on also clears its failure count: an owner
+   * who has fixed an endpoint is telling the server to start over.
+   */
+  active?: boolean;
+  includeDetails?: boolean;
+}
+
+export interface DeleteWebhookRequest {
+  id: WebhookID;
+}
+
+export interface ListWebhooksRequest {
+  ownerKind: WebhookOwnerKind;
+  ownerId: string;
+}
+
+export interface WebhookList {
+  webhooks: Webhook[];
+  /**
+   * How many this level may have. A client shows the count against the
+   * limit rather than discovering it by being refused.
+   */
+  limit: number;
+}
+
 export function validateBeginLoginRequest(value: BeginLoginRequest): string[] {
   const errors: string[] = [];
   if (value.domain.length < 1 || value.domain.length > 253) errors.push("domain: length must be between 1 and 253");
@@ -1879,6 +2154,14 @@ export function validateUpdateOrganizationRequest(value: UpdateOrganizationReque
   return errors;
 }
 
+export function validateListOrganizationsRequest(value: ListOrganizationsRequest): string[] {
+  const errors: string[] = [];
+  if (value.query !== undefined) {
+    if (value.query.length < 0 || value.query.length > 120) errors.push("query: length must be between 0 and 120");
+  }
+  return errors;
+}
+
 export function validateGathering(value: Gathering): string[] {
   const errors: string[] = [];
   if (value.name.length < 1 || value.name.length > 120) errors.push("name: length must be between 1 and 120");
@@ -1906,6 +2189,18 @@ export function validateUpdateGatheringRequest(value: UpdateGatheringRequest): s
   if (value.description !== undefined) {
     if (value.description.length < 0 || value.description.length > 10000) errors.push("description: length must be between 0 and 10000");
   }
+  return errors;
+}
+
+export function validateGatheringOffer(value: GatheringOffer): string[] {
+  const errors: string[] = [];
+  if (value.note.length < 0 || value.note.length > 500) errors.push("note: length must be between 0 and 500");
+  return errors;
+}
+
+export function validateOfferGatheringRequest(value: OfferGatheringRequest): string[] {
+  const errors: string[] = [];
+  if (value.note.length < 0 || value.note.length > 500) errors.push("note: length must be between 0 and 500");
   return errors;
 }
 
@@ -2110,6 +2405,31 @@ export function validateListRemoteEventsRequest(value: ListRemoteEventsRequest):
   const errors: string[] = [];
   if (value.query !== undefined) {
     if (value.query.length < 0 || value.query.length > 200) errors.push("query: length must be between 0 and 200");
+  }
+  return errors;
+}
+
+export function validateWebhook(value: Webhook): string[] {
+  const errors: string[] = [];
+  if (value.url.length < 1 || value.url.length > 2000) errors.push("url: length must be between 1 and 2000");
+  if (value.note.length < 0 || value.note.length > 200) errors.push("note: length must be between 0 and 200");
+  return errors;
+}
+
+export function validateCreateWebhookRequest(value: CreateWebhookRequest): string[] {
+  const errors: string[] = [];
+  if (value.url.length < 1 || value.url.length > 2000) errors.push("url: length must be between 1 and 2000");
+  if (value.note.length < 0 || value.note.length > 200) errors.push("note: length must be between 0 and 200");
+  return errors;
+}
+
+export function validateUpdateWebhookRequest(value: UpdateWebhookRequest): string[] {
+  const errors: string[] = [];
+  if (value.url !== undefined) {
+    if (value.url.length < 1 || value.url.length > 2000) errors.push("url: length must be between 1 and 2000");
+  }
+  if (value.note !== undefined) {
+    if (value.note.length < 0 || value.note.length > 200) errors.push("note: length must be between 0 and 200");
   }
   return errors;
 }

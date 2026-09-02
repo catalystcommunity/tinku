@@ -29,6 +29,16 @@ type DevAuthService struct {
 	Sink SessionSink
 }
 
+// DevAdminHandle is the handle that carries the administrator role in a
+// development environment, at ANY domain. A person testing federation runs
+// two instances with two domains and needs an administrator on both; making
+// them grant it by hand on each one is friction with no safety in it, since
+// this whole path already mints sessions with no identity assertion.
+//
+// `tinku dev-seed` makes this account up front. Signing in as it is the
+// other way to the same row.
+const DevAdminHandle = "devadmin"
+
 var _ csil.DevAuthService = (*DevAuthService)(nil)
 
 // DevLogin mints a session for `handle@domain`, creating the user the first
@@ -61,6 +71,17 @@ func (s *DevAuthService) DevLogin(ctx context.Context, req csil.DevLoginRequest)
 	})
 	if err != nil {
 		return csil.UserProfile{}, err
+	}
+
+	// The development administrator, at whatever domain was asked for.
+	// Gated by DevAuthAllowed above: this cannot run in production.
+	if user.Handle == DevAdminHandle && !user.IsAdmin {
+		if err := s.Store.SetAdmin(ctx, user.ID, true); err != nil {
+			return csil.UserProfile{}, err
+		}
+		user.IsAdmin = true
+		log.WithField("address", handle+"@"+domain).
+			Warn("DEV AUTH: granted the administrator role to the development administrator")
 	}
 
 	result, err := MintSession(ctx, s.Store, user, s.Cfg.SessionTTL)

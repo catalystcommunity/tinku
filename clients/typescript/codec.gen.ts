@@ -2,7 +2,7 @@
 // Source: <csil spec>
 // Target: typescript-codec
 
-import type { AddGatheringOwnerRequest, AddPeerRequest, AdminList, AdminUser, AttendEventRequest, Attendee, AttendeeList, BeginLoginRequest, BeginLoginResponse, CreateEventRequest, CreateEventSeriesRequest, CreateGatheringRequest, CreateGreetingRequest, CreateOrganizationRequest, DeleteEventRequest, DeleteEventSeriesRequest, DeleteGatheringRequest, DeleteOrganizationRequest, DeliveryReceipt, DevLoginRequest, Empty, Event, EventBatch, EventID, EventList, EventRole, EventRoleAssignment, EventRoleList, EventSeries, EventSeriesID, EventSeriesList, ExpandEventSeriesRequest, FederatedEvent, FederationIdentity, FindUserRequest, Gathering, GatheringID, GatheringList, GatheringMember, GatheringMemberList, GeoCircle, GetEventRequest, GetEventSeriesRequest, GetGatheringRequest, GetGreetingRequest, GetOrganizationRequest, Greeting, GreetingID, GreetingList, InstanceSettings, JoinGatheringRequest, LeaveGatheringRequest, ListAttendeesRequest, ListEventRolesRequest, ListEventSeriesRequest, ListEventsRequest, ListGatheringMembersRequest, ListGatheringsRequest, ListOrganizationMembersRequest, ListOrganizationsRequest, ListOriginVolumeRequest, ListPeersRequest, ListRemoteEventsRequest, Location, LocationFilter, Organization, OrganizationID, OrganizationList, OrganizationMember, OrganizationMemberList, OrganizationRole, Origin, OriginVolume, OriginVolumeList, OwnerKind, OwnerRef, OwnerRefInput, Page, Peer, PeerList, PeerStatus, PeeringBody, PeeringReceipt, PublishDecision, PublishSetting, PublishSource, RecurrenceFreq, RecurrenceRule, RemoteEvent, RemoteEventList, RemoveEventRoleRequest, RemoveGatheringOwnerRequest, RemoveOrganizationMemberRequest, RemovePeerRequest, ResumePeerRequest, SearchKind, SearchRequest, SearchResults, SearchUsersRequest, ServiceError, SetAdminRequest, SetEventRoleRequest, SetOrganizationMemberRequest, SetOriginRateLimitRequest, SetPeerRateLimitRequest, SetPeerStatusRequest, SignedDelivery, SignedPeeringRequest, UnattendEventRequest, UpdateEventRequest, UpdateEventSeriesRequest, UpdateGatheringRequest, UpdateInstanceSettingsRequest, UpdateOrganizationRequest, UserID, UserKind, UserProfile, UserRef, UserRefList, ViewerContext, Weekday } from "./types.gen.ts";
+import type { AddGatheringOwnerRequest, AddPeerRequest, AdminList, AdminUser, AdoptGatheringRequest, AttendEventRequest, Attendee, AttendeeList, BeginLoginRequest, BeginLoginResponse, CreateEventRequest, CreateEventSeriesRequest, CreateGatheringRequest, CreateGreetingRequest, CreateOrganizationRequest, CreateWebhookRequest, DeleteEventRequest, DeleteEventSeriesRequest, DeleteGatheringRequest, DeleteOrganizationRequest, DeleteWebhookRequest, DeliveryReceipt, DevLoginRequest, Empty, Event, EventBatch, EventID, EventList, EventRole, EventRoleAssignment, EventRoleList, EventSeries, EventSeriesID, EventSeriesList, ExpandEventSeriesRequest, FederatedEvent, FederationIdentity, FindUserRequest, Gathering, GatheringID, GatheringList, GatheringMember, GatheringMemberList, GatheringOffer, GatheringOfferID, GatheringOfferList, GatheringOfferStatus, GeoCircle, GetEventRequest, GetEventSeriesRequest, GetGatheringRequest, GetGreetingRequest, GetOrganizationRequest, Greeting, GreetingID, GreetingList, InstanceSettings, JoinGatheringRequest, LeaveGatheringRequest, ListAttendeesRequest, ListEventRolesRequest, ListEventSeriesRequest, ListEventsRequest, ListGatheringMembersRequest, ListGatheringOffersRequest, ListGatheringsRequest, ListOrganizationMembersRequest, ListOrganizationsRequest, ListOriginVolumeRequest, ListPeersRequest, ListRemoteEventsRequest, ListWebhooksRequest, Location, LocationFilter, OfferGatheringRequest, Organization, OrganizationID, OrganizationList, OrganizationMember, OrganizationMemberList, OrganizationRole, Origin, OriginVolume, OriginVolumeList, OwnerKind, OwnerRef, OwnerRefInput, Page, Peer, PeerList, PeerStatus, PeeringBody, PeeringReceipt, PublishDecision, PublishSetting, PublishSource, RecurrenceFreq, RecurrenceRule, RemoteEvent, RemoteEventList, RemoveEventRoleRequest, RemoveGatheringOwnerRequest, RemoveOrganizationMemberRequest, RemovePeerRequest, RespondToGatheringOfferRequest, ResumePeerRequest, SearchKind, SearchRequest, SearchResults, SearchUsersRequest, ServiceError, SetAdminRequest, SetEventRoleRequest, SetOrganizationMemberRequest, SetOriginRateLimitRequest, SetPeerRateLimitRequest, SetPeerStatusRequest, SignedDelivery, SignedPeeringRequest, UnattendEventRequest, UpdateEventRequest, UpdateEventSeriesRequest, UpdateGatheringRequest, UpdateInstanceSettingsRequest, UpdateOrganizationRequest, UpdateWebhookRequest, UserID, UserKind, UserProfile, UserRef, UserRefList, ViewerContext, Webhook, WebhookID, WebhookList, WebhookOwnerKind, WebhookScope, WebhookWithSecret, Weekday, WithdrawGatheringOfferRequest } from "./types.gen.ts";
 
 /** A CBOR semantic tag wrapping an inner value (e.g. tag 0 timestamp, tag 4 decimal). */
 export type CborTag = { readonly tag: number; readonly value: CborValue };
@@ -20,7 +20,7 @@ export type CborValue =
   | CborTag;
 
 const csilTextEncoder = new TextEncoder();
-const csilTextDecoder = new TextDecoder();
+const csilTextDecoder = new TextDecoder("utf-8", { fatal: true });
 
 function head(major: number, n: number | bigint, out: number[]): void {
   const mt = major << 5;
@@ -98,6 +98,10 @@ function readArg(st: Cursor, low: number): bigint {
     st.pos += 1;
     return BigInt(low);
   }
+  const width = low === 24 ? 1 : low === 25 ? 2 : low === 26 ? 4 : low === 27 ? 8 : 0;
+  if (width === 0 || st.pos >= st.b.length || st.b.length - st.pos - 1 < width) {
+    throw new Error("truncated CBOR argument");
+  }
   if (low === 24) {
     const v = BigInt(st.b[st.pos + 1]);
     st.pos += 2;
@@ -140,7 +144,9 @@ function readFloat(st: Cursor, low: number): number {
   return view.getFloat64(0, false);
 }
 
-function decInto(st: Cursor): CborValue {
+function decInto(st: Cursor, depth: number): CborValue {
+  if (depth > 64) throw new Error("CBOR nesting limit exceeded");
+  if (st.pos >= st.b.length) throw new Error("unexpected end of CBOR input");
   const ib = st.b[st.pos];
   const major = ib >> 5;
   const low = ib & 0x1f;
@@ -169,35 +175,39 @@ function decInto(st: Cursor): CborValue {
       return n >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(n) : n;
     }
     case 2: {
+      if (arg > BigInt(st.b.length - st.pos)) throw new Error("truncated CBOR byte string");
       const n = Number(arg);
       const slice = st.b.slice(st.pos, st.pos + n);
       st.pos += n;
       return slice;
     }
     case 3: {
+      if (arg > BigInt(st.b.length - st.pos)) throw new Error("truncated CBOR text string");
       const n = Number(arg);
       const text = csilTextDecoder.decode(st.b.subarray(st.pos, st.pos + n));
       st.pos += n;
       return text;
     }
     case 4: {
+      if (arg > BigInt(st.b.length - st.pos)) throw new Error("CBOR array length exceeds remaining input");
       const n = Number(arg);
       const arr: CborValue[] = [];
-      for (let i = 0; i < n; i++) arr.push(decInto(st));
+      for (let i = 0; i < n; i++) arr.push(decInto(st, depth + 1));
       return arr;
     }
     case 5: {
+      if (arg > BigInt(st.b.length - st.pos)) throw new Error("CBOR map length exceeds remaining input");
       const n = Number(arg);
       const m = new Map<CborValue, CborValue>();
       for (let i = 0; i < n; i++) {
-        const k = decInto(st);
-        const val = decInto(st);
+        const k = decInto(st, depth + 1);
+        const val = decInto(st, depth + 1);
         m.set(k, val);
       }
       return m;
     }
     case 6: {
-      const inner = decInto(st);
+      const inner = decInto(st, depth + 1);
       return { tag: Number(arg), value: inner };
     }
     default:
@@ -208,7 +218,7 @@ function decInto(st: Cursor): CborValue {
 /** Decode a CSIL CBOR byte payload into a CBOR value tree. */
 export function decode(bytes: Uint8Array): CborValue {
   const st: Cursor = { b: bytes, pos: 0 };
-  const v = decInto(st);
+  const v = decInto(st, 0);
   if (st.pos !== bytes.length) throw new Error("trailing bytes after CBOR value");
   return v;
 }
@@ -830,12 +840,14 @@ export function toListOrganizationsRequestCborValue(v: ListOrganizationsRequest)
   const csilMap = new Map<CborValue, CborValue>();
   if (v.mine !== undefined) csilMap.set("mine", v.mine);
   if (v.page !== undefined) csilMap.set("page", toPageCborValue(v.page));
+  if (v.query !== undefined) csilMap.set("query", v.query);
   return csilMap;
 }
 
 export function fromListOrganizationsRequestCborValue(value: CborValue): ListOrganizationsRequest {
   return {
     mine: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asBool(csilV))(mapGet(value, "mine")),
+    query: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "query")),
     page: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromPageCborValue(csilV))(mapGet(value, "page")),
   };
 }
@@ -1360,6 +1372,180 @@ export function fromRemoveGatheringOwnerRequestCbor(bytes: Uint8Array): RemoveGa
   return fromRemoveGatheringOwnerRequestCborValue(decode(bytes));
 }
 
+export function toGatheringOfferCborValue(v: GatheringOffer): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("id", v.id);
+  csilMap.set("note", v.note);
+  csilMap.set("status", v.status);
+  csilMap.set("viewer", toViewerContextCborValue(v.viewer));
+  csilMap.set("created_at", { tag: 0, value: csilTsToText(v.createdAt) });
+  csilMap.set("offered_by", toUserRefCborValue(v.offeredBy));
+  if (v.resolvedAt !== undefined) csilMap.set("resolved_at", { tag: 0, value: csilTsToText(v.resolvedAt) });
+  csilMap.set("gathering_id", v.gatheringId);
+  csilMap.set("gathering_name", v.gatheringName);
+  csilMap.set("organization_id", v.organizationId);
+  csilMap.set("organization_name", v.organizationName);
+  return csilMap;
+}
+
+export function fromGatheringOfferCborValue(value: CborValue): GatheringOffer {
+  return {
+    id: asString(requireKey(value, "id")),
+    gatheringId: asString(requireKey(value, "gathering_id")),
+    gatheringName: asString(requireKey(value, "gathering_name")),
+    organizationId: asString(requireKey(value, "organization_id")),
+    organizationName: asString(requireKey(value, "organization_name")),
+    offeredBy: fromUserRefCborValue(requireKey(value, "offered_by")),
+    note: asString(requireKey(value, "note")),
+    status: (asEnumMember(asString(requireKey(value, "status")), ["pending", "accepted", "declined", "withdrawn"]) as "pending" | "accepted" | "declined" | "withdrawn"),
+    createdAt: asTimestamp(requireKey(value, "created_at")),
+    resolvedAt: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asTimestamp(csilV))(mapGet(value, "resolved_at")),
+    viewer: fromViewerContextCborValue(requireKey(value, "viewer")),
+  };
+}
+
+export function toGatheringOfferCbor(v: GatheringOffer): Uint8Array {
+  return encodeValue(toGatheringOfferCborValue(v));
+}
+
+export function fromGatheringOfferCbor(bytes: Uint8Array): GatheringOffer {
+  return fromGatheringOfferCborValue(decode(bytes));
+}
+
+export function toOfferGatheringRequestCborValue(v: OfferGatheringRequest): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("note", v.note);
+  csilMap.set("gathering_id", v.gatheringId);
+  csilMap.set("organization_id", v.organizationId);
+  return csilMap;
+}
+
+export function fromOfferGatheringRequestCborValue(value: CborValue): OfferGatheringRequest {
+  return {
+    gatheringId: asString(requireKey(value, "gathering_id")),
+    organizationId: asString(requireKey(value, "organization_id")),
+    note: asString(requireKey(value, "note")),
+  };
+}
+
+export function toOfferGatheringRequestCbor(v: OfferGatheringRequest): Uint8Array {
+  return encodeValue(toOfferGatheringRequestCborValue(v));
+}
+
+export function fromOfferGatheringRequestCbor(bytes: Uint8Array): OfferGatheringRequest {
+  return fromOfferGatheringRequestCborValue(decode(bytes));
+}
+
+export function toListGatheringOffersRequestCborValue(v: ListGatheringOffersRequest): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  if (v.gatheringId !== undefined) csilMap.set("gathering_id", v.gatheringId);
+  if (v.organizationId !== undefined) csilMap.set("organization_id", v.organizationId);
+  if (v.includeResolved !== undefined) csilMap.set("include_resolved", v.includeResolved);
+  return csilMap;
+}
+
+export function fromListGatheringOffersRequestCborValue(value: CborValue): ListGatheringOffersRequest {
+  return {
+    organizationId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "organization_id")),
+    gatheringId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "gathering_id")),
+    includeResolved: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asBool(csilV))(mapGet(value, "include_resolved")),
+  };
+}
+
+export function toListGatheringOffersRequestCbor(v: ListGatheringOffersRequest): Uint8Array {
+  return encodeValue(toListGatheringOffersRequestCborValue(v));
+}
+
+export function fromListGatheringOffersRequestCbor(bytes: Uint8Array): ListGatheringOffersRequest {
+  return fromListGatheringOffersRequestCborValue(decode(bytes));
+}
+
+export function toGatheringOfferListCborValue(v: GatheringOfferList): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("total", v.total);
+  csilMap.set("offers", v.offers.map((csilE): CborValue => toGatheringOfferCborValue(csilE)));
+  return csilMap;
+}
+
+export function fromGatheringOfferListCborValue(value: CborValue): GatheringOfferList {
+  return {
+    offers: asArray(requireKey(value, "offers")).map((csilE) => fromGatheringOfferCborValue(csilE)),
+    total: asNumber(requireKey(value, "total")),
+  };
+}
+
+export function toGatheringOfferListCbor(v: GatheringOfferList): Uint8Array {
+  return encodeValue(toGatheringOfferListCborValue(v));
+}
+
+export function fromGatheringOfferListCbor(bytes: Uint8Array): GatheringOfferList {
+  return fromGatheringOfferListCborValue(decode(bytes));
+}
+
+export function toRespondToGatheringOfferRequestCborValue(v: RespondToGatheringOfferRequest): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("accept", v.accept);
+  csilMap.set("offer_id", v.offerId);
+  return csilMap;
+}
+
+export function fromRespondToGatheringOfferRequestCborValue(value: CborValue): RespondToGatheringOfferRequest {
+  return {
+    offerId: asString(requireKey(value, "offer_id")),
+    accept: asBool(requireKey(value, "accept")),
+  };
+}
+
+export function toRespondToGatheringOfferRequestCbor(v: RespondToGatheringOfferRequest): Uint8Array {
+  return encodeValue(toRespondToGatheringOfferRequestCborValue(v));
+}
+
+export function fromRespondToGatheringOfferRequestCbor(bytes: Uint8Array): RespondToGatheringOfferRequest {
+  return fromRespondToGatheringOfferRequestCborValue(decode(bytes));
+}
+
+export function toWithdrawGatheringOfferRequestCborValue(v: WithdrawGatheringOfferRequest): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("offer_id", v.offerId);
+  return csilMap;
+}
+
+export function fromWithdrawGatheringOfferRequestCborValue(value: CborValue): WithdrawGatheringOfferRequest {
+  return {
+    offerId: asString(requireKey(value, "offer_id")),
+  };
+}
+
+export function toWithdrawGatheringOfferRequestCbor(v: WithdrawGatheringOfferRequest): Uint8Array {
+  return encodeValue(toWithdrawGatheringOfferRequestCborValue(v));
+}
+
+export function fromWithdrawGatheringOfferRequestCbor(bytes: Uint8Array): WithdrawGatheringOfferRequest {
+  return fromWithdrawGatheringOfferRequestCborValue(decode(bytes));
+}
+
+export function toAdoptGatheringRequestCborValue(v: AdoptGatheringRequest): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("gathering_id", v.gatheringId);
+  csilMap.set("organization_id", v.organizationId);
+  return csilMap;
+}
+
+export function fromAdoptGatheringRequestCborValue(value: CborValue): AdoptGatheringRequest {
+  return {
+    gatheringId: asString(requireKey(value, "gathering_id")),
+    organizationId: asString(requireKey(value, "organization_id")),
+  };
+}
+
+export function toAdoptGatheringRequestCbor(v: AdoptGatheringRequest): Uint8Array {
+  return encodeValue(toAdoptGatheringRequestCborValue(v));
+}
+
+export function fromAdoptGatheringRequestCbor(bytes: Uint8Array): AdoptGatheringRequest {
+  return fromAdoptGatheringRequestCborValue(decode(bytes));
+}
+
 export function toRecurrenceRuleCborValue(v: RecurrenceRule): CborValue {
   const csilMap = new Map<CborValue, CborValue>();
   csilMap.set("freq", v.freq);
@@ -1716,18 +1902,22 @@ export function fromDeleteEventRequestCbor(bytes: Uint8Array): DeleteEventReques
 
 export function toListEventsRequestCborValue(v: ListEventsRequest): CborValue {
   const csilMap = new Map<CborValue, CborValue>();
+  if (v.mine !== undefined) csilMap.set("mine", v.mine);
   if (v.page !== undefined) csilMap.set("page", toPageCborValue(v.page));
   if (v.gatheringId !== undefined) csilMap.set("gathering_id", v.gatheringId);
   if (v.startsAfter !== undefined) csilMap.set("starts_after", { tag: 0, value: csilTsToText(v.startsAfter) });
   if (v.startsBefore !== undefined) csilMap.set("starts_before", { tag: 0, value: csilTsToText(v.startsBefore) });
   if (v.attendingOnly !== undefined) csilMap.set("attending_only", v.attendingOnly);
   if (v.includeStarted !== undefined) csilMap.set("include_started", v.includeStarted);
+  if (v.ownedByOrganization !== undefined) csilMap.set("owned_by_organization", v.ownedByOrganization);
   return csilMap;
 }
 
 export function fromListEventsRequestCborValue(value: CborValue): ListEventsRequest {
   return {
     gatheringId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "gathering_id")),
+    ownedByOrganization: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "owned_by_organization")),
+    mine: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asBool(csilV))(mapGet(value, "mine")),
     startsAfter: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asTimestamp(csilV))(mapGet(value, "starts_after")),
     startsBefore: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asTimestamp(csilV))(mapGet(value, "starts_before")),
     attendingOnly: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asBool(csilV))(mapGet(value, "attending_only")),
@@ -3152,5 +3342,195 @@ export function toListOriginVolumeRequestCbor(v: ListOriginVolumeRequest): Uint8
 
 export function fromListOriginVolumeRequestCbor(bytes: Uint8Array): ListOriginVolumeRequest {
   return fromListOriginVolumeRequestCborValue(decode(bytes));
+}
+
+export function toWebhookCborValue(v: Webhook): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("id", v.id);
+  csilMap.set("url", v.url);
+  csilMap.set("note", v.note);
+  csilMap.set("scope", v.scope);
+  csilMap.set("active", v.active);
+  csilMap.set("owner_id", v.ownerId);
+  csilMap.set("created_at", { tag: 0, value: csilTsToText(v.createdAt) });
+  csilMap.set("owner_kind", v.ownerKind);
+  csilMap.set("updated_at", { tag: 0, value: csilTsToText(v.updatedAt) });
+  if (v.lastStatus !== undefined) csilMap.set("last_status", v.lastStatus);
+  csilMap.set("failure_count", v.failureCount);
+  csilMap.set("include_details", v.includeDetails);
+  if (v.lastAttemptAt !== undefined) csilMap.set("last_attempt_at", { tag: 0, value: csilTsToText(v.lastAttemptAt) });
+  return csilMap;
+}
+
+export function fromWebhookCborValue(value: CborValue): Webhook {
+  return {
+    id: asString(requireKey(value, "id")),
+    ownerKind: (asEnumMember(asString(requireKey(value, "owner_kind")), ["organization", "gathering"]) as "organization" | "gathering"),
+    ownerId: asString(requireKey(value, "owner_id")),
+    url: asString(requireKey(value, "url")),
+    scope: (asEnumMember(asString(requireKey(value, "scope")), ["all", "structure_only"]) as "all" | "structure_only"),
+    active: asBool(requireKey(value, "active")),
+    includeDetails: asBool(requireKey(value, "include_details")),
+    note: asString(requireKey(value, "note")),
+    lastStatus: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asNumber(csilV))(mapGet(value, "last_status")),
+    lastAttemptAt: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asTimestamp(csilV))(mapGet(value, "last_attempt_at")),
+    failureCount: asNumber(requireKey(value, "failure_count")),
+    createdAt: asTimestamp(requireKey(value, "created_at")),
+    updatedAt: asTimestamp(requireKey(value, "updated_at")),
+  };
+}
+
+export function toWebhookCbor(v: Webhook): Uint8Array {
+  return encodeValue(toWebhookCborValue(v));
+}
+
+export function fromWebhookCbor(bytes: Uint8Array): Webhook {
+  return fromWebhookCborValue(decode(bytes));
+}
+
+export function toWebhookWithSecretCborValue(v: WebhookWithSecret): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("secret", v.secret);
+  csilMap.set("webhook", toWebhookCborValue(v.webhook));
+  return csilMap;
+}
+
+export function fromWebhookWithSecretCborValue(value: CborValue): WebhookWithSecret {
+  return {
+    webhook: fromWebhookCborValue(requireKey(value, "webhook")),
+    secret: asString(requireKey(value, "secret")),
+  };
+}
+
+export function toWebhookWithSecretCbor(v: WebhookWithSecret): Uint8Array {
+  return encodeValue(toWebhookWithSecretCborValue(v));
+}
+
+export function fromWebhookWithSecretCbor(bytes: Uint8Array): WebhookWithSecret {
+  return fromWebhookWithSecretCborValue(decode(bytes));
+}
+
+export function toCreateWebhookRequestCborValue(v: CreateWebhookRequest): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("url", v.url);
+  csilMap.set("note", v.note);
+  csilMap.set("scope", v.scope);
+  csilMap.set("owner_id", v.ownerId);
+  csilMap.set("owner_kind", v.ownerKind);
+  csilMap.set("include_details", v.includeDetails);
+  return csilMap;
+}
+
+export function fromCreateWebhookRequestCborValue(value: CborValue): CreateWebhookRequest {
+  return {
+    ownerKind: (asEnumMember(asString(requireKey(value, "owner_kind")), ["organization", "gathering"]) as "organization" | "gathering"),
+    ownerId: asString(requireKey(value, "owner_id")),
+    url: asString(requireKey(value, "url")),
+    scope: (asEnumMember(asString(requireKey(value, "scope")), ["all", "structure_only"]) as "all" | "structure_only"),
+    note: asString(requireKey(value, "note")),
+    includeDetails: asBool(requireKey(value, "include_details")),
+  };
+}
+
+export function toCreateWebhookRequestCbor(v: CreateWebhookRequest): Uint8Array {
+  return encodeValue(toCreateWebhookRequestCborValue(v));
+}
+
+export function fromCreateWebhookRequestCbor(bytes: Uint8Array): CreateWebhookRequest {
+  return fromCreateWebhookRequestCborValue(decode(bytes));
+}
+
+export function toUpdateWebhookRequestCborValue(v: UpdateWebhookRequest): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("id", v.id);
+  if (v.url !== undefined) csilMap.set("url", v.url);
+  if (v.note !== undefined) csilMap.set("note", v.note);
+  if (v.scope !== undefined) csilMap.set("scope", v.scope);
+  if (v.active !== undefined) csilMap.set("active", v.active);
+  if (v.includeDetails !== undefined) csilMap.set("include_details", v.includeDetails);
+  return csilMap;
+}
+
+export function fromUpdateWebhookRequestCborValue(value: CborValue): UpdateWebhookRequest {
+  return {
+    id: asString(requireKey(value, "id")),
+    url: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "url")),
+    scope: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : (asEnumMember(asString(csilV), ["all", "structure_only"]) as "all" | "structure_only"))(mapGet(value, "scope")),
+    note: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "note")),
+    active: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asBool(csilV))(mapGet(value, "active")),
+    includeDetails: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asBool(csilV))(mapGet(value, "include_details")),
+  };
+}
+
+export function toUpdateWebhookRequestCbor(v: UpdateWebhookRequest): Uint8Array {
+  return encodeValue(toUpdateWebhookRequestCborValue(v));
+}
+
+export function fromUpdateWebhookRequestCbor(bytes: Uint8Array): UpdateWebhookRequest {
+  return fromUpdateWebhookRequestCborValue(decode(bytes));
+}
+
+export function toDeleteWebhookRequestCborValue(v: DeleteWebhookRequest): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("id", v.id);
+  return csilMap;
+}
+
+export function fromDeleteWebhookRequestCborValue(value: CborValue): DeleteWebhookRequest {
+  return {
+    id: asString(requireKey(value, "id")),
+  };
+}
+
+export function toDeleteWebhookRequestCbor(v: DeleteWebhookRequest): Uint8Array {
+  return encodeValue(toDeleteWebhookRequestCborValue(v));
+}
+
+export function fromDeleteWebhookRequestCbor(bytes: Uint8Array): DeleteWebhookRequest {
+  return fromDeleteWebhookRequestCborValue(decode(bytes));
+}
+
+export function toListWebhooksRequestCborValue(v: ListWebhooksRequest): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("owner_id", v.ownerId);
+  csilMap.set("owner_kind", v.ownerKind);
+  return csilMap;
+}
+
+export function fromListWebhooksRequestCborValue(value: CborValue): ListWebhooksRequest {
+  return {
+    ownerKind: (asEnumMember(asString(requireKey(value, "owner_kind")), ["organization", "gathering"]) as "organization" | "gathering"),
+    ownerId: asString(requireKey(value, "owner_id")),
+  };
+}
+
+export function toListWebhooksRequestCbor(v: ListWebhooksRequest): Uint8Array {
+  return encodeValue(toListWebhooksRequestCborValue(v));
+}
+
+export function fromListWebhooksRequestCbor(bytes: Uint8Array): ListWebhooksRequest {
+  return fromListWebhooksRequestCborValue(decode(bytes));
+}
+
+export function toWebhookListCborValue(v: WebhookList): CborValue {
+  const csilMap = new Map<CborValue, CborValue>();
+  csilMap.set("limit", v.limit);
+  csilMap.set("webhooks", v.webhooks.map((csilE): CborValue => toWebhookCborValue(csilE)));
+  return csilMap;
+}
+
+export function fromWebhookListCborValue(value: CborValue): WebhookList {
+  return {
+    webhooks: asArray(requireKey(value, "webhooks")).map((csilE) => fromWebhookCborValue(csilE)),
+    limit: asNumber(requireKey(value, "limit")),
+  };
+}
+
+export function toWebhookListCbor(v: WebhookList): Uint8Array {
+  return encodeValue(toWebhookListCborValue(v));
+}
+
+export function fromWebhookListCbor(bytes: Uint8Array): WebhookList {
+  return fromWebhookListCborValue(decode(bytes));
 }
 

@@ -470,7 +470,14 @@ type EventFilter struct {
 	SeriesID string
 	// AttendeeID restricts to events this person has marked attendance on.
 	AttendeeID string
-	Place      PlaceFilter
+	// MemberID restricts to events under gatherings this person belongs to
+	// or owns. Wider than AttendeeID: what is on for my groups, rather than
+	// what I have said I am coming to.
+	MemberID string
+	// OwnedByOrganization restricts to events under the gatherings one
+	// organization owns.
+	OwnedByOrganization string
+	Place               PlaceFilter
 	// StartsAfter and StartsBefore bound starts_at. A zero time means
 	// unbounded on that side.
 	StartsAfter  time.Time
@@ -770,4 +777,104 @@ type OriginVolume struct {
 	// RateLimitedTotal counts refusals against THIS origin, as distinct
 	// from the peer's.
 	RateLimitedTotal int64
+}
+
+// GatheringOfferStatus is where a two-sided move stands.
+type GatheringOfferStatus string
+
+const (
+	OfferPending   GatheringOfferStatus = "pending"
+	OfferAccepted  GatheringOfferStatus = "accepted"
+	OfferDeclined  GatheringOfferStatus = "declined"
+	OfferWithdrawn GatheringOfferStatus = "withdrawn"
+)
+
+// GatheringOffer is one gathering offered to one organization.
+//
+// The names and the offerer's handle are carried alongside the ids because
+// every screen that shows an offer shows all three, and a directory that
+// spans domains has to show which domain each of them is from.
+type GatheringOffer struct {
+	ID               string
+	GatheringID      string
+	GatheringName    string
+	OrganizationID   string
+	OrganizationName string
+	OfferedByID      string
+	OfferedByHandle  string
+	OfferedByName    string
+	OfferedByDomain  string
+	Note             string
+	Status           GatheringOfferStatus
+	CreatedAt        time.Time
+	ResolvedAt       *time.Time
+}
+
+// WebhookOwnerKind is the level a webhook hangs off.
+type WebhookOwnerKind string
+
+const (
+	WebhookOwnerOrganization WebhookOwnerKind = "organization"
+	WebhookOwnerGathering    WebhookOwnerKind = "gathering"
+)
+
+// WebhookScope is how much of what happens underneath is reported.
+type WebhookScope string
+
+const (
+	// WebhookScopeAll reports everything under the level, events included.
+	WebhookScopeAll WebhookScope = "all"
+	// WebhookScopeStructure reports the level and its gatherings, and no
+	// events at all.
+	WebhookScopeStructure WebhookScope = "structure_only"
+)
+
+// Webhook is one outbound notification endpoint.
+//
+// Secret is the HMAC key and never leaves the server except in the reply to
+// the call that created it.
+type Webhook struct {
+	ID        string
+	OwnerKind WebhookOwnerKind
+	OwnerID   string
+	URL       string
+	Secret    string
+	Scope     WebhookScope
+	Note      string
+	Active    bool
+	// IncludeDetails sends the record rather than a pointer to it. The
+	// owner's own choice, made with a warning in front of them.
+	IncludeDetails bool
+	FailureCount   int64
+	LastStatus     *int64
+	LastAttemptAt  *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// WebhookInput is what an owner sets. The server owns everything else.
+type WebhookInput struct {
+	URL            string
+	Scope          WebhookScope
+	Note           string
+	Active         bool
+	IncludeDetails bool
+}
+
+// WebhookDelivery is one queued POST.
+type WebhookDelivery struct {
+	ID        string
+	WebhookID string
+	Payload   []byte
+	Attempts  int64
+	URL       string
+	Secret    string
+}
+
+// WebhookAudience splits the webhooks a change matched by what they are
+// allowed to be told. The dispatcher builds one body for each half rather
+// than one for each webhook.
+type WebhookAudience struct {
+	Pointer  []Webhook
+	Detailed []Webhook
 }

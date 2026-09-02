@@ -30,6 +30,9 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
+# Playwright MCP writes snapshots here when a browser drives the client.
+.playwright-mcp/
+
 # Editor and OS noise
 .DS_Store
 *.swp

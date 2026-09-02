@@ -26,6 +26,11 @@ import (
 // code CodeNotFound).
 var ErrNotFound = errors.New("store: not found")
 
+// ErrLimitReached is returned when a bounded collection is full. A webhook
+// count is checked before the insert and again inside it, because two
+// callers can both read four and both write a fifth.
+var ErrLimitReached = errors.New("store: limit reached")
+
 // Store is the full persistence surface tinku needs. It is small enough to
 // implement twice on purpose — every method added here is a method both
 // backends must grow.
@@ -438,4 +443,79 @@ type Store interface {
 	// SetOriginRateLimit gives one origin its own allowance. A nil limit
 	// restores the instance-wide one.
 	SetOriginRateLimit(ctx context.Context, peerID, organizationName string, limit *int64, defaultLimit int64, now time.Time) (*OriginVolume, error)
+
+	// ---- Offers of a gathering to an organization ---------------------
+
+	// CreateGatheringOffer records an offer. When one is already pending
+	// for the same pair it returns that one instead of making a second, so
+	// that offering twice is not two things to answer.
+	CreateGatheringOffer(ctx context.Context, gatheringID, organizationID, offeredBy, note string, now time.Time) (*GatheringOffer, error)
+
+	// GatheringOfferByID reads one offer.
+	GatheringOfferByID(ctx context.Context, id string) (*GatheringOffer, error)
+
+	// ListGatheringOffers returns offers to an organization, offers of a
+	// gathering, or — with both ids empty — every offer that touches the
+	// gatherings and organizations the caller owns.
+	ListGatheringOffers(ctx context.Context, f GatheringOfferFilter) ([]GatheringOffer, int64, error)
+
+	// ResolveGatheringOffer moves a pending offer to a final status. It
+	// answers false when the offer was not pending, which is how a second
+	// acceptance of the same offer is refused without a second read.
+	ResolveGatheringOffer(ctx context.Context, id string, status GatheringOfferStatus, now time.Time) (bool, error)
+
+	// ---- Webhooks -----------------------------------------------------
+
+	// CreateWebhook stores one. The caller has already checked the limit;
+	// this returns ErrLimitReached if the count moved underneath it.
+	CreateWebhook(ctx context.Context, w Webhook, limit int) (*Webhook, error)
+
+	// WebhookByID reads one, secret included. Service code must never put
+	// the secret in a reply except the one that created it.
+	WebhookByID(ctx context.Context, id string) (*Webhook, error)
+
+	// ListWebhooks returns the webhooks on one level.
+	ListWebhooks(ctx context.Context, kind WebhookOwnerKind, ownerID string) ([]Webhook, error)
+
+	// UpdateWebhook changes what an owner may change. Switching a webhook
+	// back on clears its failure count.
+	UpdateWebhook(ctx context.Context, id string, in WebhookInput, now time.Time) (*Webhook, error)
+
+	// DeleteWebhook removes one, and the deliveries queued for it.
+	DeleteWebhook(ctx context.Context, id string) error
+
+	// DeleteWebhooksFor removes every webhook on one level.
+	//
+	// (owner_kind, owner_id) is a pair rather than a foreign key — the two
+	// kinds live in two tables — so nothing cascades here. Deleting the
+	// organization or the gathering has to say so, or its webhooks outlive
+	// it as rows holding a URL and a secret for something that is gone.
+	DeleteWebhooksFor(ctx context.Context, kind WebhookOwnerKind, ownerID string) error
+
+	// QueueWebhookDelivery writes one payload for one webhook.
+	QueueWebhookDelivery(ctx context.Context, webhookID string, payload []byte, now time.Time) error
+
+	// DueWebhookDeliveries claims deliveries whose next try has come.
+	DueWebhookDeliveries(ctx context.Context, now time.Time, limit int) ([]WebhookDelivery, error)
+
+	// WebhookDelivered records a success: the row goes, and the webhook's
+	// failure count resets.
+	WebhookDelivered(ctx context.Context, deliveryID, webhookID string, status int, now time.Time) error
+
+	// WebhookFailed records a failure and schedules the next try. After
+	// `maxAttempts` the delivery is dropped and the webhook is switched
+	// off, because an endpoint that has failed that many times in a row is
+	// not coming back on its own.
+	WebhookFailed(ctx context.Context, deliveryID, webhookID string, status int, reason string, nextTry time.Time, maxAttempts int) error
+}
+
+// GatheringOfferFilter narrows a list of offers.
+type GatheringOfferFilter struct {
+	OrganizationID  string
+	GatheringID     string
+	IncludeResolved bool
+	// ViewerID limits the answer to offers the caller has a side in: made
+	// by them, on a gathering they own, or to an organization they own.
+	// Empty means no such limit, which only admin paths use.
+	ViewerID string
 }

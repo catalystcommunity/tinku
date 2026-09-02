@@ -8,7 +8,9 @@
 #   ./tools.sh lint               # go vet (api + coredb) + tsc --noEmit (webapp)
 #   ./tools.sh migrate [up|down|status]
 #   ./tools.sh serve-local        # api on SQLite, no docker, dev auth on
-#   ./tools.sh dev                # docker compose up (postgres + api + webapp)
+#   ./tools.sh admin grant NAME@example.test   # make a dev user an admin
+#   ./tools.sh dev                # the full stack, seeded: devadmin + devuser
+#   ./tools.sh dev-down           # stop it again
 #   ./tools.sh dev-web            # vite dev server against a local api
 #   ./tools.sh build-images       # build the deployable container images
 #   ./tools.sh site build         # build the marketing site in website/
@@ -34,6 +36,10 @@ err() {
 # nothing else is set. It needs no server, so a first run is one command.
 LOCAL_DB_URI="sqlite:${SCRIPT_DIR}/local.db"
 
+# COMPOSE_DB_URI reaches the compose PostgreSQL from the host. It matches
+# docker-compose.yaml, and `dev` seeds through it.
+COMPOSE_DB_URI="postgresql://tinku:devpass123@localhost:5432/tinku_db?sslmode=disable"
+
 usage() {
     cat <<EOF
 Usage: ./tools.sh <command>
@@ -53,7 +59,17 @@ Commands:
                      SQLite database). verb is up, down or status.
   serve-local        Run the api on SQLite with dev auth enabled. No docker,
                      no Postgres, no linkkeys.
-  dev                Boot the full local stack with docker compose
+  admin [verb]       The global admin role, against \$TINKU_DB_URI. verb is
+                     list, grant <handle@domain> or revoke <handle@domain>.
+                     Granting the first admin is only possible here.
+  dev, dev-up        Start the full stack with docker compose: PostgreSQL,
+                     the api and the web client. Waits for readiness, seeds
+                     the development accounts, then prints the addresses.
+  dev-down           Stop the stack. Add --volumes to drop the database.
+  dev-logs [svc]     Follow the stack's logs. svc is postgres, api or webapp.
+  dev-seed           Make the development accounts against \$TINKU_DB_URI:
+                     devadmin, which is an administrator, and devuser, which
+                     is not. Idempotent. Run it after 'serve-local' too.
   dev-web            Run the vite dev server, proxying to a local api
   build-images       Build the deployable container images
   site [verb]        The marketing site in website/. verb is build or
@@ -236,9 +252,13 @@ cmd_test_pg() {
     log_status "test-pg: the container is still up; stop it with ./tools.sh dev-down"
 }
 
+# cmd_dev_down stops the stack. It keeps the database volume unless the
+# caller asks for --volumes: a dropped volume is a dropped afternoon, and
+# `docker compose down` on its own does not warn.
 cmd_dev_down() {
-    log_status "docker compose down"
-    ( cd "$SCRIPT_DIR" && docker compose down )
+    require_docker "./tools.sh dev-down"
+    log_status "dev-down"
+    ( cd "$SCRIPT_DIR" && docker compose down "$@" )
 }
 
 cmd_test() {
@@ -282,7 +302,7 @@ cmd_migrate() {
 # HTTP on localhost.
 cmd_serve_local() {
     log_status "serve-local"
-    echo "  api:  http://localhost:8080${NC}"
+    echo "  api:  http://localhost:5080${NC}"
     echo "  ops:  http://localhost:9090/metrics, /healthz, /readyz"
     echo "  db:   ${TINKU_DB_URI:-$LOCAL_DB_URI}"
     ( cd "$SCRIPT_DIR/api" && go run . serve \
@@ -290,16 +310,98 @@ cmd_serve_local() {
         --env=dev --dev-auth --session-cookie-insecure )
 }
 
+require_docker() {
+    command -v docker >/dev/null 2>&1 || { err "docker is required for $1"; exit 1; }
+}
+
+# cmd_dev_seed makes the two accounts a person signs in as locally. There is
+# no password to set: development sign-in is devauth.dev-login, which takes
+# a handle and a domain and carries no credential at all.
+cmd_dev_seed() {
+    local uri="${1:-${TINKU_DB_URI:-$LOCAL_DB_URI}}"
+    # A person who runs this before anything has touched the local database
+    # meets "no such table: users", which says nothing. The compose stack
+    # migrates at boot, so only the local file needs this.
+    if [ -z "${1:-}" ]; then
+        ( cd "$SCRIPT_DIR/coredb" && TINKU_DB_URI="$uri" go run ./cmd/migrate up >/dev/null )
+    fi
+    log_status "dev-seed"
+    ( cd "$SCRIPT_DIR/api" && go run . dev-seed --db-uri="$uri" --env=dev )
+}
+
+# cmd_dev starts the stack and waits for it, so the command finishes when the
+# stack is usable rather than when docker has accepted the request. The api
+# is not ready while it migrates, and seeding into a database that has no
+# schema yet fails. `dev-up` is the same command under the name people
+# reach for.
 cmd_dev() {
     log_status "dev"
-    command -v docker >/dev/null 2>&1 || { err "docker is required for './tools.sh dev'"; exit 1; }
-    docker compose up "$@"
+    require_docker "./tools.sh dev"
+    ( cd "$SCRIPT_DIR" && docker compose up -d --build "$@" )
+
+    printf '  waiting for the api'
+    local i
+    for i in $(seq 1 60); do
+        if curl -fsS -o /dev/null http://localhost:9090/readyz 2>/dev/null; then
+            echo
+            cmd_dev_seed "$COMPOSE_DB_URI"
+            log_status "dev: ready"
+            echo "  web client: http://localhost:8080"
+            echo "  api:        http://localhost:5080"
+            echo "  ops:        http://localhost:9090/metrics, /healthz, /readyz"
+            echo "  postgres:   $COMPOSE_DB_URI"
+            echo
+            echo "  sign in as devadmin (an administrator) or devuser, domain example.test"
+            echo "  logs: ./tools.sh dev-logs      stop: ./tools.sh dev-down"
+            return 0
+        fi
+        printf '.'
+        sleep 2
+    done
+    echo
+    err "the api did not become ready. Its log:"
+    ( cd "$SCRIPT_DIR" && docker compose logs --tail 30 api )
+    exit 1
+}
+
+cmd_dev_logs() {
+    require_docker "./tools.sh dev-logs"
+    ( cd "$SCRIPT_DIR" && docker compose logs -f "$@" )
+}
+
+# ensure_web_deps installs the client's dependencies when they are absent.
+# A person who has just cloned the repository has no node_modules, and a
+# command that fails with "vite: not found" tells them nothing.
+ensure_web_deps() {
+    if [ ! -d "$SCRIPT_DIR/webapp/node_modules" ]; then
+        log_status "npm install (webapp)"
+        ( cd "$SCRIPT_DIR/webapp" && npm install )
+    fi
 }
 
 cmd_dev_web() {
+    ensure_web_deps
     log_status "dev-web"
-    echo "  proxying /csil and /auth to http://localhost:8080 (run './tools.sh serve-local' in another shell)"
+    echo "  web client: http://localhost:8080"
+    echo "  proxying /csil and /auth to http://localhost:5080 (run './tools.sh serve-local' in another shell)"
     ( cd "$SCRIPT_DIR/webapp" && npm run dev )
+}
+
+# cmd_admin bootstraps the global admin role. The first admin cannot be
+# granted through the API, because granting needs the role.
+cmd_admin() {
+    local verb="${2:-list}"
+    case "$verb" in
+        list|grant|revoke) ;;
+        *) err "unknown admin verb: $verb (expected list, grant or revoke)"; exit 1 ;;
+    esac
+    if [ "$verb" != "list" ] && [ -z "${3:-}" ]; then
+        err "admin $verb needs an address, for example: ./tools.sh admin $verb ada@example.test"
+        exit 1
+    fi
+    log_status "admin $verb"
+    ( cd "$SCRIPT_DIR/api" && go run . admin "$verb" "${3:-}" \
+        --db-uri="${TINKU_DB_URI:-$LOCAL_DB_URI}" )
 }
 
 cmd_build_images() {
@@ -339,9 +441,12 @@ case "${1:-}" in
     lint-web)          cmd_lint_web ;;
     migrate)           cmd_migrate "$@" ;;
     serve-local)       cmd_serve_local ;;
-    dev)               shift; cmd_dev "$@" ;;
+    admin)             cmd_admin "$@" ;;
+    dev|dev-up)        shift; cmd_dev "$@" ;;
+    dev-logs)          shift; cmd_dev_logs "$@" ;;
+    dev-seed)          cmd_dev_seed ;;
     dev-web)           cmd_dev_web ;;
-    dev-down)          cmd_dev_down ;;
+    dev-down)          shift; cmd_dev_down "$@" ;;
     build-images)      cmd_build_images ;;
     site)              shift; "$SCRIPT_DIR/website/tools.sh" "$@" ;;
     ""|-h|--help|help) usage ;;

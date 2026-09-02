@@ -8,8 +8,7 @@ domain: REPLACE-ME.example
 
 sitefilePath: "/site/root"
 image:
-  # Set by --set in the reactorcide job, which uses the internal registry.
-  #   Internal: 10.16.0.1:5000/private/catalystcommunity/tinku-website
-  #   External: containers.catalystsquad.com/private/catalystcommunity/tinku-website
-  repository: 10.16.0.1:5000/private/catalystcommunity/tinku-website
-  # tag is provided by --set image.tag=...
+  # The reactorcide deploy job sets both again with --set. They are here so
+  # that a person can run the same helm command by hand.
+  repository: containers.catalystsquad.com/public/catalystcommunity/tinku-website
+  # tag comes from website/VERSION.txt

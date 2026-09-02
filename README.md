@@ -90,41 +90,129 @@ instance of a rule that does not end.
 The hello-world greetings domain stays. It is the smallest end-to-end path
 through every layer, and the tests use it as a canary.
 
-## Start in one command
+## Quickstart
+
+You need Go 1.26 or later and Node 22 or later (CI uses 26). You do not
+need Docker, PostgreSQL, or a linkkeys server for this walkthrough.
+
+**1. Start the API.** It applies the migrations to a SQLite file,
+`local.db`, and then listens.
 
 ```sh
 ./tools.sh serve-local
 ```
 
-This command runs the API on SQLite. You do not need Docker, PostgreSQL, or
-a linkkeys relying party. It applies the migration to `local.db`, then
-listens.
-
-- API: <http://localhost:8080>
+- API: <http://localhost:5080>
 - Ops: <http://localhost:9090/metrics>, `/healthz`, `/readyz`
 
-Run the web client in a second terminal:
+The client and the API are two ports on purpose, and the browser calls each
+of them: the page comes from 8080 and its API calls go to 5080. Forwarding
+this to another machine therefore means forwarding BOTH — see "The client is
+a different origin" in `docs/OPERATING.md`.
+
+The log says `DEV AUTH ENABLED`. This command gives the API `--env=dev` and
+`--dev-auth`, which is what makes step 3 possible. No other command does.
+
+**2. Start the web client**, in a second terminal. The command installs the
+client's dependencies the first time you run it.
 
 ```sh
-cd webapp && npm install && cd ..
-./tools.sh dev-web        # http://localhost:5173
+./tools.sh dev-web
 ```
 
-Sign in with any handle. The sign-in form uses `devauth.dev-login`, which
-the API offers only in a dev or nonprod environment.
+Open <http://localhost:8080>.
+
+**3. Sign in as `devadmin`, at whatever domain you like.** Select **Sign
+in**, give the handle `devadmin`, and keep the domain the form suggests or
+type your own — `example.test`, `two.example`, anything. In a development
+environment that handle holds the administrator role at every domain, so
+you can see the whole application at once, and two instances on two domains
+each have an administrator without a second command.
+
+There is no password. The client calls `devauth.dev-login`, which makes the
+person the first time their handle is used and gives back a session with no
+identity assertion behind it. That is why the operation exists only in a
+dev or nonprod environment, and why the API refuses it anywhere else.
+
+Any other handle works too and makes an ordinary account: `ada`, `devuser`,
+your own name. Use one to see what somebody without the role sees. Two
+handles at two domains are two different people, which is the rule the
+whole directory rests on.
+
+**4. Make something.**
+
+- **Orgs → Start an organization.** The organization gets an address from
+  its name: `forge-utah@localhost`. `localhost` is this instance's origin
+  domain. Another instance shows its own.
+- **Gatherings → Start a gathering.** Open it. It has two forms: one
+  schedules a single event, and one schedules a rule.
+- In **Schedule a recurring event**, keep the defaults — second Thursday,
+  19:00, America/Denver — give a title and a first possible date, then
+  select **Schedule**. Tinku writes the occurrences the rule makes, one
+  year ahead. Each one is an ordinary event that a person attends by
+  itself.
+- Times show in the event's own timezone, never in yours. That is the
+  point: an event is where it is.
+
+**5. The administrator role.** Only an administrator can delete an
+organization, or an event that has started. Signing in as `devadmin`
+(step 3) is the short way to hold it. To give it to an account you have
+already signed in as:
+
+```sh
+./tools.sh admin grant ada@example.test
+./tools.sh admin list
+```
+
+The role is read from the database on every request, so it takes effect at
+once. Reload the page to see the controls that it adds. `tinku admin` is
+also the only way to make the FIRST administrator of a real deployment,
+where development sign-in does not exist: granting the role over the API
+needs the role.
+
+The person has to sign in one time before you grant the role. The command
+answers `nobody here has the address ...` when they have not. It also
+refuses to revoke the last administrator, so an instance cannot lose the
+role completely.
+
+**6. Start again from nothing**, at any time:
+
+```sh
+rm -f local.db
+```
+
+### What to try after that
+
+| Rule | How to see it |
+| --- | --- |
+| An event freezes when it starts. | Schedule a single event two minutes ahead. When the time goes by, the description, the edit, and **Attend** all go away — for everybody. |
+| A rule can make nothing. | Ask for the fifth Thursday, or the 31st. A month without one makes no event. It is never moved to the nearest day. |
+| Federation is off. | The publish control on a gathering says `Decided by this instance`. See the federation section of `docs/OPERATING.md` to switch it on. |
 
 ## Start the full stack
 
 ```sh
-./tools.sh dev
+./tools.sh dev            # dev-up is the same command
 ```
 
 This command starts PostgreSQL, the API, and the web client with Docker
-Compose.
+Compose. It waits until the API reports ready, makes the development
+accounts, and then prints the addresses. It does not hold the terminal.
 
-- Web client: <http://localhost:8081>
-- API: <http://localhost:8080>
+- Web client: <http://localhost:8080>
+- API: <http://localhost:5080>
 - Ops: <http://localhost:9090>
+- PostgreSQL: `postgresql://tinku:devpass123@localhost:5432/tinku_db`
+
+Sign in as **devadmin**, which holds the administrator role, or **devuser**,
+which holds nothing. The domain is `example.test`. There is no password:
+development sign-in carries no credential.
+
+```sh
+./tools.sh dev-logs       # follow the logs; dev-logs api for one service
+./tools.sh dev-down       # stop it. The database survives.
+./tools.sh dev-down --volumes   # stop it and drop the database
+```
 
 ## Repository layout
 
@@ -163,8 +251,11 @@ Compose.
 | `./tools.sh lint` | Runs `go vet` and `tsc --noEmit`. |
 | `./tools.sh migrate up\|down\|status` | Applies or reports the migrations. |
 | `./tools.sh serve-local` | Runs the API on SQLite. |
-| `./tools.sh dev` | Starts the Docker Compose stack. |
-| `./tools.sh dev-down` | Stops the Docker Compose stack. |
+| `./tools.sh dev` (or `dev-up`) | Starts the Docker Compose stack, waits for it, and seeds the development accounts. |
+| `./tools.sh dev-logs [service]` | Follows the stack's logs. |
+| `./tools.sh dev-down [--volumes]` | Stops the stack. `--volumes` drops the database. |
+| `./tools.sh dev-seed` | Makes `devadmin` and `devuser`. Idempotent. |
+| `./tools.sh admin list\|grant\|revoke` | The global administrator role. |
 | `./tools.sh dev-web` | Starts the Vite development server. |
 | `./tools.sh build-images` | Builds the container images. |
 | `./tools.sh site build` | Builds the marketing site in `website/`. |

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"time"
+	"unicode/utf8"
 )
 
 // cborValue is a minimal canonical-CBOR value tree: a closed set of variants the
@@ -168,7 +169,7 @@ func cborEnc(v cborValue, out *[]byte) {
 // is not exactly one value is an error rather than a silently-truncated read.
 func cborDecode(b []byte) (cborValue, error) {
 	pos := 0
-	v, err := cborDec(b, &pos)
+	v, err := cborDec(b, &pos, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -185,21 +186,21 @@ func cborReadArg(b []byte, pos *int, low byte) (uint64, error) {
 	}
 	switch low {
 	case 24:
-		if *pos+2 > len(b) {
+		if len(b)-*pos < 2 {
 			return 0, fmt.Errorf("csil cbor: truncated argument")
 		}
 		v := uint64(b[*pos+1])
 		*pos += 2
 		return v, nil
 	case 25:
-		if *pos+3 > len(b) {
+		if len(b)-*pos < 3 {
 			return 0, fmt.Errorf("csil cbor: truncated argument")
 		}
 		v := uint64(b[*pos+1])<<8 | uint64(b[*pos+2])
 		*pos += 3
 		return v, nil
 	case 26:
-		if *pos+5 > len(b) {
+		if len(b)-*pos < 5 {
 			return 0, fmt.Errorf("csil cbor: truncated argument")
 		}
 		var v uint64
@@ -209,7 +210,7 @@ func cborReadArg(b []byte, pos *int, low byte) (uint64, error) {
 		*pos += 5
 		return v, nil
 	case 27:
-		if *pos+9 > len(b) {
+		if len(b)-*pos < 9 {
 			return 0, fmt.Errorf("csil cbor: truncated argument")
 		}
 		var v uint64
@@ -223,7 +224,10 @@ func cborReadArg(b []byte, pos *int, low byte) (uint64, error) {
 	}
 }
 
-func cborDec(b []byte, pos *int) (cborValue, error) {
+func cborDec(b []byte, pos *int, depth int) (cborValue, error) {
+	if depth > 64 {
+		return nil, fmt.Errorf("csil cbor: nesting limit exceeded")
+	}
 	if *pos >= len(b) {
 		return nil, fmt.Errorf("csil cbor: unexpected end of input")
 	}
@@ -270,27 +274,33 @@ func cborDec(b []byte, pos *int) (cborValue, error) {
 		}
 		return cborInt(-1 - int64(arg)), nil
 	case 2:
-		n := int(arg)
-		if *pos+n > len(b) {
+		if arg > uint64(len(b)-*pos) {
 			return nil, fmt.Errorf("csil cbor: truncated byte string")
 		}
+		n := int(arg)
 		slice := make([]byte, n)
 		copy(slice, b[*pos:*pos+n])
 		*pos += n
 		return cborBytes(slice), nil
 	case 3:
-		n := int(arg)
-		if *pos+n > len(b) {
+		if arg > uint64(len(b)-*pos) {
 			return nil, fmt.Errorf("csil cbor: truncated text string")
+		}
+		n := int(arg)
+		if !utf8.Valid(b[*pos : *pos+n]) {
+			return nil, fmt.Errorf("csil cbor: invalid utf-8")
 		}
 		s := string(b[*pos : *pos+n])
 		*pos += n
 		return cborText(s), nil
 	case 4:
+		if arg > uint64(len(b)-*pos) {
+			return nil, fmt.Errorf("csil cbor: array length exceeds remaining input")
+		}
 		n := int(arg)
 		items := make(cborArray, 0, n)
 		for i := 0; i < n; i++ {
-			item, err := cborDec(b, pos)
+			item, err := cborDec(b, pos, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -298,14 +308,17 @@ func cborDec(b []byte, pos *int) (cborValue, error) {
 		}
 		return items, nil
 	case 5:
+		if arg > uint64(len(b)-*pos) {
+			return nil, fmt.Errorf("csil cbor: map length exceeds remaining input")
+		}
 		n := int(arg)
 		entries := make(cborMap, 0, n)
 		for i := 0; i < n; i++ {
-			k, err := cborDec(b, pos)
+			k, err := cborDec(b, pos, depth+1)
 			if err != nil {
 				return nil, err
 			}
-			val, err := cborDec(b, pos)
+			val, err := cborDec(b, pos, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -313,7 +326,7 @@ func cborDec(b []byte, pos *int) (cborValue, error) {
 		}
 		return entries, nil
 	case 6:
-		inner, err := cborDec(b, pos)
+		inner, err := cborDec(b, pos, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -1929,12 +1942,15 @@ func DecodeDeleteOrganizationRequest(csilData []byte) (DeleteOrganizationRequest
 
 // csilEncListOrganizationsRequest builds the canonical CBOR value tree for a ListOrganizationsRequest.
 func csilEncListOrganizationsRequest(csilV ListOrganizationsRequest) cborValue {
-	csilEntries := make(cborMap, 0, 2)
+	csilEntries := make(cborMap, 0, 3)
 	if csilV.Mine != nil {
 		csilEntries = append(csilEntries, cborEntry{cborText("mine"), cborBool((*csilV.Mine))})
 	}
 	if csilV.Page != nil {
 		csilEntries = append(csilEntries, cborEntry{cborText("page"), csilEncPage((*csilV.Page))})
+	}
+	if csilV.Query != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("query"), cborText((*csilV.Query))})
 	}
 	return csilEntries
 }
@@ -1948,6 +1964,13 @@ func csilDecListOrganizationsRequest(csilRoot cborValue) (ListOrganizationsReque
 			return csilOut, csilErr
 		}
 		csilOut.Mine = &csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "query"); csilOk {
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Query = &csilVal
 	}
 	if csilField, csilOk := cborMapGet(csilRoot, "page"); csilOk {
 		csilVal, csilErr := (csilDecPage)(csilField)
@@ -3449,6 +3472,522 @@ func DecodeRemoveGatheringOwnerRequest(csilData []byte) (RemoveGatheringOwnerReq
 	return csilDecRemoveGatheringOwnerRequest(csilRoot)
 }
 
+// csilEncGatheringOffer builds the canonical CBOR value tree for a GatheringOffer.
+func csilEncGatheringOffer(csilV GatheringOffer) cborValue {
+	csilEntries := make(cborMap, 0, 11)
+	csilEntries = append(csilEntries, cborEntry{cborText("id"), cborText(csilV.Id)})
+	csilEntries = append(csilEntries, cborEntry{cborText("note"), cborText(csilV.Note)})
+	csilEntries = append(csilEntries, cborEntry{cborText("status"), cborText(csilV.Status)})
+	csilEntries = append(csilEntries, cborEntry{cborText("viewer"), csilEncViewerContext(csilV.Viewer)})
+	csilEntries = append(csilEntries, cborEntry{cborText("created_at"), csilEncTimestamp(csilV.CreatedAt)})
+	csilEntries = append(csilEntries, cborEntry{cborText("offered_by"), csilEncUserRef(csilV.OfferedBy)})
+	if csilV.ResolvedAt != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("resolved_at"), csilEncTimestamp((*csilV.ResolvedAt))})
+	}
+	csilEntries = append(csilEntries, cborEntry{cborText("gathering_id"), cborText(csilV.GatheringId)})
+	csilEntries = append(csilEntries, cborEntry{cborText("gathering_name"), cborText(csilV.GatheringName)})
+	csilEntries = append(csilEntries, cborEntry{cborText("organization_id"), cborText(csilV.OrganizationId)})
+	csilEntries = append(csilEntries, cborEntry{cborText("organization_name"), cborText(csilV.OrganizationName)})
+	return csilEntries
+}
+
+// csilDecGatheringOffer reconstructs a GatheringOffer from a decoded CBOR value tree.
+func csilDecGatheringOffer(csilRoot cborValue) (GatheringOffer, error) {
+	var csilOut GatheringOffer
+	{
+		csilField, csilErr := cborRequire(csilRoot, "id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (GatheringOfferID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return GatheringOfferID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Id = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "gathering_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (GatheringID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return GatheringID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.GatheringId = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "gathering_name")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.GatheringName = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "organization_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (OrganizationID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return OrganizationID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OrganizationId = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "organization_name")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OrganizationName = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "offered_by")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (csilDecUserRef)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OfferedBy = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "note")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Note = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "status")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (GatheringOfferStatus, error) {
+			csilInner, csilErr := (func(csilV cborValue) (string, error) {
+				csilInner, csilErr := (cborAsText)(csilV)
+				if csilErr != nil {
+					var csilZero string
+					return csilZero, csilErr
+				}
+				if !(csilInner == "pending" || csilInner == "accepted" || csilInner == "declined" || csilInner == "withdrawn") {
+					var csilZero string
+					return csilZero, fmt.Errorf("csil cbor: value %v is not a member of the declared enum", csilInner)
+				}
+				return csilInner, nil
+			})(csilV)
+			return GatheringOfferStatus(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Status = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "created_at")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (csilAsTimestamp)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.CreatedAt = csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "resolved_at"); csilOk {
+		csilVal, csilErr := (csilAsTimestamp)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.ResolvedAt = &csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "viewer")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (csilDecViewerContext)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Viewer = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeGatheringOffer encodes a GatheringOffer to canonical CSIL CBOR bytes.
+func EncodeGatheringOffer(csilV GatheringOffer) []byte {
+	return cborEncode(csilEncGatheringOffer(csilV))
+}
+
+// DecodeGatheringOffer decodes canonical CSIL CBOR bytes into a GatheringOffer.
+func DecodeGatheringOffer(csilData []byte) (GatheringOffer, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero GatheringOffer
+		return csilZero, csilErr
+	}
+	return csilDecGatheringOffer(csilRoot)
+}
+
+// csilEncOfferGatheringRequest builds the canonical CBOR value tree for a OfferGatheringRequest.
+func csilEncOfferGatheringRequest(csilV OfferGatheringRequest) cborValue {
+	csilEntries := make(cborMap, 0, 3)
+	csilEntries = append(csilEntries, cborEntry{cborText("note"), cborText(csilV.Note)})
+	csilEntries = append(csilEntries, cborEntry{cborText("gathering_id"), cborText(csilV.GatheringId)})
+	csilEntries = append(csilEntries, cborEntry{cborText("organization_id"), cborText(csilV.OrganizationId)})
+	return csilEntries
+}
+
+// csilDecOfferGatheringRequest reconstructs a OfferGatheringRequest from a decoded CBOR value tree.
+func csilDecOfferGatheringRequest(csilRoot cborValue) (OfferGatheringRequest, error) {
+	var csilOut OfferGatheringRequest
+	{
+		csilField, csilErr := cborRequire(csilRoot, "gathering_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (GatheringID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return GatheringID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.GatheringId = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "organization_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (OrganizationID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return OrganizationID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OrganizationId = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "note")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Note = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeOfferGatheringRequest encodes a OfferGatheringRequest to canonical CSIL CBOR bytes.
+func EncodeOfferGatheringRequest(csilV OfferGatheringRequest) []byte {
+	return cborEncode(csilEncOfferGatheringRequest(csilV))
+}
+
+// DecodeOfferGatheringRequest decodes canonical CSIL CBOR bytes into a OfferGatheringRequest.
+func DecodeOfferGatheringRequest(csilData []byte) (OfferGatheringRequest, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero OfferGatheringRequest
+		return csilZero, csilErr
+	}
+	return csilDecOfferGatheringRequest(csilRoot)
+}
+
+// csilEncListGatheringOffersRequest builds the canonical CBOR value tree for a ListGatheringOffersRequest.
+func csilEncListGatheringOffersRequest(csilV ListGatheringOffersRequest) cborValue {
+	csilEntries := make(cborMap, 0, 3)
+	if csilV.GatheringId != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("gathering_id"), cborText((*csilV.GatheringId))})
+	}
+	if csilV.OrganizationId != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("organization_id"), cborText((*csilV.OrganizationId))})
+	}
+	if csilV.IncludeResolved != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("include_resolved"), cborBool((*csilV.IncludeResolved))})
+	}
+	return csilEntries
+}
+
+// csilDecListGatheringOffersRequest reconstructs a ListGatheringOffersRequest from a decoded CBOR value tree.
+func csilDecListGatheringOffersRequest(csilRoot cborValue) (ListGatheringOffersRequest, error) {
+	var csilOut ListGatheringOffersRequest
+	if csilField, csilOk := cborMapGet(csilRoot, "organization_id"); csilOk {
+		csilVal, csilErr := (func(csilV cborValue) (OrganizationID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return OrganizationID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OrganizationId = &csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "gathering_id"); csilOk {
+		csilVal, csilErr := (func(csilV cborValue) (GatheringID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return GatheringID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.GatheringId = &csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "include_resolved"); csilOk {
+		csilVal, csilErr := (cborAsBool)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.IncludeResolved = &csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeListGatheringOffersRequest encodes a ListGatheringOffersRequest to canonical CSIL CBOR bytes.
+func EncodeListGatheringOffersRequest(csilV ListGatheringOffersRequest) []byte {
+	return cborEncode(csilEncListGatheringOffersRequest(csilV))
+}
+
+// DecodeListGatheringOffersRequest decodes canonical CSIL CBOR bytes into a ListGatheringOffersRequest.
+func DecodeListGatheringOffersRequest(csilData []byte) (ListGatheringOffersRequest, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero ListGatheringOffersRequest
+		return csilZero, csilErr
+	}
+	return csilDecListGatheringOffersRequest(csilRoot)
+}
+
+// csilEncGatheringOfferList builds the canonical CBOR value tree for a GatheringOfferList.
+func csilEncGatheringOfferList(csilV GatheringOfferList) cborValue {
+	csilEntries := make(cborMap, 0, 2)
+	csilEntries = append(csilEntries, cborEntry{cborText("total"), cborUint(csilV.Total)})
+	csilEntries = append(csilEntries, cborEntry{cborText("offers"), cborEncArray(csilV.Offers, func(csilElem GatheringOffer) cborValue { return csilEncGatheringOffer(csilElem) })})
+	return csilEntries
+}
+
+// csilDecGatheringOfferList reconstructs a GatheringOfferList from a decoded CBOR value tree.
+func csilDecGatheringOfferList(csilRoot cborValue) (GatheringOfferList, error) {
+	var csilOut GatheringOfferList
+	{
+		csilField, csilErr := cborRequire(csilRoot, "offers")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) ([]GatheringOffer, error) { return cborDecArray(csilV, csilDecGatheringOffer) })(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Offers = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "total")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsU64)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Total = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeGatheringOfferList encodes a GatheringOfferList to canonical CSIL CBOR bytes.
+func EncodeGatheringOfferList(csilV GatheringOfferList) []byte {
+	return cborEncode(csilEncGatheringOfferList(csilV))
+}
+
+// DecodeGatheringOfferList decodes canonical CSIL CBOR bytes into a GatheringOfferList.
+func DecodeGatheringOfferList(csilData []byte) (GatheringOfferList, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero GatheringOfferList
+		return csilZero, csilErr
+	}
+	return csilDecGatheringOfferList(csilRoot)
+}
+
+// csilEncRespondToGatheringOfferRequest builds the canonical CBOR value tree for a RespondToGatheringOfferRequest.
+func csilEncRespondToGatheringOfferRequest(csilV RespondToGatheringOfferRequest) cborValue {
+	csilEntries := make(cborMap, 0, 2)
+	csilEntries = append(csilEntries, cborEntry{cborText("accept"), cborBool(csilV.Accept)})
+	csilEntries = append(csilEntries, cborEntry{cborText("offer_id"), cborText(csilV.OfferId)})
+	return csilEntries
+}
+
+// csilDecRespondToGatheringOfferRequest reconstructs a RespondToGatheringOfferRequest from a decoded CBOR value tree.
+func csilDecRespondToGatheringOfferRequest(csilRoot cborValue) (RespondToGatheringOfferRequest, error) {
+	var csilOut RespondToGatheringOfferRequest
+	{
+		csilField, csilErr := cborRequire(csilRoot, "offer_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (GatheringOfferID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return GatheringOfferID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OfferId = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "accept")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsBool)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Accept = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeRespondToGatheringOfferRequest encodes a RespondToGatheringOfferRequest to canonical CSIL CBOR bytes.
+func EncodeRespondToGatheringOfferRequest(csilV RespondToGatheringOfferRequest) []byte {
+	return cborEncode(csilEncRespondToGatheringOfferRequest(csilV))
+}
+
+// DecodeRespondToGatheringOfferRequest decodes canonical CSIL CBOR bytes into a RespondToGatheringOfferRequest.
+func DecodeRespondToGatheringOfferRequest(csilData []byte) (RespondToGatheringOfferRequest, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero RespondToGatheringOfferRequest
+		return csilZero, csilErr
+	}
+	return csilDecRespondToGatheringOfferRequest(csilRoot)
+}
+
+// csilEncWithdrawGatheringOfferRequest builds the canonical CBOR value tree for a WithdrawGatheringOfferRequest.
+func csilEncWithdrawGatheringOfferRequest(csilV WithdrawGatheringOfferRequest) cborValue {
+	csilEntries := make(cborMap, 0, 1)
+	csilEntries = append(csilEntries, cborEntry{cborText("offer_id"), cborText(csilV.OfferId)})
+	return csilEntries
+}
+
+// csilDecWithdrawGatheringOfferRequest reconstructs a WithdrawGatheringOfferRequest from a decoded CBOR value tree.
+func csilDecWithdrawGatheringOfferRequest(csilRoot cborValue) (WithdrawGatheringOfferRequest, error) {
+	var csilOut WithdrawGatheringOfferRequest
+	{
+		csilField, csilErr := cborRequire(csilRoot, "offer_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (GatheringOfferID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return GatheringOfferID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OfferId = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeWithdrawGatheringOfferRequest encodes a WithdrawGatheringOfferRequest to canonical CSIL CBOR bytes.
+func EncodeWithdrawGatheringOfferRequest(csilV WithdrawGatheringOfferRequest) []byte {
+	return cborEncode(csilEncWithdrawGatheringOfferRequest(csilV))
+}
+
+// DecodeWithdrawGatheringOfferRequest decodes canonical CSIL CBOR bytes into a WithdrawGatheringOfferRequest.
+func DecodeWithdrawGatheringOfferRequest(csilData []byte) (WithdrawGatheringOfferRequest, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero WithdrawGatheringOfferRequest
+		return csilZero, csilErr
+	}
+	return csilDecWithdrawGatheringOfferRequest(csilRoot)
+}
+
+// csilEncAdoptGatheringRequest builds the canonical CBOR value tree for a AdoptGatheringRequest.
+func csilEncAdoptGatheringRequest(csilV AdoptGatheringRequest) cborValue {
+	csilEntries := make(cborMap, 0, 2)
+	csilEntries = append(csilEntries, cborEntry{cborText("gathering_id"), cborText(csilV.GatheringId)})
+	csilEntries = append(csilEntries, cborEntry{cborText("organization_id"), cborText(csilV.OrganizationId)})
+	return csilEntries
+}
+
+// csilDecAdoptGatheringRequest reconstructs a AdoptGatheringRequest from a decoded CBOR value tree.
+func csilDecAdoptGatheringRequest(csilRoot cborValue) (AdoptGatheringRequest, error) {
+	var csilOut AdoptGatheringRequest
+	{
+		csilField, csilErr := cborRequire(csilRoot, "gathering_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (GatheringID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return GatheringID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.GatheringId = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "organization_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (OrganizationID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return OrganizationID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OrganizationId = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeAdoptGatheringRequest encodes a AdoptGatheringRequest to canonical CSIL CBOR bytes.
+func EncodeAdoptGatheringRequest(csilV AdoptGatheringRequest) []byte {
+	return cborEncode(csilEncAdoptGatheringRequest(csilV))
+}
+
+// DecodeAdoptGatheringRequest decodes canonical CSIL CBOR bytes into a AdoptGatheringRequest.
+func DecodeAdoptGatheringRequest(csilData []byte) (AdoptGatheringRequest, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero AdoptGatheringRequest
+		return csilZero, csilErr
+	}
+	return csilDecAdoptGatheringRequest(csilRoot)
+}
+
 // csilEncRecurrenceRule builds the canonical CBOR value tree for a RecurrenceRule.
 func csilEncRecurrenceRule(csilV RecurrenceRule) cborValue {
 	csilEntries := make(cborMap, 0, 5)
@@ -4794,7 +5333,10 @@ func DecodeDeleteEventRequest(csilData []byte) (DeleteEventRequest, error) {
 
 // csilEncListEventsRequest builds the canonical CBOR value tree for a ListEventsRequest.
 func csilEncListEventsRequest(csilV ListEventsRequest) cborValue {
-	csilEntries := make(cborMap, 0, 6)
+	csilEntries := make(cborMap, 0, 8)
+	if csilV.Mine != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("mine"), cborBool((*csilV.Mine))})
+	}
 	if csilV.Page != nil {
 		csilEntries = append(csilEntries, cborEntry{cborText("page"), csilEncPage((*csilV.Page))})
 	}
@@ -4813,6 +5355,9 @@ func csilEncListEventsRequest(csilV ListEventsRequest) cborValue {
 	if csilV.IncludeStarted != nil {
 		csilEntries = append(csilEntries, cborEntry{cborText("include_started"), cborBool((*csilV.IncludeStarted))})
 	}
+	if csilV.OwnedByOrganization != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("owned_by_organization"), cborText((*csilV.OwnedByOrganization))})
+	}
 	return csilEntries
 }
 
@@ -4828,6 +5373,23 @@ func csilDecListEventsRequest(csilRoot cborValue) (ListEventsRequest, error) {
 			return csilOut, csilErr
 		}
 		csilOut.GatheringId = &csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "owned_by_organization"); csilOk {
+		csilVal, csilErr := (func(csilV cborValue) (OrganizationID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return OrganizationID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OwnedByOrganization = &csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "mine"); csilOk {
+		csilVal, csilErr := (cborAsBool)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Mine = &csilVal
 	}
 	if csilField, csilOk := cborMapGet(csilRoot, "starts_after"); csilOk {
 		csilVal, csilErr := (csilAsTimestamp)(csilField)
@@ -9187,4 +9749,656 @@ func DecodeListOriginVolumeRequest(csilData []byte) (ListOriginVolumeRequest, er
 		return csilZero, csilErr
 	}
 	return csilDecListOriginVolumeRequest(csilRoot)
+}
+
+// csilEncWebhook builds the canonical CBOR value tree for a Webhook.
+func csilEncWebhook(csilV Webhook) cborValue {
+	csilEntries := make(cborMap, 0, 13)
+	csilEntries = append(csilEntries, cborEntry{cborText("id"), cborText(csilV.Id)})
+	csilEntries = append(csilEntries, cborEntry{cborText("url"), cborText(csilV.Url)})
+	csilEntries = append(csilEntries, cborEntry{cborText("note"), cborText(csilV.Note)})
+	csilEntries = append(csilEntries, cborEntry{cborText("scope"), cborText(csilV.Scope)})
+	csilEntries = append(csilEntries, cborEntry{cborText("active"), cborBool(csilV.Active)})
+	csilEntries = append(csilEntries, cborEntry{cborText("owner_id"), cborText(csilV.OwnerId)})
+	csilEntries = append(csilEntries, cborEntry{cborText("created_at"), csilEncTimestamp(csilV.CreatedAt)})
+	csilEntries = append(csilEntries, cborEntry{cborText("owner_kind"), cborText(csilV.OwnerKind)})
+	csilEntries = append(csilEntries, cborEntry{cborText("updated_at"), csilEncTimestamp(csilV.UpdatedAt)})
+	if csilV.LastStatus != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("last_status"), cborUint((*csilV.LastStatus))})
+	}
+	csilEntries = append(csilEntries, cborEntry{cborText("failure_count"), cborUint(csilV.FailureCount)})
+	csilEntries = append(csilEntries, cborEntry{cborText("include_details"), cborBool(csilV.IncludeDetails)})
+	if csilV.LastAttemptAt != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("last_attempt_at"), csilEncTimestamp((*csilV.LastAttemptAt))})
+	}
+	return csilEntries
+}
+
+// csilDecWebhook reconstructs a Webhook from a decoded CBOR value tree.
+func csilDecWebhook(csilRoot cborValue) (Webhook, error) {
+	var csilOut Webhook
+	{
+		csilField, csilErr := cborRequire(csilRoot, "id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (WebhookID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return WebhookID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Id = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "owner_kind")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (WebhookOwnerKind, error) {
+			csilInner, csilErr := (func(csilV cborValue) (string, error) {
+				csilInner, csilErr := (cborAsText)(csilV)
+				if csilErr != nil {
+					var csilZero string
+					return csilZero, csilErr
+				}
+				if !(csilInner == "organization" || csilInner == "gathering") {
+					var csilZero string
+					return csilZero, fmt.Errorf("csil cbor: value %v is not a member of the declared enum", csilInner)
+				}
+				return csilInner, nil
+			})(csilV)
+			return WebhookOwnerKind(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OwnerKind = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "owner_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OwnerId = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "url")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Url = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "scope")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (WebhookScope, error) {
+			csilInner, csilErr := (func(csilV cborValue) (string, error) {
+				csilInner, csilErr := (cborAsText)(csilV)
+				if csilErr != nil {
+					var csilZero string
+					return csilZero, csilErr
+				}
+				if !(csilInner == "all" || csilInner == "structure_only") {
+					var csilZero string
+					return csilZero, fmt.Errorf("csil cbor: value %v is not a member of the declared enum", csilInner)
+				}
+				return csilInner, nil
+			})(csilV)
+			return WebhookScope(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Scope = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "active")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsBool)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Active = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "include_details")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsBool)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.IncludeDetails = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "note")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Note = csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "last_status"); csilOk {
+		csilVal, csilErr := (cborAsU64)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.LastStatus = &csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "last_attempt_at"); csilOk {
+		csilVal, csilErr := (csilAsTimestamp)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.LastAttemptAt = &csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "failure_count")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsU64)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.FailureCount = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "created_at")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (csilAsTimestamp)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.CreatedAt = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "updated_at")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (csilAsTimestamp)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.UpdatedAt = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeWebhook encodes a Webhook to canonical CSIL CBOR bytes.
+func EncodeWebhook(csilV Webhook) []byte {
+	return cborEncode(csilEncWebhook(csilV))
+}
+
+// DecodeWebhook decodes canonical CSIL CBOR bytes into a Webhook.
+func DecodeWebhook(csilData []byte) (Webhook, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero Webhook
+		return csilZero, csilErr
+	}
+	return csilDecWebhook(csilRoot)
+}
+
+// csilEncWebhookWithSecret builds the canonical CBOR value tree for a WebhookWithSecret.
+func csilEncWebhookWithSecret(csilV WebhookWithSecret) cborValue {
+	csilEntries := make(cborMap, 0, 2)
+	csilEntries = append(csilEntries, cborEntry{cborText("secret"), cborText(csilV.Secret)})
+	csilEntries = append(csilEntries, cborEntry{cborText("webhook"), csilEncWebhook(csilV.Webhook)})
+	return csilEntries
+}
+
+// csilDecWebhookWithSecret reconstructs a WebhookWithSecret from a decoded CBOR value tree.
+func csilDecWebhookWithSecret(csilRoot cborValue) (WebhookWithSecret, error) {
+	var csilOut WebhookWithSecret
+	{
+		csilField, csilErr := cborRequire(csilRoot, "webhook")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (csilDecWebhook)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Webhook = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "secret")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Secret = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeWebhookWithSecret encodes a WebhookWithSecret to canonical CSIL CBOR bytes.
+func EncodeWebhookWithSecret(csilV WebhookWithSecret) []byte {
+	return cborEncode(csilEncWebhookWithSecret(csilV))
+}
+
+// DecodeWebhookWithSecret decodes canonical CSIL CBOR bytes into a WebhookWithSecret.
+func DecodeWebhookWithSecret(csilData []byte) (WebhookWithSecret, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero WebhookWithSecret
+		return csilZero, csilErr
+	}
+	return csilDecWebhookWithSecret(csilRoot)
+}
+
+// csilEncCreateWebhookRequest builds the canonical CBOR value tree for a CreateWebhookRequest.
+func csilEncCreateWebhookRequest(csilV CreateWebhookRequest) cborValue {
+	csilEntries := make(cborMap, 0, 6)
+	csilEntries = append(csilEntries, cborEntry{cborText("url"), cborText(csilV.Url)})
+	csilEntries = append(csilEntries, cborEntry{cborText("note"), cborText(csilV.Note)})
+	csilEntries = append(csilEntries, cborEntry{cborText("scope"), cborText(csilV.Scope)})
+	csilEntries = append(csilEntries, cborEntry{cborText("owner_id"), cborText(csilV.OwnerId)})
+	csilEntries = append(csilEntries, cborEntry{cborText("owner_kind"), cborText(csilV.OwnerKind)})
+	csilEntries = append(csilEntries, cborEntry{cborText("include_details"), cborBool(csilV.IncludeDetails)})
+	return csilEntries
+}
+
+// csilDecCreateWebhookRequest reconstructs a CreateWebhookRequest from a decoded CBOR value tree.
+func csilDecCreateWebhookRequest(csilRoot cborValue) (CreateWebhookRequest, error) {
+	var csilOut CreateWebhookRequest
+	{
+		csilField, csilErr := cborRequire(csilRoot, "owner_kind")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (WebhookOwnerKind, error) {
+			csilInner, csilErr := (func(csilV cborValue) (string, error) {
+				csilInner, csilErr := (cborAsText)(csilV)
+				if csilErr != nil {
+					var csilZero string
+					return csilZero, csilErr
+				}
+				if !(csilInner == "organization" || csilInner == "gathering") {
+					var csilZero string
+					return csilZero, fmt.Errorf("csil cbor: value %v is not a member of the declared enum", csilInner)
+				}
+				return csilInner, nil
+			})(csilV)
+			return WebhookOwnerKind(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OwnerKind = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "owner_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OwnerId = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "url")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Url = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "scope")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (WebhookScope, error) {
+			csilInner, csilErr := (func(csilV cborValue) (string, error) {
+				csilInner, csilErr := (cborAsText)(csilV)
+				if csilErr != nil {
+					var csilZero string
+					return csilZero, csilErr
+				}
+				if !(csilInner == "all" || csilInner == "structure_only") {
+					var csilZero string
+					return csilZero, fmt.Errorf("csil cbor: value %v is not a member of the declared enum", csilInner)
+				}
+				return csilInner, nil
+			})(csilV)
+			return WebhookScope(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Scope = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "note")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Note = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "include_details")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsBool)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.IncludeDetails = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeCreateWebhookRequest encodes a CreateWebhookRequest to canonical CSIL CBOR bytes.
+func EncodeCreateWebhookRequest(csilV CreateWebhookRequest) []byte {
+	return cborEncode(csilEncCreateWebhookRequest(csilV))
+}
+
+// DecodeCreateWebhookRequest decodes canonical CSIL CBOR bytes into a CreateWebhookRequest.
+func DecodeCreateWebhookRequest(csilData []byte) (CreateWebhookRequest, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero CreateWebhookRequest
+		return csilZero, csilErr
+	}
+	return csilDecCreateWebhookRequest(csilRoot)
+}
+
+// csilEncUpdateWebhookRequest builds the canonical CBOR value tree for a UpdateWebhookRequest.
+func csilEncUpdateWebhookRequest(csilV UpdateWebhookRequest) cborValue {
+	csilEntries := make(cborMap, 0, 6)
+	csilEntries = append(csilEntries, cborEntry{cborText("id"), cborText(csilV.Id)})
+	if csilV.Url != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("url"), cborText((*csilV.Url))})
+	}
+	if csilV.Note != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("note"), cborText((*csilV.Note))})
+	}
+	if csilV.Scope != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("scope"), cborText((*csilV.Scope))})
+	}
+	if csilV.Active != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("active"), cborBool((*csilV.Active))})
+	}
+	if csilV.IncludeDetails != nil {
+		csilEntries = append(csilEntries, cborEntry{cborText("include_details"), cborBool((*csilV.IncludeDetails))})
+	}
+	return csilEntries
+}
+
+// csilDecUpdateWebhookRequest reconstructs a UpdateWebhookRequest from a decoded CBOR value tree.
+func csilDecUpdateWebhookRequest(csilRoot cborValue) (UpdateWebhookRequest, error) {
+	var csilOut UpdateWebhookRequest
+	{
+		csilField, csilErr := cborRequire(csilRoot, "id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (WebhookID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return WebhookID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Id = csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "url"); csilOk {
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Url = &csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "scope"); csilOk {
+		csilVal, csilErr := (func(csilV cborValue) (WebhookScope, error) {
+			csilInner, csilErr := (func(csilV cborValue) (string, error) {
+				csilInner, csilErr := (cborAsText)(csilV)
+				if csilErr != nil {
+					var csilZero string
+					return csilZero, csilErr
+				}
+				if !(csilInner == "all" || csilInner == "structure_only") {
+					var csilZero string
+					return csilZero, fmt.Errorf("csil cbor: value %v is not a member of the declared enum", csilInner)
+				}
+				return csilInner, nil
+			})(csilV)
+			return WebhookScope(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Scope = &csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "note"); csilOk {
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Note = &csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "active"); csilOk {
+		csilVal, csilErr := (cborAsBool)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Active = &csilVal
+	}
+	if csilField, csilOk := cborMapGet(csilRoot, "include_details"); csilOk {
+		csilVal, csilErr := (cborAsBool)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.IncludeDetails = &csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeUpdateWebhookRequest encodes a UpdateWebhookRequest to canonical CSIL CBOR bytes.
+func EncodeUpdateWebhookRequest(csilV UpdateWebhookRequest) []byte {
+	return cborEncode(csilEncUpdateWebhookRequest(csilV))
+}
+
+// DecodeUpdateWebhookRequest decodes canonical CSIL CBOR bytes into a UpdateWebhookRequest.
+func DecodeUpdateWebhookRequest(csilData []byte) (UpdateWebhookRequest, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero UpdateWebhookRequest
+		return csilZero, csilErr
+	}
+	return csilDecUpdateWebhookRequest(csilRoot)
+}
+
+// csilEncDeleteWebhookRequest builds the canonical CBOR value tree for a DeleteWebhookRequest.
+func csilEncDeleteWebhookRequest(csilV DeleteWebhookRequest) cborValue {
+	csilEntries := make(cborMap, 0, 1)
+	csilEntries = append(csilEntries, cborEntry{cborText("id"), cborText(csilV.Id)})
+	return csilEntries
+}
+
+// csilDecDeleteWebhookRequest reconstructs a DeleteWebhookRequest from a decoded CBOR value tree.
+func csilDecDeleteWebhookRequest(csilRoot cborValue) (DeleteWebhookRequest, error) {
+	var csilOut DeleteWebhookRequest
+	{
+		csilField, csilErr := cborRequire(csilRoot, "id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (WebhookID, error) {
+			csilInner, csilErr := (cborAsText)(csilV)
+			return WebhookID(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Id = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeDeleteWebhookRequest encodes a DeleteWebhookRequest to canonical CSIL CBOR bytes.
+func EncodeDeleteWebhookRequest(csilV DeleteWebhookRequest) []byte {
+	return cborEncode(csilEncDeleteWebhookRequest(csilV))
+}
+
+// DecodeDeleteWebhookRequest decodes canonical CSIL CBOR bytes into a DeleteWebhookRequest.
+func DecodeDeleteWebhookRequest(csilData []byte) (DeleteWebhookRequest, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero DeleteWebhookRequest
+		return csilZero, csilErr
+	}
+	return csilDecDeleteWebhookRequest(csilRoot)
+}
+
+// csilEncListWebhooksRequest builds the canonical CBOR value tree for a ListWebhooksRequest.
+func csilEncListWebhooksRequest(csilV ListWebhooksRequest) cborValue {
+	csilEntries := make(cborMap, 0, 2)
+	csilEntries = append(csilEntries, cborEntry{cborText("owner_id"), cborText(csilV.OwnerId)})
+	csilEntries = append(csilEntries, cborEntry{cborText("owner_kind"), cborText(csilV.OwnerKind)})
+	return csilEntries
+}
+
+// csilDecListWebhooksRequest reconstructs a ListWebhooksRequest from a decoded CBOR value tree.
+func csilDecListWebhooksRequest(csilRoot cborValue) (ListWebhooksRequest, error) {
+	var csilOut ListWebhooksRequest
+	{
+		csilField, csilErr := cborRequire(csilRoot, "owner_kind")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) (WebhookOwnerKind, error) {
+			csilInner, csilErr := (func(csilV cborValue) (string, error) {
+				csilInner, csilErr := (cborAsText)(csilV)
+				if csilErr != nil {
+					var csilZero string
+					return csilZero, csilErr
+				}
+				if !(csilInner == "organization" || csilInner == "gathering") {
+					var csilZero string
+					return csilZero, fmt.Errorf("csil cbor: value %v is not a member of the declared enum", csilInner)
+				}
+				return csilInner, nil
+			})(csilV)
+			return WebhookOwnerKind(csilInner), csilErr
+		})(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OwnerKind = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "owner_id")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsText)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.OwnerId = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeListWebhooksRequest encodes a ListWebhooksRequest to canonical CSIL CBOR bytes.
+func EncodeListWebhooksRequest(csilV ListWebhooksRequest) []byte {
+	return cborEncode(csilEncListWebhooksRequest(csilV))
+}
+
+// DecodeListWebhooksRequest decodes canonical CSIL CBOR bytes into a ListWebhooksRequest.
+func DecodeListWebhooksRequest(csilData []byte) (ListWebhooksRequest, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero ListWebhooksRequest
+		return csilZero, csilErr
+	}
+	return csilDecListWebhooksRequest(csilRoot)
+}
+
+// csilEncWebhookList builds the canonical CBOR value tree for a WebhookList.
+func csilEncWebhookList(csilV WebhookList) cborValue {
+	csilEntries := make(cborMap, 0, 2)
+	csilEntries = append(csilEntries, cborEntry{cborText("limit"), cborUint(csilV.Limit)})
+	csilEntries = append(csilEntries, cborEntry{cborText("webhooks"), cborEncArray(csilV.Webhooks, func(csilElem Webhook) cborValue { return csilEncWebhook(csilElem) })})
+	return csilEntries
+}
+
+// csilDecWebhookList reconstructs a WebhookList from a decoded CBOR value tree.
+func csilDecWebhookList(csilRoot cborValue) (WebhookList, error) {
+	var csilOut WebhookList
+	{
+		csilField, csilErr := cborRequire(csilRoot, "webhooks")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (func(csilV cborValue) ([]Webhook, error) { return cborDecArray(csilV, csilDecWebhook) })(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Webhooks = csilVal
+	}
+	{
+		csilField, csilErr := cborRequire(csilRoot, "limit")
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilVal, csilErr := (cborAsU64)(csilField)
+		if csilErr != nil {
+			return csilOut, csilErr
+		}
+		csilOut.Limit = csilVal
+	}
+	return csilOut, nil
+}
+
+// EncodeWebhookList encodes a WebhookList to canonical CSIL CBOR bytes.
+func EncodeWebhookList(csilV WebhookList) []byte {
+	return cborEncode(csilEncWebhookList(csilV))
+}
+
+// DecodeWebhookList decodes canonical CSIL CBOR bytes into a WebhookList.
+func DecodeWebhookList(csilData []byte) (WebhookList, error) {
+	csilRoot, csilErr := cborDecode(csilData)
+	if csilErr != nil {
+		var csilZero WebhookList
+		return csilZero, csilErr
+	}
+	return csilDecWebhookList(csilRoot)
 }

@@ -12,12 +12,13 @@ job:
     user: host
 environment:
   TINKU_JOB: deploy-website
-  REGISTRY_INTERNAL: "10.16.0.1:5000"
-  REGISTRY_INTERNAL_PATH: "private/catalystcommunity/tinku-website"
-  REGISTRY_EXTERNAL: "containers.catalystsquad.com"
-  REGISTRY_USER: "${secret:tinku/registry:user}"
-  REGISTRY_PASSWORD: "${secret:tinku/registry:password}"
-  KUBECONFIG_CONTENT: "${secret:tinku/k8s:kubeconfig}"
+  # The public registry, as every other catalystcommunity workload in this
+  # cluster uses. linkkeys-website, the sibling PySocha site, is there too.
+  REGISTRY: "containers.catalystsquad.com"
+  REGISTRY_PATH: "public/catalystcommunity/tinku-website"
+  REGISTRY_USER: "${secret:catalystcommunity/registry:user}"
+  REGISTRY_PASSWORD: "${secret:catalystcommunity/registry:password}"
+  KUBECONFIG_CONTENT: "${secret:catalystcommunity/k8s:kubeconfig}"
   # Its own namespace. The site shares a cluster with other sites and
   # nothing else.
   K8S_NAMESPACE: "tinku-website"

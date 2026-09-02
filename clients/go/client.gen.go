@@ -308,6 +308,51 @@ func (c *GatheringClient) RemoveGatheringOwner(ctx context.Context, req RemoveGa
 	return DecodeGathering(csilResp)
 }
 
+func (c *GatheringClient) OfferGathering(ctx context.Context, req OfferGatheringRequest) (GatheringOffer, error) {
+	var csilZero GatheringOffer
+	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "offer-gathering", EncodeOfferGatheringRequest(req))
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	return DecodeGatheringOffer(csilResp)
+}
+
+func (c *GatheringClient) ListGatheringOffers(ctx context.Context, req ListGatheringOffersRequest) (GatheringOfferList, error) {
+	var csilZero GatheringOfferList
+	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "list-gathering-offers", EncodeListGatheringOffersRequest(req))
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	return DecodeGatheringOfferList(csilResp)
+}
+
+func (c *GatheringClient) RespondToGatheringOffer(ctx context.Context, req RespondToGatheringOfferRequest) (GatheringOffer, error) {
+	var csilZero GatheringOffer
+	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "respond-to-gathering-offer", EncodeRespondToGatheringOfferRequest(req))
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	return DecodeGatheringOffer(csilResp)
+}
+
+func (c *GatheringClient) WithdrawGatheringOffer(ctx context.Context, req WithdrawGatheringOfferRequest) (Empty, error) {
+	var csilZero Empty
+	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "withdraw-gathering-offer", EncodeWithdrawGatheringOfferRequest(req))
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	return DecodeEmpty(csilResp)
+}
+
+func (c *GatheringClient) AdoptGathering(ctx context.Context, req AdoptGatheringRequest) (Gathering, error) {
+	var csilZero Gathering
+	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "adopt-gathering", EncodeAdoptGatheringRequest(req))
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	return DecodeGathering(csilResp)
+}
+
 // EventClient is a typed client for the EventService service. The client owns
 // (de)serialization via the generated codec; the transport only moves bytes.
 type EventClient struct {
@@ -670,4 +715,50 @@ func (c *FederationClient) SetOriginRateLimit(ctx context.Context, req SetOrigin
 		return csilZero, csilErr
 	}
 	return DecodeOriginVolume(csilResp)
+}
+
+// WebhookClient is a typed client for the WebhookService service. The client owns
+// (de)serialization via the generated codec; the transport only moves bytes.
+type WebhookClient struct {
+	transport Transport
+}
+
+func NewWebhookClient(transport Transport) *WebhookClient {
+	return &WebhookClient{transport: transport}
+}
+
+func (c *WebhookClient) ListWebhooks(ctx context.Context, req ListWebhooksRequest) (WebhookList, error) {
+	var csilZero WebhookList
+	csilResp, csilErr := c.transport.Call(ctx, "WebhookService", "list-webhooks", EncodeListWebhooksRequest(req))
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	return DecodeWebhookList(csilResp)
+}
+
+func (c *WebhookClient) CreateWebhook(ctx context.Context, req CreateWebhookRequest) (WebhookWithSecret, error) {
+	var csilZero WebhookWithSecret
+	csilResp, csilErr := c.transport.Call(ctx, "WebhookService", "create-webhook", EncodeCreateWebhookRequest(req))
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	return DecodeWebhookWithSecret(csilResp)
+}
+
+func (c *WebhookClient) UpdateWebhook(ctx context.Context, req UpdateWebhookRequest) (Webhook, error) {
+	var csilZero Webhook
+	csilResp, csilErr := c.transport.Call(ctx, "WebhookService", "update-webhook", EncodeUpdateWebhookRequest(req))
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	return DecodeWebhook(csilResp)
+}
+
+func (c *WebhookClient) DeleteWebhook(ctx context.Context, req DeleteWebhookRequest) (Empty, error) {
+	var csilZero Empty
+	csilResp, csilErr := c.transport.Call(ctx, "WebhookService", "delete-webhook", EncodeDeleteWebhookRequest(req))
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	return DecodeEmpty(csilResp)
 }

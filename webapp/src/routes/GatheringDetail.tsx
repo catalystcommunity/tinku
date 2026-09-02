@@ -8,6 +8,8 @@ import { useSession } from "~/lib/session";
 import { ErrorAlert, StatusMessage } from "~/components/Alert";
 import { CheckField, Field } from "~/components/Field";
 import { EventCard, SeriesCard } from "~/components/Cards";
+import { AdoptGathering, OfferGathering } from "~/components/Offers";
+import { Webhooks } from "~/components/Webhooks";
 import { OriginBadge } from "~/components/OriginBadge";
 import { PublishControl } from "~/components/PublishControl";
 import { Select } from "~/components/Select";
@@ -101,6 +103,10 @@ export default function GatheringDetail(): JSX.Element {
   const [error, setError] = createSignal<unknown>();
   const [status, setStatus] = createSignal("");
   const [busy, setBusy] = createSignal(false);
+  // Which of the two schedule forms is on screen. Both are always in the
+  // document — `hidden` rather than `Show` — so that what a person has typed
+  // into one survives a look at the other.
+  const [scheduleTab, setScheduleTab] = createSignal<"single" | "series">("single");
 
   const refetchAll = () => Promise.all([refetchGathering(), refetchEvents(), refetchSeries()]);
 
@@ -293,7 +299,7 @@ export default function GatheringDetail(): JSX.Element {
       {(g) => (
         <>
           <h1>{g().name}</h1>
-          <p>
+          <p class="page-address">
             <OriginBadge origin={g().origin} local={g().slug} />
           </p>
           {/* An external record that shares a local name is the case worth
@@ -303,9 +309,9 @@ export default function GatheringDetail(): JSX.Element {
               {t("origin.externalWarning", { domain: g().origin.domain })}
             </p>
           </Show>
-          <p class="card-meta">
-            {plural("gathering.members", g().memberCount)} ·{" "}
-            {plural("gathering.events", g().eventCount)}
+          <p class="page-meta">
+            <span>{plural("gathering.members", g().memberCount)}</span>
+            <span>{plural("gathering.events", g().eventCount)}</span>
           </p>
           <Show when={g().blurb}>
             <p>{g().blurb}</p>
@@ -362,7 +368,7 @@ export default function GatheringDetail(): JSX.Element {
           <Show when={status()}>{(s) => <StatusMessage>{s()}</StatusMessage>}</Show>
 
           <Show when={user()}>
-            <p>
+            <p class="page-actions">
               <Show
                 when={g().viewer.hasJoined}
                 fallback={
@@ -371,7 +377,7 @@ export default function GatheringDetail(): JSX.Element {
                   </button>
                 }
               >
-                <button type="button" onClick={() => membership(false)} disabled={busy()}>
+                <button type="button" class="secondary" onClick={() => membership(false)} disabled={busy()}>
                   {busy() ? t("gathering.leaving") : t("gathering.leave")}
                 </button>
               </Show>
@@ -396,7 +402,7 @@ export default function GatheringDetail(): JSX.Element {
 
           <Show when={(series()?.series.length ?? 0) > 0}>
             <section>
-              <h2>{t("event.newSeries")}</h2>
+              <h2>{t("event.seriesHeading")}</h2>
               <ul class="cards">
                 <For each={series()?.series}>{(s) => <SeriesCard series={s} />}</For>
               </ul>
@@ -408,7 +414,43 @@ export default function GatheringDetail(): JSX.Element {
               a thing to tab through for no reason. */}
           <Show when={g().viewer.canEdit}>
             <section>
-              <h2>{t("event.new")}</h2>
+              <h2>{t("event.scheduleHeading")}</h2>
+              {/*
+                One event and a rule that makes many are two shapes of the
+                same task, so they are one section with a switch. Both forms
+                used to be open at once, which made the page twice as long
+                as the job and left the reader to work out which half
+                applied to them.
+              */}
+              <div class="tabs" role="tablist" aria-label={t("event.scheduleHeading")}>
+                <button
+                  type="button"
+                  role="tab"
+                  id="schedule-tab-single"
+                  aria-selected={scheduleTab() === "single"}
+                  aria-controls="schedule-panel-single"
+                  onClick={() => setScheduleTab("single")}
+                >
+                  {t("event.tabSingle")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="schedule-tab-series"
+                  aria-selected={scheduleTab() === "series"}
+                  aria-controls="schedule-panel-series"
+                  onClick={() => setScheduleTab("series")}
+                >
+                  {t("event.tabSeries")}
+                </button>
+              </div>
+
+              <div
+                id="schedule-panel-single"
+                role="tabpanel"
+                aria-labelledby="schedule-tab-single"
+                hidden={scheduleTab() !== "single"}
+              >
               <form onSubmit={createEvent}>
                 <Field label={t("event.titleLabel")} required requiredText={t("common.required")}>
                   {(control) => (
@@ -430,26 +472,28 @@ export default function GatheringDetail(): JSX.Element {
                     />
                   )}
                 </Field>
-                <Field label={t("event.startsAtLabel")} required requiredText={t("common.required")}>
-                  {(control) => (
-                    <input
-                      {...control}
-                      type="datetime-local"
-                      value={single.startsAt}
-                      onInput={(e) => setSingle("startsAt", e.currentTarget.value)}
-                    />
-                  )}
-                </Field>
-                <Field label={t("event.endsAtLabel")} required requiredText={t("common.required")}>
-                  {(control) => (
-                    <input
-                      {...control}
-                      type="datetime-local"
-                      value={single.endsAt}
-                      onInput={(e) => setSingle("endsAt", e.currentTarget.value)}
-                    />
-                  )}
-                </Field>
+                <div class="field-row">
+  <Field label={t("event.startsAtLabel")} required requiredText={t("common.required")}>
+                    {(control) => (
+                      <input
+                        {...control}
+                        type="datetime-local"
+                        value={single.startsAt}
+                        onInput={(e) => setSingle("startsAt", e.currentTarget.value)}
+                      />
+                    )}
+                  </Field>
+                  <Field label={t("event.endsAtLabel")} required requiredText={t("common.required")}>
+                    {(control) => (
+                      <input
+                        {...control}
+                        type="datetime-local"
+                        value={single.endsAt}
+                        onInput={(e) => setSingle("endsAt", e.currentTarget.value)}
+                      />
+                    )}
+                  </Field>
+</div>
                 <Field
                   label={t("event.timezoneLabel")}
                   hint={t("event.timezoneHint")}
@@ -477,16 +521,18 @@ export default function GatheringDetail(): JSX.Element {
                     </p>
                   )}
                 </Show>
-                <CheckField
-                  label={t("event.onlineLabel")}
-                  checked={single.isOnline}
-                  onChange={(v) => setSingle("isOnline", v)}
-                />
-                <CheckField
-                  label={t("event.inPersonLabel")}
-                  checked={single.isInPerson}
-                  onChange={(v) => setSingle("isInPerson", v)}
-                />
+                <div class="check-row">
+                  <CheckField
+                    label={t("event.onlineLabel")}
+                    checked={single.isOnline}
+                    onChange={(v) => setSingle("isOnline", v)}
+                  />
+                  <CheckField
+                    label={t("event.inPersonLabel")}
+                    checked={single.isInPerson}
+                    onChange={(v) => setSingle("isInPerson", v)}
+                  />
+                </div>
                 <Show when={single.isOnline}>
                   <Field label={t("event.onlineUrlLabel")} optionalText={t("common.optional")}>
                     {(control) => (
@@ -572,17 +618,23 @@ export default function GatheringDetail(): JSX.Element {
                     </Field>
                   </fieldset>
                 </Show>
-                <button
-                  type="submit"
-                  disabled={busy() || !single.title.trim() || !single.startsAt || !single.endsAt}
-                >
-                  {busy() ? t("common.creating") : t("gathering.schedule")}
-                </button>
+                <div class="form-actions">
+                  <button
+                    type="submit"
+                    disabled={busy() || !single.title.trim() || !single.startsAt || !single.endsAt}
+                  >
+                    {busy() ? t("common.creating") : t("gathering.schedule")}
+                  </button>
+                </div>
               </form>
-            </section>
+              </div>
 
-            <section>
-              <h2>{t("event.newSeries")}</h2>
+              <div
+                id="schedule-panel-series"
+                role="tabpanel"
+                aria-labelledby="schedule-tab-series"
+                hidden={scheduleTab() !== "series"}
+              >
               <form onSubmit={createSeries}>
                 <Field label={t("event.titleLabel")} required requiredText={t("common.required")}>
                   {(control) => (
@@ -606,111 +658,117 @@ export default function GatheringDetail(): JSX.Element {
                 </Field>
                 <fieldset>
                   <legend>{t("recurrence.freqLabel")}</legend>
-                  <Field label={t("recurrence.freqLabel")}>
-                    {(control) => (
-                      <Select
-                        control={control}
-                        value={recurring.freq}
-                        options={FREQUENCIES}
-                        label={(f) => t(`recurrence.freq.${f}`)}
-                        onChange={(f) => setRecurring("freq", f)}
-                      />
-                    )}
-                  </Field>
-                  {/* An ordinal is meaningless for a weekly rule, so the
-                      control is not offered for one. */}
-                  <Show when={recurring.freq !== "weekly"}>
-                    <Field label={t("recurrence.ordinalLabel")}>
+                  <div class="field-row">
+  <Field label={t("recurrence.freqLabel")}>
                       {(control) => (
                         <Select
                           control={control}
-                          value={String(recurring.ordinal)}
-                          options={ORDINALS.map(String)}
-                          label={(o) => t(`recurrence.ordinal.${Number(o) as (typeof ORDINALS)[number]}`)}
-                          onChange={(o) => setRecurring("ordinal", Number(o))}
+                          value={recurring.freq}
+                          options={FREQUENCIES}
+                          label={(f) => t(`recurrence.freq.${f}`)}
+                          onChange={(f) => setRecurring("freq", f)}
                         />
                       )}
                     </Field>
-                  </Show>
-                  <Field label={t("recurrence.weekdayLabel")}>
+                    {/* An ordinal is meaningless for a weekly rule, so the
+                        control is not offered for one. */}
+                    <Show when={recurring.freq !== "weekly"}>
+                      <Field label={t("recurrence.ordinalLabel")}>
+                        {(control) => (
+                          <Select
+                            control={control}
+                            value={String(recurring.ordinal)}
+                            options={ORDINALS.map(String)}
+                            label={(o) => t(`recurrence.ordinal.${Number(o) as (typeof ORDINALS)[number]}`)}
+                            onChange={(o) => setRecurring("ordinal", Number(o))}
+                          />
+                        )}
+                      </Field>
+                    </Show>
+                    <Field label={t("recurrence.weekdayLabel")}>
+                      {(control) => (
+                        <Select
+                          control={control}
+                          value={recurring.weekday}
+                          options={WEEKDAYS}
+                          label={(d) => t(`weekday.${d}`)}
+                          onChange={(d) => setRecurring("weekday", d)}
+                        />
+                      )}
+                    </Field>
+                    <Field label={t("recurrence.intervalLabel")}>
+                      {(control) => (
+                        <input
+                          {...control}
+                          type="number"
+                          min={1}
+                          max={52}
+                          value={recurring.interval}
+                          onInput={(e) => setRecurring("interval", Number(e.currentTarget.value))}
+                        />
+                      )}
+                    </Field>
+                </div>
+                </fieldset>
+                <div class="field-row">
+  <Field
+                    label={t("recurrence.startsOnLabel")}
+                    required
+                    requiredText={t("common.required")}
+                  >
                     {(control) => (
-                      <Select
-                        control={control}
-                        value={recurring.weekday}
-                        options={WEEKDAYS}
-                        label={(d) => t(`weekday.${d}`)}
-                        onChange={(d) => setRecurring("weekday", d)}
+                      <input
+                        {...control}
+                        type="date"
+                        value={recurring.startsOn}
+                        onInput={(e) => setRecurring("startsOn", e.currentTarget.value)}
                       />
                     )}
                   </Field>
-                  <Field label={t("recurrence.intervalLabel")}>
+                  <Field label={t("recurrence.endsOnLabel")} optionalText={t("common.optional")}>
+                    {(control) => (
+                      <input
+                        {...control}
+                        type="date"
+                        value={recurring.endsOn}
+                        onInput={(e) => setRecurring("endsOn", e.currentTarget.value)}
+                      />
+                    )}
+                  </Field>
+                </div>
+                <div class="field-row">
+  <Field
+                    label={t("recurrence.startTimeLabel")}
+                    required
+                    requiredText={t("common.required")}
+                  >
+                    {(control) => (
+                      <input
+                        {...control}
+                        type="time"
+                        value={recurring.startTime}
+                        onInput={(e) => setRecurring("startTime", e.currentTarget.value)}
+                      />
+                    )}
+                  </Field>
+                  <Field
+                    label={t("recurrence.durationLabel")}
+                    required
+                    requiredText={t("common.required")}
+                  >
                     {(control) => (
                       <input
                         {...control}
                         type="number"
-                        min={1}
-                        max={52}
-                        value={recurring.interval}
-                        onInput={(e) => setRecurring("interval", Number(e.currentTarget.value))}
+                        min={5}
+                        value={recurring.durationMinutes}
+                        onInput={(e) =>
+                          setRecurring("durationMinutes", Number(e.currentTarget.value))
+                        }
                       />
                     )}
                   </Field>
-                </fieldset>
-                <Field
-                  label={t("recurrence.startsOnLabel")}
-                  required
-                  requiredText={t("common.required")}
-                >
-                  {(control) => (
-                    <input
-                      {...control}
-                      type="date"
-                      value={recurring.startsOn}
-                      onInput={(e) => setRecurring("startsOn", e.currentTarget.value)}
-                    />
-                  )}
-                </Field>
-                <Field label={t("recurrence.endsOnLabel")} optionalText={t("common.optional")}>
-                  {(control) => (
-                    <input
-                      {...control}
-                      type="date"
-                      value={recurring.endsOn}
-                      onInput={(e) => setRecurring("endsOn", e.currentTarget.value)}
-                    />
-                  )}
-                </Field>
-                <Field
-                  label={t("recurrence.startTimeLabel")}
-                  required
-                  requiredText={t("common.required")}
-                >
-                  {(control) => (
-                    <input
-                      {...control}
-                      type="time"
-                      value={recurring.startTime}
-                      onInput={(e) => setRecurring("startTime", e.currentTarget.value)}
-                    />
-                  )}
-                </Field>
-                <Field
-                  label={t("recurrence.durationLabel")}
-                  required
-                  requiredText={t("common.required")}
-                >
-                  {(control) => (
-                    <input
-                      {...control}
-                      type="number"
-                      min={5}
-                      value={recurring.durationMinutes}
-                      onInput={(e) =>
-                        setRecurring("durationMinutes", Number(e.currentTarget.value))
-                      }
-                    />
-                  )}
-                </Field>
+                </div>
                 <Field
                   label={t("event.timezoneLabel")}
                   hint={t("event.timezoneHint")}
@@ -725,16 +783,18 @@ export default function GatheringDetail(): JSX.Element {
                     />
                   )}
                 </Field>
-                <CheckField
-                  label={t("event.onlineLabel")}
-                  checked={recurring.isOnline}
-                  onChange={(v) => setRecurring("isOnline", v)}
-                />
-                <CheckField
-                  label={t("event.inPersonLabel")}
-                  checked={recurring.isInPerson}
-                  onChange={(v) => setRecurring("isInPerson", v)}
-                />
+                <div class="check-row">
+                  <CheckField
+                    label={t("event.onlineLabel")}
+                    checked={recurring.isOnline}
+                    onChange={(v) => setRecurring("isOnline", v)}
+                  />
+                  <CheckField
+                    label={t("event.inPersonLabel")}
+                    checked={recurring.isInPerson}
+                    onChange={(v) => setRecurring("isInPerson", v)}
+                  />
+                </div>
                 <Show when={recurring.isInPerson}>
                   <fieldset>
                     <legend>{t("event.locationLegend")}</legend>
@@ -761,14 +821,32 @@ export default function GatheringDetail(): JSX.Element {
                     </Field>
                   </fieldset>
                 </Show>
-                <button
-                  type="submit"
-                  disabled={busy() || !recurring.title.trim() || !recurring.startsOn}
-                >
-                  {busy() ? t("common.creating") : t("gathering.schedule")}
-                </button>
+                <div class="form-actions">
+                  <button
+                    type="submit"
+                    disabled={busy() || !recurring.title.trim() || !recurring.startsOn}
+                  >
+                    {busy() ? t("common.creating") : t("gathering.schedule")}
+                  </button>
+                </div>
               </form>
+              </div>
             </section>
+          </Show>
+
+          {/* Ownership moving is an owner's to offer and somebody else's to
+              accept; an administrator has a separate, one-sided path. */}
+          <Show when={g().viewer.canEdit}>
+            <OfferGathering gatheringId={params.id} />
+          </Show>
+          <Show when={g().viewer.isAdmin}>
+            <AdoptGathering gatheringId={params.id} onAdopted={() => void refetchGathering()} />
+          </Show>
+
+          {/* Webhooks are an owner's to set: the URL and the failure history
+              say where their systems are. */}
+          <Show when={g().viewer.canEdit}>
+            <Webhooks ownerKind="gathering" ownerId={params.id} />
           </Show>
 
           {/* Deletion is a DIFFERENT permission from editing. The server
@@ -777,7 +855,8 @@ export default function GatheringDetail(): JSX.Element {
               canEdit would leave an admin with no way to remove a gathering
               they do not own — which is the one thing the role exists for. */}
           <Show when={g().viewer.canDelete}>
-            <section>
+            <section class="danger-zone">
+              <p>{t("gathering.dangerNote")}</p>
               <button type="button" class="danger" onClick={remove}>
                 {t("common.delete")}
               </button>

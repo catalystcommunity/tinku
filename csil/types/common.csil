@@ -30,6 +30,12 @@ EventID = text
 ;;; An event series' id (ULID).
 EventSeriesID = text
 
+;;; A webhook's id (ULID).
+WebhookID = text
+
+;;; An offer's id (ULID). One gathering offered to one organization.
+GatheringOfferID = text
+
 ;;; The empty payload. Ops that take no input and ops that return nothing
 ;;; both use it, so every op still has a declared request and response type.
 Empty = {}

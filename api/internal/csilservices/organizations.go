@@ -7,6 +7,7 @@ import (
 
 	"github.com/catalystcommunity/tinku/api/internal/csil"
 	"github.com/catalystcommunity/tinku/api/internal/store"
+	"github.com/catalystcommunity/tinku/api/internal/webhooks"
 )
 
 // OrganizationService implements csil.OrganizationService: an organization
@@ -20,6 +21,10 @@ type OrganizationService struct {
 	// OriginDomain is the domain half of every organization address this node
 	// mints.
 	OriginDomain string
+	// Notify queues webhook deliveries for what this service changes.
+	// Nil in a test that does not care, which is why every call goes
+	// through Dispatch rather than touching the field.
+	Notify *webhooks.Dispatcher
 }
 
 var _ csil.OrganizationService = (*OrganizationService)(nil)
@@ -49,6 +54,9 @@ func (s *OrganizationService) ListOrganizations(ctx context.Context, req csil.Li
 			return csil.OrganizationList{Organizations: []csil.Organization{}}, nil
 		}
 		f.MemberID = c.ID
+	}
+	if req.Query != nil {
+		f.Query = strings.TrimSpace(*req.Query)
 	}
 
 	organizations, total, err := s.Store.ListOrganizations(ctx, f)
@@ -106,6 +114,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, req csil.C
 	if err != nil {
 		return csil.Organization{}, err
 	}
+	s.notifyOrganization(ctx, webhooks.ActionCreated, organization)
 	return toOrganization(organization, organizationViewer(c, store.OrganizationRoleOwner, true), s.OriginDomain), nil
 }
 
@@ -185,6 +194,7 @@ func (s *OrganizationService) UpdateOrganization(ctx context.Context, req csil.U
 	if err != nil {
 		return csil.Organization{}, err
 	}
+	s.notifyOrganization(ctx, webhooks.ActionUpdated, updated)
 	return toOrganization(updated, viewer, s.OriginDomain), nil
 }
 
@@ -200,12 +210,21 @@ func (s *OrganizationService) DeleteOrganization(ctx context.Context, req csil.D
 	if !c.IsAdmin {
 		return csil.Empty{}, Forbidden("only an administrator can delete an organization")
 	}
-	if _, err := s.Store.OrganizationByID(ctx, string(req.Id)); errors.Is(err, store.ErrNotFound) {
+	organization, err := s.Store.OrganizationByID(ctx, string(req.Id))
+	if errors.Is(err, store.ErrNotFound) {
 		return csil.Empty{}, NotFound("organization", "no organization with that id")
 	} else if err != nil {
 		return csil.Empty{}, err
 	}
 	if err := s.Store.DeleteOrganization(ctx, string(req.Id)); err != nil {
+		return csil.Empty{}, err
+	}
+	// Its webhooks go with it, and nothing is sent about the deletion: the
+	// only endpoints subscribed to an organization are its own, and they
+	// belong to the thing that is gone. (owner_kind, owner_id) is a pair
+	// rather than a foreign key, so this has to be said rather than left to
+	// a cascade.
+	if err := s.Store.DeleteWebhooksFor(ctx, store.WebhookOwnerOrganization, organization.ID); err != nil {
 		return csil.Empty{}, err
 	}
 	return csil.Empty{}, nil

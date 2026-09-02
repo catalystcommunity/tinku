@@ -4,6 +4,23 @@ import { useI18n } from "~/i18n";
 import { api } from "~/lib/api";
 import { ErrorAlert, StatusMessage } from "~/components/Alert";
 import { CheckField, Field } from "~/components/Field";
+import { TinkuTransportError } from "~/lib/errors";
+import { Status } from "~/transport/csil/conventions";
+
+/**
+ * Federation is off by default, and an instance with it off does not
+ * register the service at all — so the first call here comes back "unknown
+ * service or op". That is an ANSWER, not a failure: this screen exists to
+ * say whether the instance federates. Letting it reach the error boundary
+ * turned "off" into a crash page, which told an administrator nothing about
+ * the setting they came to look at.
+ */
+function offWhenAbsent(err: unknown): null {
+  if (err instanceof TinkuTransportError && err.status === Status.UnknownServiceOrOp) {
+    return null;
+  }
+  throw err;
+}
 
 /**
  * Who this instance federates with.
@@ -16,13 +33,23 @@ import { CheckField, Field } from "~/components/Field";
 export default function Federation(): JSX.Element {
   const { t, plural, dateTime } = useI18n();
 
-  const [identity] = createResource(() => api.federation.federationIdentity({}));
-  const [peers, { refetch }] = createResource(() => api.federation.listPeers({}));
+  const [identity] = createResource(() =>
+    api.federation.federationIdentity({}).catch(offWhenAbsent),
+  );
+  const [peers, { refetch }] = createResource(() =>
+    api.federation.listPeers({}).catch(offWhenAbsent),
+  );
   const [settings, { mutate: mutateSettings }] = createResource(() =>
     api.admin.getInstanceSettings({}),
   );
   const [saved, setSaved] = createSignal(false);
-  const [volume] = createResource(() => api.federation.listOriginVolume({}));
+  // `null` from a resource means the service is absent, which is what an
+  // instance with federation off answers. The peer screens are hidden then:
+  // a peer list that can never have a peer is furniture.
+  const off = () => identity.state === "ready" && identity() === null;
+  const [volume] = createResource(() =>
+    api.federation.listOriginVolume({}).catch(offWhenAbsent),
+  );
 
   const [address, setAddress] = createSignal("");
   const [baseUrl, setBaseUrl] = createSignal("");
@@ -70,6 +97,15 @@ export default function Federation(): JSX.Element {
     <>
       <h1>{t("federation.title")}</h1>
 
+      {/* The service is absent rather than failing. Say so, and say what to
+          do about it, instead of rendering the peer screens of an instance
+          that has no peers and cannot have any. */}
+      <Show when={off()}>
+        <p class="alert alert-status" role="status">
+          {t("federation.off")}
+        </p>
+      </Show>
+
       {/* `enabled` is the server's answer, and it is the one to read: an
           instance that does not federate still answers this op, with an
           empty address. Guarding on the object alone renders "This instance
@@ -77,7 +113,11 @@ export default function Federation(): JSX.Element {
           peer UI beneath it. */}
       <Show
         when={identity()?.enabled ? identity() : undefined}
-        fallback={<p class="card-meta">{t("federation.identityUnset")}</p>}
+        fallback={
+          <Show when={!off()}>
+            <p class="card-meta">{t("federation.identityUnset")}</p>
+          </Show>
+        }
       >
         {(who) => (
           <>
@@ -189,285 +229,291 @@ export default function Federation(): JSX.Element {
         </Show>
       </section>
 
-      <section>
-        <h2>{t("federation.peers")}</h2>
-        <Show when={peers()} fallback={<p>{t("common.loading")}</p>}>
-          {(list) => (
-            <Show when={list().peers.length > 0} fallback={<p>{t("federation.noPeers")}</p>}>
-              <ul class="cards">
-                <For each={list().peers}>
-                  {(peer) => (
-                    <li class="card" classList={{ "card-locked": peer.suspended }}>
-                      <h3>{peer.address}</h3>
-                      <p class="card-meta">{peer.baseUrl}</p>
-                      <Show when={peer.note}>
-                        <p class="card-blurb">{peer.note}</p>
-                      </Show>
-
-                      <p class="card-meta">
-                        {t("federation.inbound")}:{" "}
-                        <span class="badge">{t(`federation.status.${peer.inboundStatus}`)}</span>{" "}
-                        {t("federation.outbound")}:{" "}
-                        <span class="badge">{t(`federation.status.${peer.outboundStatus}`)}</span>
-                      </p>
-
-                      <p class="card-meta">
-                        {t("federation.rateLimit")}:{" "}
-                        <Show
-                          when={peer.rateLimitPerMinute != null}
-                          fallback={t("federation.rateLimitInstance")}
-                        >
-                          {t("federation.rateLimitOwn", { count: peer.rateLimitPerMinute ?? 0 })}
+      <Show when={!off()}>
+        <section>
+          <h2>{t("federation.peers")}</h2>
+          <Show when={peers()} fallback={<p>{t("common.loading")}</p>}>
+            {(list) => (
+              <Show when={list().peers.length > 0} fallback={<p>{t("federation.noPeers")}</p>}>
+                <ul class="cards">
+                  <For each={list().peers}>
+                    {(peer) => (
+                      <li class="card" classList={{ "card-locked": peer.suspended }}>
+                        <h3>{peer.address}</h3>
+                        <p class="card-meta">{peer.baseUrl}</p>
+                        <Show when={peer.note}>
+                          <p class="card-blurb">{peer.note}</p>
                         </Show>
-                        <Show when={peer.rateLimitedTotal > 0}>
-                          {" "}
-                          · {plural("federation.rateLimitedTotal", peer.rateLimitedTotal)}
-                        </Show>
-                      </p>
-                      <p>
-                        <label>
-                          {t("federation.setRateLimit")}{" "}
-                          <input
-                            type="number"
-                            min={0}
-                            value={peer.rateLimitPerMinute ?? ""}
-                            onChange={(e) =>
-                              void act(() =>
-                                api.federation.setPeerRateLimit({
-                                  peerId: peer.id,
-                                  // An empty field restores the instance
-                                  // limit rather than setting zero, which
-                                  // would mean "no limit at all".
-                                  rateLimitPerMinute:
-                                    e.currentTarget.value === ""
-                                      ? undefined
-                                      : Number(e.currentTarget.value),
-                                }),
-                              )
-                            }
-                          />
-                        </label>
-                      </p>
-                      <p class="card-meta">
-                        {plural("federation.queued", peer.pendingDeliveries)}
-                        <Show when={peer.lastSuccessAt}>
-                          {(when) => <> · {t("federation.lastSuccess", { when: dateTime(when()) })}</>}
-                        </Show>
-                      </p>
 
-                      {/* A stopped peer says so in words, and says why. */}
-                      <Show when={peer.suspended}>
-                        <p class="alert alert-error" role="alert">
-                          <strong>{t("federation.suspended")}</strong>
-                          <Show when={peer.suspendedAt}>
-                            {(when) => <> {t("federation.suspendedSince", { when: dateTime(when()) })}</>}
+                        <p class="card-meta">
+                          {t("federation.inbound")}:{" "}
+                          <span class="badge">{t(`federation.status.${peer.inboundStatus}`)}</span>{" "}
+                          {t("federation.outbound")}:{" "}
+                          <span class="badge">{t(`federation.status.${peer.outboundStatus}`)}</span>
+                        </p>
+
+                        <p class="card-meta">
+                          {t("federation.rateLimit")}:{" "}
+                          <Show
+                            when={peer.rateLimitPerMinute != null}
+                            fallback={t("federation.rateLimitInstance")}
+                          >
+                            {t("federation.rateLimitOwn", { count: peer.rateLimitPerMinute ?? 0 })}
                           </Show>
-                          <Show when={peer.lastFailureReason}>
-                            {(reason) => <> {t("federation.lastFailure", { reason: reason() })}</>}
+                          <Show when={peer.rateLimitedTotal > 0}>
+                            {" "}
+                            · {plural("federation.rateLimitedTotal", peer.rateLimitedTotal)}
                           </Show>
                         </p>
+                        <p>
+                          <label>
+                            {t("federation.setRateLimit")}{" "}
+                            <input
+                              type="number"
+                              min={0}
+                              value={peer.rateLimitPerMinute ?? ""}
+                              onChange={(e) =>
+                                void act(() =>
+                                  api.federation.setPeerRateLimit({
+                                    peerId: peer.id,
+                                    // An empty field restores the instance
+                                    // limit rather than setting zero, which
+                                    // would mean "no limit at all".
+                                    rateLimitPerMinute:
+                                      e.currentTarget.value === ""
+                                        ? undefined
+                                        : Number(e.currentTarget.value),
+                                  }),
+                                )
+                              }
+                            />
+                          </label>
+                        </p>
+                        <p class="card-meta">
+                          {plural("federation.queued", peer.pendingDeliveries)}
+                          <Show when={peer.lastSuccessAt}>
+                            {(when) => <> · {t("federation.lastSuccess", { when: dateTime(when()) })}</>}
+                          </Show>
+                        </p>
+
+                        {/* A stopped peer says so in words, and says why. */}
+                        <Show when={peer.suspended}>
+                          <p class="alert alert-error" role="alert">
+                            <strong>{t("federation.suspended")}</strong>
+                            <Show when={peer.suspendedAt}>
+                              {(when) => <> {t("federation.suspendedSince", { when: dateTime(when()) })}</>}
+                            </Show>
+                            <Show when={peer.lastFailureReason}>
+                              {(reason) => <> {t("federation.lastFailure", { reason: reason() })}</>}
+                            </Show>
+                          </p>
+                          <button
+                            type="button"
+                            aria-label={t("federation.resumePeer", { peer: peer.address })}
+                            disabled={busy()}
+                            onClick={() => void act(() => api.federation.resumePeer({ peerId: peer.id }))}
+                          >
+                            {t("federation.resume")}
+                          </button>
+                        </Show>
+
+                        <p>
+                          <button
+                            type="button"
+                            aria-label={t("federation.approveInbound", { peer: peer.address })}
+                            disabled={busy() || peer.inboundStatus === "approved"}
+                            onClick={() => setStatus(peer, "inbound", "approved")}
+                          >
+                            {t("federation.approveInbound", { peer: peer.address })}
+                          </button>{" "}
+                          <button
+                            type="button"
+                            class="danger"
+                            aria-label={t("federation.blockInbound", { peer: peer.address })}
+                            disabled={busy() || peer.inboundStatus === "blocked"}
+                            onClick={() => setStatus(peer, "inbound", "blocked")}
+                          >
+                            {t("federation.blockInbound", { peer: peer.address })}
+                          </button>
+                        </p>
+                        <p>
+                          <button
+                            type="button"
+                            aria-label={t("federation.approveOutbound", { peer: peer.address })}
+                            disabled={busy() || peer.outboundStatus === "approved"}
+                            onClick={() => setStatus(peer, "outbound", "approved")}
+                          >
+                            {t("federation.approveOutbound", { peer: peer.address })}
+                          </button>{" "}
+                          <button
+                            type="button"
+                            class="danger"
+                            aria-label={t("federation.revokeOutbound", { peer: peer.address })}
+                            disabled={busy() || peer.outboundStatus === "none"}
+                            onClick={() => setStatus(peer, "outbound", "none")}
+                          >
+                            {t("federation.revokeOutbound", { peer: peer.address })}
+                          </button>
+                        </p>
+
                         <button
                           type="button"
-                          aria-label={t("federation.resumePeer", { peer: peer.address })}
+                          class="danger"
                           disabled={busy()}
-                          onClick={() => void act(() => api.federation.resumePeer({ peerId: peer.id }))}
+                          aria-label={t("federation.removePeer", { peer: peer.address })}
+                          onClick={() => {
+                            if (!window.confirm(t("common.confirmDelete", { name: peer.address }))) return;
+                            void act(() => api.federation.removePeer({ peerId: peer.id }));
+                          }}
                         >
-                          {t("federation.resume")}
+                          {t("federation.remove")}
                         </button>
-                      </Show>
-
-                      <p>
-                        <button
-                          type="button"
-                          aria-label={t("federation.approveInbound", { peer: peer.address })}
-                          disabled={busy() || peer.inboundStatus === "approved"}
-                          onClick={() => setStatus(peer, "inbound", "approved")}
-                        >
-                          {t("federation.approveInbound", { peer: peer.address })}
-                        </button>{" "}
-                        <button
-                          type="button"
-                          class="danger"
-                          aria-label={t("federation.blockInbound", { peer: peer.address })}
-                          disabled={busy() || peer.inboundStatus === "blocked"}
-                          onClick={() => setStatus(peer, "inbound", "blocked")}
-                        >
-                          {t("federation.blockInbound", { peer: peer.address })}
-                        </button>
-                      </p>
-                      <p>
-                        <button
-                          type="button"
-                          aria-label={t("federation.approveOutbound", { peer: peer.address })}
-                          disabled={busy() || peer.outboundStatus === "approved"}
-                          onClick={() => setStatus(peer, "outbound", "approved")}
-                        >
-                          {t("federation.approveOutbound", { peer: peer.address })}
-                        </button>{" "}
-                        <button
-                          type="button"
-                          class="danger"
-                          aria-label={t("federation.revokeOutbound", { peer: peer.address })}
-                          disabled={busy() || peer.outboundStatus === "none"}
-                          onClick={() => setStatus(peer, "outbound", "none")}
-                        >
-                          {t("federation.revokeOutbound", { peer: peer.address })}
-                        </button>
-                      </p>
-
-                      <button
-                        type="button"
-                        class="danger"
-                        disabled={busy()}
-                        aria-label={t("federation.removePeer", { peer: peer.address })}
-                        onClick={() => {
-                          if (!window.confirm(t("common.confirmDelete", { name: peer.address }))) return;
-                          void act(() => api.federation.removePeer({ peerId: peer.id }));
-                        }}
-                      >
-                        {t("federation.remove")}
-                      </button>
-                    </li>
-                  )}
-                </For>
-              </ul>
-            </Show>
-          )}
-        </Show>
-      </section>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </Show>
+            )}
+          </Show>
+        </section>
+      </Show>
 
       {/*
         The rate limit is enforced on a PEER, and a peer carries many
         organizations. A throttled peer therefore does not say which origin
         caused it. This list does, busiest first.
       */}
-      <section>
-        <h2>{t("volume.title")}</h2>
-        <p class="field-hint">{t("volume.hint")}</p>
-        <Show when={volume()} fallback={<p>{t("common.loading")}</p>}>
-          {(list) => (
-            <Show when={list().origins.length > 0} fallback={<p>{t("volume.none")}</p>}>
-              <ul class="cards">
-                <For each={list().origins}>
-                  {(origin) => (
-                    <li class="card">
-                      <h3>{origin.organizationName || t("volume.noOrganization")}</h3>
-                      <p class="card-address">{origin.peerAddress}</p>
-                      <p class="card-meta">
-                        {plural("volume.held", origin.held)} ·{" "}
-                        {plural("volume.acceptedTotal", origin.acceptedTotal)}
-                      </p>
-                      <p class="card-meta">
-                        <Show
-                          when={origin.effectiveRateLimitPerMinute > 0}
-                          fallback={t("volume.thisMinuteNoLimit", {
-                            count: origin.acceptedThisMinute,
-                          })}
-                        >
-                          {t("volume.thisMinute", {
-                            count: origin.acceptedThisMinute,
-                            limit: origin.effectiveRateLimitPerMinute,
-                          })}
-                        </Show>
-                        <Show when={origin.lastReceivedAt}>
-                          {(when) => <> · {t("volume.lastReceived", { when: dateTime(when()) })}</>}
-                        </Show>
-                      </p>
-                      {/* The peer's state, said here so this list stands on
-                          its own rather than needing a cross-reference. */}
-                      <Show when={origin.rateLimitedTotal > 0}>
+      <Show when={!off()}>
+        <section>
+          <h2>{t("volume.title")}</h2>
+          <p class="field-hint">{t("volume.hint")}</p>
+          <Show when={volume()} fallback={<p>{t("common.loading")}</p>}>
+            {(list) => (
+              <Show when={list().origins.length > 0} fallback={<p>{t("volume.none")}</p>}>
+                <ul class="cards">
+                  <For each={list().origins}>
+                    {(origin) => (
+                      <li class="card">
+                        <h3>{origin.organizationName || t("volume.noOrganization")}</h3>
+                        <p class="card-address">{origin.peerAddress}</p>
                         <p class="card-meta">
-                          {plural("volume.originLimited", origin.rateLimitedTotal)}
+                          {plural("volume.held", origin.held)} ·{" "}
+                          {plural("volume.acceptedTotal", origin.acceptedTotal)}
                         </p>
-                      </Show>
-                      <Show when={origin.peerRateLimitedTotal > 0}>
                         <p class="card-meta">
-                          {plural("federation.rateLimitedTotal", origin.peerRateLimitedTotal)}
+                          <Show
+                            when={origin.effectiveRateLimitPerMinute > 0}
+                            fallback={t("volume.thisMinuteNoLimit", {
+                              count: origin.acceptedThisMinute,
+                            })}
+                          >
+                            {t("volume.thisMinute", {
+                              count: origin.acceptedThisMinute,
+                              limit: origin.effectiveRateLimitPerMinute,
+                            })}
+                          </Show>
+                          <Show when={origin.lastReceivedAt}>
+                            {(when) => <> · {t("volume.lastReceived", { when: dateTime(when()) })}</>}
+                          </Show>
                         </p>
-                      </Show>
-                      {/* Throttle one organization without touching the
-                          peer's others — the reason the limit exists at two
-                          levels. An empty field restores the instance one. */}
-                      <p>
-                        <label>
-                          {t("volume.setOriginLimit")}{" "}
-                          <input
-                            type="number"
-                            min={0}
-                            placeholder={String(origin.effectiveRateLimitPerMinute)}
-                            value={origin.rateLimitPerMinute ?? ""}
-                            onChange={(e) =>
-                              void act(() =>
-                                api.federation.setOriginRateLimit({
-                                  peerId: origin.peerId,
-                                  organizationName: origin.organizationName,
-                                  rateLimitPerMinute:
-                                    e.currentTarget.value === ""
-                                      ? undefined
-                                      : Number(e.currentTarget.value),
-                                }),
-                              )
-                            }
-                          />
-                        </label>
-                      </p>
-                      <Show when={origin.peerSuspended}>
-                        <p class="alert alert-error" role="alert">
-                          {t("volume.peerSuspended")}
+                        {/* The peer's state, said here so this list stands on
+                            its own rather than needing a cross-reference. */}
+                        <Show when={origin.rateLimitedTotal > 0}>
+                          <p class="card-meta">
+                            {plural("volume.originLimited", origin.rateLimitedTotal)}
+                          </p>
+                        </Show>
+                        <Show when={origin.peerRateLimitedTotal > 0}>
+                          <p class="card-meta">
+                            {plural("federation.rateLimitedTotal", origin.peerRateLimitedTotal)}
+                          </p>
+                        </Show>
+                        {/* Throttle one organization without touching the
+                            peer's others — the reason the limit exists at two
+                            levels. An empty field restores the instance one. */}
+                        <p>
+                          <label>
+                            {t("volume.setOriginLimit")}{" "}
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder={String(origin.effectiveRateLimitPerMinute)}
+                              value={origin.rateLimitPerMinute ?? ""}
+                              onChange={(e) =>
+                                void act(() =>
+                                  api.federation.setOriginRateLimit({
+                                    peerId: origin.peerId,
+                                    organizationName: origin.organizationName,
+                                    rateLimitPerMinute:
+                                      e.currentTarget.value === ""
+                                        ? undefined
+                                        : Number(e.currentTarget.value),
+                                  }),
+                                )
+                              }
+                            />
+                          </label>
                         </p>
-                      </Show>
-                    </li>
-                  )}
-                </For>
-              </ul>
-            </Show>
-          )}
-        </Show>
-      </section>
+                        <Show when={origin.peerSuspended}>
+                          <p class="alert alert-error" role="alert">
+                            {t("volume.peerSuspended")}
+                          </p>
+                        </Show>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </Show>
+            )}
+          </Show>
+        </section>
+      </Show>
 
-      <section>
-        <h2>{t("federation.addPeer")}</h2>
-        <form onSubmit={addPeer}>
-          <Field
-            label={t("federation.addressLabel")}
-            hint={t("federation.addressHint")}
-            required
-            requiredText={t("common.required")}
-          >
-            {(control) => (
-              <input
-                {...control}
-                type="text"
-                value={address()}
-                onInput={(e) => setAddress(e.currentTarget.value)}
-              />
-            )}
-          </Field>
-          <Field label={t("federation.baseUrlLabel")} required requiredText={t("common.required")}>
-            {(control) => (
-              <input
-                {...control}
-                type="url"
-                value={baseUrl()}
-                onInput={(e) => setBaseUrl(e.currentTarget.value)}
-              />
-            )}
-          </Field>
-          <Field label={t("federation.noteLabel")} optionalText={t("common.optional")}>
-            {(control) => (
-              <input
-                {...control}
-                type="text"
-                value={note()}
-                onInput={(e) => setNote(e.currentTarget.value)}
-              />
-            )}
-          </Field>
-          <button type="submit" disabled={busy() || !address().includes("@") || !baseUrl()}>
-            {t("common.create")}
-          </button>
-        </form>
-      </section>
+      <Show when={!off()}>
+        <section>
+          <h2>{t("federation.addPeer")}</h2>
+          <form onSubmit={addPeer}>
+            <Field
+              label={t("federation.addressLabel")}
+              hint={t("federation.addressHint")}
+              required
+              requiredText={t("common.required")}
+            >
+              {(control) => (
+                <input
+                  {...control}
+                  type="text"
+                  value={address()}
+                  onInput={(e) => setAddress(e.currentTarget.value)}
+                />
+              )}
+            </Field>
+            <Field label={t("federation.baseUrlLabel")} required requiredText={t("common.required")}>
+              {(control) => (
+                <input
+                  {...control}
+                  type="url"
+                  value={baseUrl()}
+                  onInput={(e) => setBaseUrl(e.currentTarget.value)}
+                />
+              )}
+            </Field>
+            <Field label={t("federation.noteLabel")} optionalText={t("common.optional")}>
+              {(control) => (
+                <input
+                  {...control}
+                  type="text"
+                  value={note()}
+                  onInput={(e) => setNote(e.currentTarget.value)}
+                />
+              )}
+            </Field>
+            <button type="submit" disabled={busy() || !address().includes("@") || !baseUrl()}>
+              {t("common.create")}
+            </button>
+          </form>
+        </section>
+      </Show>
     </>
   );
 }

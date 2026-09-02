@@ -158,8 +158,8 @@ func SetSessionCookie(w http.ResponseWriter, cfg config.Config, token string, ex
 		Path:     "/",
 		Expires:  expires,
 		HttpOnly: true,
-		Secure:   cfg.SessionCookieSecure,
-		SameSite: http.SameSiteLaxMode,
+		Secure:   cfg.CookieSecure(),
+		SameSite: cfg.SameSite(),
 	})
 }
 
@@ -173,7 +173,7 @@ func ClearSessionCookie(w http.ResponseWriter, cfg config.Config) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   cfg.SessionCookieSecure,
-		SameSite: http.SameSiteLaxMode,
+		Secure:   cfg.CookieSecure(),
+		SameSite: cfg.SameSite(),
 	})
 }

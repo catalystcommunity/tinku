@@ -21,6 +21,7 @@ import (
 	"github.com/catalystcommunity/tinku/api/internal/store"
 	_ "github.com/catalystcommunity/tinku/api/internal/store/backends"
 	"github.com/catalystcommunity/tinku/api/internal/transport"
+	"github.com/catalystcommunity/tinku/api/internal/webhooks"
 	"github.com/catalystcommunity/tinku/coredb"
 )
 
@@ -44,6 +45,10 @@ type testEnv struct {
 	// services than the default set — EnableFederation does exactly that.
 	cfg  config.Config
 	sink csilservices.SessionSink
+
+	// Notify is the dispatcher the services under test write through, so a
+	// test can assert on what a change queued.
+	Notify *webhooks.Dispatcher
 
 	mu  sync.Mutex
 	now time.Time
@@ -110,15 +115,22 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 
 	sink := server.NewSessionSink()
+	// The dispatcher is real, so a test can read the delivery rows a change
+	// wrote. Nothing SENDS them here: webhooks.Sender is a separate loop
+	// that a test starts for itself when it wants one.
+	notify := &webhooks.Dispatcher{Store: st, OriginDomain: cfg.OriginDomain()}
+	env.Notify = notify
+
 	svcs := server.Services{
 		Auth:         &csilservices.AuthService{Store: st, Cfg: cfg, Sink: sink},
 		DevAuth:      &csilservices.DevAuthService{Store: st, Cfg: cfg, Sink: sink},
 		Greeting:     &csilservices.GreetingService{Store: st},
-		Organization: &csilservices.OrganizationService{Store: st, OriginDomain: cfg.OriginDomain()},
-		Gathering:    &csilservices.GatheringService{Store: st, OriginDomain: cfg.OriginDomain()},
-		Event:        &csilservices.EventService{Store: st, OriginDomain: cfg.OriginDomain(), Now: env.clock},
+		Organization: &csilservices.OrganizationService{Store: st, OriginDomain: cfg.OriginDomain(), Notify: notify},
+		Gathering:    &csilservices.GatheringService{Store: st, OriginDomain: cfg.OriginDomain(), Notify: notify},
+		Event:        &csilservices.EventService{Store: st, OriginDomain: cfg.OriginDomain(), Now: env.clock, Notify: notify},
 		Search:       &csilservices.SearchService{Store: st, OriginDomain: cfg.OriginDomain(), Now: env.clock},
 		Admin:        &csilservices.AdminService{Store: st},
+		Webhook:      &csilservices.WebhookService{Store: st, Cfg: cfg},
 	}
 
 	env.cfg = cfg
@@ -181,11 +193,12 @@ func (e *testEnv) EnableFederationFull(t *testing.T, signer federation.Signer, v
 		Auth:         &csilservices.AuthService{Store: e.Store, Cfg: e.cfg, Sink: e.sink},
 		DevAuth:      &csilservices.DevAuthService{Store: e.Store, Cfg: e.cfg, Sink: e.sink},
 		Greeting:     &csilservices.GreetingService{Store: e.Store},
-		Organization: &csilservices.OrganizationService{Store: e.Store, OriginDomain: e.cfg.OriginDomain()},
-		Gathering:    &csilservices.GatheringService{Store: e.Store, OriginDomain: e.cfg.OriginDomain()},
-		Event:        &csilservices.EventService{Store: e.Store, OriginDomain: e.cfg.OriginDomain(), Publisher: publisher, Now: e.clock},
+		Organization: &csilservices.OrganizationService{Store: e.Store, OriginDomain: e.cfg.OriginDomain(), Notify: e.Notify},
+		Gathering:    &csilservices.GatheringService{Store: e.Store, OriginDomain: e.cfg.OriginDomain(), Notify: e.Notify},
+		Event:        &csilservices.EventService{Store: e.Store, OriginDomain: e.cfg.OriginDomain(), Publisher: publisher, Now: e.clock, Notify: e.Notify},
 		Search:       &csilservices.SearchService{Store: e.Store, OriginDomain: e.cfg.OriginDomain(), Now: e.clock},
 		Admin:        &csilservices.AdminService{Store: e.Store},
+		Webhook:      &csilservices.WebhookService{Store: e.Store, Cfg: e.cfg},
 		Federation: &csilservices.FederationService{
 			Store: e.Store, OriginDomain: e.cfg.OriginDomain(),
 			Signer: signer, Verifier: verifier, PeeringVerifier: peeringVerifier, Now: e.clock,
@@ -214,10 +227,13 @@ func truncateAll(t *testing.T, dbURI string) {
 	}
 	defer db.Close() //nolint:errcheck // test cleanup
 
-	statement := `TRUNCATE users, organizations, gatherings, federation_peers RESTART IDENTITY CASCADE`
+	// webhooks is listed on its own: (owner_kind, owner_id) is a pair, not
+	// a foreign key, so nothing cascades into it and rows would survive
+	// into the next test on the shared Postgres run.
+	statement := `TRUNCATE users, organizations, gatherings, federation_peers, webhooks RESTART IDENTITY CASCADE`
 	if target.Dialect == coredb.DialectSQLite {
 		statement = `DELETE FROM users; DELETE FROM organizations; DELETE FROM gatherings;
-		             DELETE FROM federation_peers;`
+		             DELETE FROM federation_peers; DELETE FROM webhooks;`
 	}
 	if _, err := db.Exec(statement); err != nil {
 		t.Fatalf("emptying the test database: %v", err)
@@ -259,6 +275,22 @@ func (e *testEnv) login(t *testing.T, handle string) (*http.Client, csil.UserPro
 	profile, err := csil.DecodeUserProfile(resp.Payload)
 	if err != nil {
 		t.Fatalf("decoding UserProfile for %s: %v", handle, err)
+	}
+	return client, profile
+}
+
+// loginAt mints a session for handle at a domain the caller picks. Two
+// instances of tinku are two domains, so a test about who somebody is has
+// to be able to say which domain they are from.
+func (e *testEnv) loginAt(t *testing.T, handle, domain string) (*http.Client, csil.UserProfile) {
+	t.Helper()
+	client := e.newClient(t)
+	resp := e.call(t, client, "devauth", "dev-login",
+		csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: handle, Domain: domain}))
+	requireReply(t, resp, "UserProfile", "devauth/dev-login as "+handle+"@"+domain)
+	profile, err := csil.DecodeUserProfile(resp.Payload)
+	if err != nil {
+		t.Fatalf("decoding UserProfile for %s@%s: %v", handle, domain, err)
 	}
 	return client, profile
 }
@@ -1239,3 +1271,42 @@ func TestExpandingASeriesReturnsAllOfIt(t *testing.T) {
 
 func boolPtr(b bool) *bool       { return &b }
 func uint64Ptr(n uint64) *uint64 { return &n }
+
+// TestTheDevelopmentAdministratorArrivesAtAnyDomain covers the affordance a
+// person meets first: sign in as devadmin, at whatever domain, and hold the
+// role. Two instances of tinku are two domains, so pinning the role to one
+// domain would mean granting it by hand on the second — for an account that
+// already carries no identity assertion at all.
+//
+// Nobody else gets it. Only development sign-in reaches this path, and
+// `tinku serve` does not build the service outside a dev or nonprod
+// environment.
+func TestTheDevelopmentAdministratorArrivesAtAnyDomain(t *testing.T) {
+	env := newTestEnv(t)
+
+	for _, domain := range []string{"example.test", "somewhere.else.test"} {
+		_, profile := env.loginAt(t, "devadmin", domain)
+		if profile.LinkkeysDomain != domain {
+			t.Fatalf("domain = %q, want %q", profile.LinkkeysDomain, domain)
+		}
+		user, err := env.Store.UserByHandle(context.Background(), "devadmin", domain)
+		if err != nil {
+			t.Fatalf("devadmin@%s is missing: %v", domain, err)
+		}
+		if !user.IsAdmin {
+			t.Errorf("devadmin@%s does not hold the administrator role", domain)
+		}
+	}
+
+	_, ada := env.loginAt(t, "ada", "example.test")
+	other, err := env.Store.UserByHandle(context.Background(), "ada", "example.test")
+	if err != nil {
+		t.Fatalf("ada is missing: %v", err)
+	}
+	if other.IsAdmin {
+		t.Error("an ordinary development sign-in came back with the administrator role")
+	}
+	if ada.Handle != "ada" {
+		t.Errorf("handle = %q, want ada", ada.Handle)
+	}
+}

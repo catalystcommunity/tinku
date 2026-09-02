@@ -8,6 +8,9 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Before the bundle: it reads window.__TINKU__ as it starts. Not a
+         module, and not deferred, so it has run by then. -->
+    <script src="/config.js"></script>
     <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>

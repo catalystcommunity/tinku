@@ -6,6 +6,7 @@ import (
 
 	"github.com/catalystcommunity/tinku/api/internal/csil"
 	"github.com/catalystcommunity/tinku/api/internal/store"
+	"github.com/catalystcommunity/tinku/api/internal/webhooks"
 )
 
 // GatheringService implements csil.GatheringService: a gathering is what
@@ -18,6 +19,10 @@ import (
 type GatheringService struct {
 	Store        store.Store
 	OriginDomain string
+	// Notify queues webhook deliveries for what this service changes.
+	// Nil in a test that does not care, which is why every call goes
+	// through Dispatch rather than touching the field.
+	Notify *webhooks.Dispatcher
 }
 
 var _ csil.GatheringService = (*GatheringService)(nil)
@@ -124,6 +129,11 @@ func (s *GatheringService) CreateGathering(ctx context.Context, req csil.CreateG
 	if err != nil {
 		return csil.Gathering{}, err
 	}
+	organizations := []string{}
+	if owner.Kind == store.OwnerKindOrganization {
+		organizations = append(organizations, owner.ID)
+	}
+	s.notifyGathering(ctx, webhooks.ActionCreated, gathering, organizations)
 	return s.read(ctx, c, gathering.ID)
 }
 
@@ -226,6 +236,11 @@ func (s *GatheringService) UpdateGathering(ctx context.Context, req csil.UpdateG
 	}); err != nil {
 		return csil.Gathering{}, err
 	}
+	updated, err := s.Store.GatheringByID(ctx, gathering.ID)
+	if err != nil {
+		return csil.Gathering{}, err
+	}
+	s.notifyGathering(ctx, webhooks.ActionUpdated, updated, organizationsOwning(ctx, s.Store, gathering.ID))
 	return s.read(ctx, c, gathering.ID)
 }
 
@@ -254,16 +269,27 @@ func (s *GatheringService) DeleteGathering(ctx context.Context, req csil.DeleteG
 	if err != nil {
 		return csil.Empty{}, err
 	}
-	_, viewer, err := s.load(ctx, c, string(req.Id))
+	gathering, viewer, err := s.load(ctx, c, string(req.Id))
 	if err != nil {
 		return csil.Empty{}, err
 	}
 	if !viewer.CanDelete {
 		return csil.Empty{}, Forbidden("only an owner or an administrator can delete this gathering")
 	}
+	// The organizations are read BEFORE the delete: afterwards there is no
+	// gathering to read them from, and they are who has to be told.
+	organizations := organizationsOwning(ctx, s.Store, string(req.Id))
+	deleted := *gathering
 	if err := s.Store.DeleteGathering(ctx, string(req.Id)); err != nil {
 		return csil.Empty{}, err
 	}
+	// This gathering's own webhooks go with it — they belong to the thing
+	// that is gone — but the organizations above it are still listening,
+	// and a gathering disappearing is exactly what they want to hear.
+	if err := s.Store.DeleteWebhooksFor(ctx, store.WebhookOwnerGathering, string(req.Id)); err != nil {
+		return csil.Empty{}, err
+	}
+	s.notifyGathering(ctx, webhooks.ActionDeleted, &deleted, organizations)
 	return csil.Empty{}, nil
 }
 

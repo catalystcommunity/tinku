@@ -21,6 +21,7 @@ import (
 	"github.com/catalystcommunity/tinku/api/internal/metrics"
 	"github.com/catalystcommunity/tinku/api/internal/server"
 	"github.com/catalystcommunity/tinku/api/internal/store"
+	"github.com/catalystcommunity/tinku/api/internal/webhooks"
 	// Links both store implementations in, so a --db-uri of either scheme
 	// resolves to a backend.
 	_ "github.com/catalystcommunity/tinku/api/internal/store/backends"
@@ -105,18 +106,32 @@ func Serve(flags map[string]string) error {
 	// ---- 4. services, readiness, API listener ----
 	sink := server.NewSessionSink()
 	pki := buildPKIClient(cfg)
+	// One dispatcher, shared by every service that changes something. It
+	// only ever writes rows; the sender below is what opens a socket, so a
+	// request that changed something never waits on a receiver.
+	notify := &webhooks.Dispatcher{
+		Store:         st,
+		OriginDomain:  cfg.OriginDomain(),
+		PublicBaseURL: cfg.PublicBaseURL,
+	}
+
 	svcs := server.Services{
 		Auth:     &csilservices.AuthService{Store: st, Cfg: cfg, PKI: pki, Sink: sink},
 		Greeting: &csilservices.GreetingService{Store: st},
 		// OriginDomain is the domain half of every organization and gathering
 		// address this node mints, so the two services that mint one both
 		// carry it.
-		Organization: &csilservices.OrganizationService{Store: st, OriginDomain: cfg.OriginDomain()},
-		Gathering:    &csilservices.GatheringService{Store: st, OriginDomain: cfg.OriginDomain()},
-		Event:        &csilservices.EventService{Store: st, OriginDomain: cfg.OriginDomain()},
+		Organization: &csilservices.OrganizationService{Store: st, OriginDomain: cfg.OriginDomain(), Notify: notify},
+		Gathering:    &csilservices.GatheringService{Store: st, OriginDomain: cfg.OriginDomain(), Notify: notify},
+		Event:        &csilservices.EventService{Store: st, OriginDomain: cfg.OriginDomain(), Notify: notify},
 		Search:       &csilservices.SearchService{Store: st, OriginDomain: cfg.OriginDomain()},
 		Admin:        &csilservices.AdminService{Store: st},
+		Webhook:      &csilservices.WebhookService{Store: st, Cfg: cfg},
 	}
+
+	// The sender drains the delivery queue on its own clock. Every replica
+	// runs one: the claim is the row, not a lock held in a process.
+	go webhooks.NewSender(st, "tinku/"+cfg.OriginDomain()).Run(ctx)
 	// Federation is off unless it is switched on AND this instance has an
 	// account of its own to sign with. Both are required: an instance with
 	// no address cannot sign, so registering the service would only produce

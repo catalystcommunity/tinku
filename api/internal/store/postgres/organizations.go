@@ -116,7 +116,18 @@ func (s *Store) ListOrganizations(ctx context.Context, f store.OrganizationFilte
 	}
 
 	limit, offset := clamp(f.Page)
-	query := organizationColumnsSQL + clause + ` ORDER BY g.created_at DESC, g.id DESC LIMIT ` +
+	// A typeahead ranks a name match above a description match, because
+	// only the name is shown: an answer whose reason is invisible reads as
+	// a wrong answer. Within each band the newest is first, as an
+	// unfiltered list is.
+	order := ` ORDER BY g.created_at DESC, g.id DESC`
+	if f.Query != "" {
+		prefix := a.next(likePrefix(f.Query))
+		anywhere := a.next(likeFold(f.Query))
+		order = ` ORDER BY (lower(g.name) LIKE ` + prefix + `) DESC,` +
+			` (lower(g.name) LIKE ` + anywhere + `) DESC, g.created_at DESC, g.id DESC`
+	}
+	query := organizationColumnsSQL + clause + order + ` LIMIT ` +
 		a.next(limit) + ` OFFSET ` + a.next(offset)
 	rows, err := s.db.QueryContext(ctx, query, a.vals...)
 	if err != nil {

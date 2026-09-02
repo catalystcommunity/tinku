@@ -356,6 +356,16 @@ DeleteEventRequest = {
 ListEventsRequest = {
     ? gathering_id: GatheringID,
 
+    ;;; Only events under gatherings this organization owns.
+    ? owned_by_organization: OrganizationID,
+
+    ;;; Only events under gatherings the caller belongs to or owns. Requires
+    ;;; a session; an anonymous caller asking for `mine` gets an empty list.
+    ;;;
+    ;;; This is a WIDER question than `attending_only`: what is on for the
+    ;;; groups I am part of, rather than what I have said I am coming to.
+    ? mine: bool,
+
     ;;; Only events starting at or after this instant.
     ? starts_after: timestamp,
 

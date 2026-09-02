@@ -32,6 +32,7 @@ include "types/events.csil"
 include "types/search.csil"
 include "types/admin.csil"
 include "types/federation.csil"
+include "types/webhooks.csil"
 
 options {
     package: "tinku",
@@ -179,7 +180,29 @@ service GatheringService {
 
     ;;; Drop an owner. The last owner cannot be dropped.
     @wire-id(9)
-    remove-gathering-owner: RemoveGatheringOwnerRequest -> Gathering / ServiceError
+    remove-gathering-owner: RemoveGatheringOwnerRequest -> Gathering / ServiceError,
+
+    ;;; Offer this gathering to an organization. Gathering owners only.
+    @wire-id(10)
+    offer-gathering: OfferGatheringRequest -> GatheringOffer / ServiceError,
+
+    ;;; Offers the caller can see: made for a gathering they own, or made to
+    ;;; an organization they own.
+    @wire-id(11)
+    list-gathering-offers: ListGatheringOffersRequest -> GatheringOfferList / ServiceError,
+
+    ;;; Accept or decline an offer. An owner of the receiving organization
+    ;;; only.
+    @wire-id(12)
+    respond-to-gathering-offer: RespondToGatheringOfferRequest -> GatheringOffer / ServiceError,
+
+    ;;; Take back a pending offer. The offering side only.
+    @wire-id(13)
+    withdraw-gathering-offer: WithdrawGatheringOfferRequest -> Empty / ServiceError,
+
+    ;;; Put a loose gathering under an organization. Administrators only.
+    @wire-id(14)
+    adopt-gathering: AdoptGatheringRequest -> Gathering / ServiceError
 }
 
 ;;; Events and event series. An occurrence of a series is an ordinary event
@@ -375,4 +398,27 @@ service FederationService {
     ;;; allowance, or restore the instance-wide one. Admins only.
     @wire-id(11)
     set-origin-rate-limit: SetOriginRateLimitRequest -> OriginVolume / ServiceError
+}
+
+;;; Outbound notification. A webhook belongs to an organization or a
+;;; gathering, and reports what happens at that level and below it. Owners
+;;; of that level manage it; nobody else can read the list, because a URL
+;;; and a delivery history say where somebody's systems are.
+@wire-id(10)
+service WebhookService {
+    ;;; The webhooks on one organization or gathering, with the limit.
+    @wire-id(0)
+    list-webhooks: ListWebhooksRequest -> WebhookList / ServiceError,
+
+    ;;; Add one. Returns the signing secret, once and only here.
+    @wire-id(1)
+    create-webhook: CreateWebhookRequest -> WebhookWithSecret / ServiceError,
+
+    ;;; Change the URL, the scope, the note, or whether it is switched on.
+    @wire-id(2)
+    update-webhook: UpdateWebhookRequest -> Webhook / ServiceError,
+
+    ;;; Remove one.
+    @wire-id(3)
+    delete-webhook: DeleteWebhookRequest -> Empty / ServiceError
 }

@@ -1,0 +1,152 @@
+;; Webhooks: an owner's way to hear about what happens under their own
+;; organization or gathering, without polling.
+;;
+;; A webhook belongs to ONE level — an organization or a gathering — and it
+;; hears about that level and everything under it. An organization's
+;; webhook can be narrowed to the organization and its gatherings alone,
+;; because "every event under every gathering we own" is a firehose that a
+;; small integration usually does not want.
+;;
+;; A webhook is NOT federation. It points at a URL its own owner chose, it
+;; carries no signature from a peer, and it never brings anything in: it is
+;; outbound notification and nothing else. The two must not be confused,
+;; which is why they are separate services with separate tables.
+;;
+;; Does not include common.csil — see the note at the top of that file.
+
+;;; What a webhook hangs off. An event or a series never carries one of its
+;;; own: a webhook is set where a person holds ownership, and the things
+;;; underneath it are what it reports on.
+WebhookOwnerKind = "organization" / "gathering"
+
+;;; How much of what happens underneath is reported.
+;;;
+;;; `all` is everything under the level, events included. `structure_only`
+;;; is the organization and its gatherings, and no events at all — the
+;;; setting for an integration that tracks WHAT EXISTS rather than what is
+;;; scheduled. On a gathering, the two differ only in whether its events are
+;;; reported, since a gathering has no gatherings under it.
+WebhookScope = "all" / "structure_only"
+
+;;; What happened. A cancellation is not a deletion: a cancelled event still
+;;; exists and still shows, which a receiver has to be able to tell apart
+;;; from a record that went away.
+WebhookAction = "created" / "updated" / "cancelled" / "deleted"
+
+;;; What it happened to.
+WebhookSubject = "organization" / "gathering" / "event" / "series"
+
+;;; A webhook, as read. The secret is NOT here: it is returned once, by
+;;; create-webhook, and never again — a value a server can hand back on
+;;; demand is a value that leaks through any screen that shows it.
+Webhook = {
+    @receive-only
+    id: WebhookID,
+
+    @receive-only
+    owner_kind: WebhookOwnerKind,
+
+    @receive-only
+    owner_id: text,
+
+    ;;; Where deliveries are POSTed. HTTPS only, except in a dev
+    ;;; environment, where a local http:// endpoint is the only way to try
+    ;;; one at all.
+    url: text .size (1..2000),
+
+    scope: WebhookScope,
+
+    ;;; A webhook that fails repeatedly is switched off rather than retried
+    ;;; forever. An owner switches it back on after fixing the endpoint.
+    active: bool,
+
+    ;;; Send the record, not only a pointer to it.
+    ;;;
+    ;;; Off by default, and the default is the safe one: a delivery goes to
+    ;;; a URL over which this server has no say, and a gathering's
+    ;;; description or an address can be information its members did not
+    ;;; expect to travel. With this on, a delivery carries the fields a
+    ;;; reader of the record would see — description, times, location, link.
+    ;;;
+    ;;; It is the OWNER's information to send. They are the same people who
+    ;;; wrote it, and a directory that refused to tell them their own
+    ;;; description would be pretending to a control it does not have. The
+    ;;; client warns and asks them to accept it; the server records the
+    ;;; choice.
+    include_details: bool,
+
+    ;;; What this webhook is for, in the owner's own words. Shown in the
+    ;;; list, so five of them are tellable apart.
+    note: text .size (0..200),
+
+    ;;; What the last attempt did. Absent until one has been made.
+    @receive-only
+    ? last_status: uint,
+
+    @receive-only
+    ? last_attempt_at: timestamp,
+
+    ;;; Consecutive failures. Reset by a success, and by an owner switching
+    ;;; the webhook back on.
+    @receive-only
+    failure_count: uint,
+
+    @receive-only
+    created_at: timestamp,
+
+    @receive-only
+    updated_at: timestamp
+}
+
+;;; A webhook and the signing secret that was minted with it. This shape is
+;;; returned by create-webhook alone.
+WebhookWithSecret = {
+    webhook: Webhook,
+
+    ;;; The HMAC-SHA256 key that signs every delivery to this webhook, in
+    ;;; the `X-Tinku-Signature` header. Shown once. A receiver that does not
+    ;;; check it cannot tell a delivery from anybody else's POST.
+    secret: text
+}
+
+CreateWebhookRequest = {
+    owner_kind: WebhookOwnerKind,
+    owner_id: text,
+    url: text .size (1..2000),
+    scope: WebhookScope,
+    note: text .size (0..200),
+
+    ;;; See Webhook.include_details. A client sets this only after the
+    ;;; person has been shown what it means and has accepted it.
+    include_details: bool
+}
+
+UpdateWebhookRequest = {
+    id: WebhookID,
+    ? url: text .size (1..2000),
+    ? scope: WebhookScope,
+    ? note: text .size (0..200),
+
+    ;;; Switching a webhook back on also clears its failure count: an owner
+    ;;; who has fixed an endpoint is telling the server to start over.
+    ? active: bool,
+
+    ? include_details: bool
+}
+
+DeleteWebhookRequest = {
+    id: WebhookID
+}
+
+ListWebhooksRequest = {
+    owner_kind: WebhookOwnerKind,
+    owner_id: text
+}
+
+WebhookList = {
+    webhooks: [* Webhook],
+
+    ;;; How many this level may have. A client shows the count against the
+    ;;; limit rather than discovering it by being refused.
+    limit: uint
+}

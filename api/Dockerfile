@@ -25,10 +25,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /tinku .
 # CA bundle pgx TLS needs, and the /etc/passwd entry for the nonroot UID.
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=builder /tinku /tinku
-# 8080 is CSIL-RPC and the auth callback; 9090 is /metrics, /healthz and
+# 5080 is CSIL-RPC and the auth callback; 9090 is /metrics, /healthz and
 # /readyz. They are separate listeners so an ingress can expose one without
 # exposing the other.
-EXPOSE 8080 9090
+EXPOSE 5080 9090
 USER nonroot:nonroot
 ENTRYPOINT ["/tinku"]
 CMD ["serve"]

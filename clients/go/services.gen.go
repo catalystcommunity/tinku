@@ -77,6 +77,11 @@ type GatheringService interface {
 	LeaveGathering(ctx context.Context, req LeaveGatheringRequest) (Gathering, error)
 	AddGatheringOwner(ctx context.Context, req AddGatheringOwnerRequest) (Gathering, error)
 	RemoveGatheringOwner(ctx context.Context, req RemoveGatheringOwnerRequest) (Gathering, error)
+	OfferGathering(ctx context.Context, req OfferGatheringRequest) (GatheringOffer, error)
+	ListGatheringOffers(ctx context.Context, req ListGatheringOffersRequest) (GatheringOfferList, error)
+	RespondToGatheringOffer(ctx context.Context, req RespondToGatheringOfferRequest) (GatheringOffer, error)
+	WithdrawGatheringOffer(ctx context.Context, req WithdrawGatheringOfferRequest) (Empty, error)
+	AdoptGathering(ctx context.Context, req AdoptGatheringRequest) (Gathering, error)
 }
 
 // Wire-id ordinals for the GatheringService service (transport compact profiles).
@@ -91,6 +96,11 @@ const GatheringServiceOpJoinGatheringWireID uint64 = 6
 const GatheringServiceOpLeaveGatheringWireID uint64 = 7
 const GatheringServiceOpAddGatheringOwnerWireID uint64 = 8
 const GatheringServiceOpRemoveGatheringOwnerWireID uint64 = 9
+const GatheringServiceOpOfferGatheringWireID uint64 = 10
+const GatheringServiceOpListGatheringOffersWireID uint64 = 11
+const GatheringServiceOpRespondToGatheringOfferWireID uint64 = 12
+const GatheringServiceOpWithdrawGatheringOfferWireID uint64 = 13
+const GatheringServiceOpAdoptGatheringWireID uint64 = 14
 
 // EventService defines the service interface
 type EventService interface {
@@ -191,3 +201,18 @@ const FederationServiceOpListRemoteEventsWireID uint64 = 8
 const FederationServiceOpSetPeerRateLimitWireID uint64 = 9
 const FederationServiceOpListOriginVolumeWireID uint64 = 10
 const FederationServiceOpSetOriginRateLimitWireID uint64 = 11
+
+// WebhookService defines the service interface
+type WebhookService interface {
+	ListWebhooks(ctx context.Context, req ListWebhooksRequest) (WebhookList, error)
+	CreateWebhook(ctx context.Context, req CreateWebhookRequest) (WebhookWithSecret, error)
+	UpdateWebhook(ctx context.Context, req UpdateWebhookRequest) (Webhook, error)
+	DeleteWebhook(ctx context.Context, req DeleteWebhookRequest) (Empty, error)
+}
+
+// Wire-id ordinals for the WebhookService service (transport compact profiles).
+const WebhookServiceServiceWireID uint64 = 10
+const WebhookServiceOpListWebhooksWireID uint64 = 0
+const WebhookServiceOpCreateWebhookWireID uint64 = 1
+const WebhookServiceOpUpdateWebhookWireID uint64 = 2
+const WebhookServiceOpDeleteWebhookWireID uint64 = 3

@@ -66,6 +66,30 @@ func like(query string) string {
 	return "%" + escaped + "%"
 }
 
+// likePrefix and likeFold are like() for RANKING rather than filtering: both
+// fold case, because they are compared against lower(name), and likePrefix
+// anchors at the start — a name the query BEGINS is what a person typing
+// into a typeahead means before they mean anything else.
+func likePrefix(query string) string {
+	return likeFoldBody(query) + "%"
+}
+
+func likeFold(query string) string {
+	return "%" + likeFoldBody(query) + "%"
+}
+
+func likeFoldBody(query string) string {
+	return strings.NewReplacer(BS, BS+BS, "%", BS+"%", "_", BS+"_").Replace(strings.ToLower(query))
+}
+
+// BS is a single backslash, named so the replacer above reads without a
+// thicket of escapes.
+const BS = "\\"
+
+// likePrefix is like() anchored at the start: it matches a name the query
+// BEGINS, which is what a person typing into a typeahead means before they
+// mean anything else.
+
 // placePredicates appends the place half of a filter. The caller has
 // already lowercased the filter values, so these fold the stored column to
 // match.
