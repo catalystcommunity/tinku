@@ -213,3 +213,102 @@ RemoveGatheringOwnerRequest = {
     gathering_id: GatheringID,
     owner: OwnerRefInput
 }
+
+;;; Where an offer stands. An offer is a two-sided move: a gathering's owner
+;;; hands it to an organization, and an owner of that organization accepts.
+;;; Neither side can do it alone — an owner cannot push a gathering into
+;;; somebody else's organization, and an organization cannot take one.
+GatheringOfferStatus = "pending" / "accepted" / "declined" / "withdrawn"
+
+;;; One offer of one gathering to one organization.
+GatheringOffer = {
+    @receive-only
+    id: GatheringOfferID,
+
+    @receive-only
+    gathering_id: GatheringID,
+
+    @receive-only
+    gathering_name: text,
+
+    @receive-only
+    organization_id: OrganizationID,
+
+    @receive-only
+    organization_name: text,
+
+    ;;; Who offered it. The gathering's owner at the time of the offer.
+    @receive-only
+    offered_by: UserRef,
+
+    ;;; Why, in the offerer's words. An organization's owner is being asked
+    ;;; to take on somebody else's gathering and deserves a sentence about
+    ;;; it.
+    note: text .size (0..500),
+
+    @receive-only
+    status: GatheringOfferStatus,
+
+    @receive-only
+    created_at: timestamp,
+
+    ;;; When it stopped being pending. Absent while it still is.
+    @receive-only
+    ? resolved_at: timestamp,
+
+    @receive-only
+    viewer: ViewerContext
+}
+
+;;; Offer a gathering to an organization. The caller must own the
+;;; gathering. Offering the same gathering to the same organization twice
+;;; while an offer is pending returns the pending one rather than making a
+;;; second.
+OfferGatheringRequest = {
+    gathering_id: GatheringID,
+    organization_id: OrganizationID,
+    note: text .size (0..500)
+}
+
+;;; Offers to an organization the caller owns, or offers of a gathering the
+;;; caller owns. With neither field, every offer the caller can see.
+ListGatheringOffersRequest = {
+    ? organization_id: OrganizationID,
+    ? gathering_id: GatheringID,
+
+    ;;; Include offers that are no longer pending. Off by default.
+    ? include_resolved: bool
+}
+
+GatheringOfferList = {
+    offers: [* GatheringOffer],
+    total: uint
+}
+
+;;; Accept or decline. An owner of the organization only.
+;;;
+;;; Accepting makes the organization an owner of the gathering ALONGSIDE
+;;; whoever owned it before — an offer is not a surrender — and puts the
+;;; gathering's individual owners on the organization's roster, since they
+;;; now hold ownership through it. The gathering's members are not touched:
+;;; people join gatherings and attend events, and nobody is enrolled into an
+;;; organization by a decision two other people made.
+RespondToGatheringOfferRequest = {
+    offer_id: GatheringOfferID,
+    accept: bool
+}
+
+;;; Take back an offer that is still pending. The offering side only.
+WithdrawGatheringOfferRequest = {
+    offer_id: GatheringOfferID
+}
+
+;;; Put a gathering under an organization with no offer and no acceptance.
+;;; Administrators only: this is the tool for a gathering that was started
+;;; loose and belongs to an organization that already exists, and it is
+;;; deliberately not available to anybody who could otherwise be tempted to
+;;; take a gathering that is not theirs.
+AdoptGatheringRequest = {
+    gathering_id: GatheringID,
+    organization_id: OrganizationID
+}

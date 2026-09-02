@@ -112,13 +112,38 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 
 // corsMiddleware wraps handler with rs/cors. A single "*" entry — the
 // default — allows any origin, which suits a local run and nothing else.
+//
+// The wildcard is expressed as AllowOriginFunc rather than as
+// AllowedOrigins:["*"], and that is not a style choice. Every call here
+// carries the session cookie, and a browser REFUSES a credentialed response
+// whose Access-Control-Allow-Origin is the literal "*". rs/cors sends "*"
+// for AllowedOrigins:["*"] and echoes the request's origin for anything
+// else, so the wildcard has to be spelled the second way or the permissive
+// setting becomes the one that fails. See TestCredentialedCorsEchoesTheOrigin.
 func corsMiddleware(origins []string) func(http.Handler) http.Handler {
-	return cors.New(cors.Options{
-		AllowedOrigins:   origins,
+	options := cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodOptions},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
-	}).Handler
+	}
+	// A "*" ANYWHERE in the list is the wildcard, not only a list that is
+	// exactly ["*"]. `TINKU_CORS_ORIGINS=*,https://tinku.example` means the
+	// same thing as `*`, and reading it any other way would hand the
+	// wildcard to rs/cors as a literal origin and break credentials on the
+	// most permissive setting there is.
+	wildcard := false
+	for _, origin := range origins {
+		if origin == "*" {
+			wildcard = true
+			break
+		}
+	}
+	if wildcard {
+		options.AllowOriginFunc = func(string) bool { return true }
+	} else {
+		options.AllowedOrigins = origins
+	}
+	return cors.New(options).Handler
 }
 
 // statusRecorder captures the status a handler wrote, which

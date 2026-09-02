@@ -2,8 +2,8 @@
 // Source: <csil spec>
 // Target: typescript-client
 
-import type { AddGatheringOwnerRequest, AddPeerRequest, AdminList, AttendEventRequest, AttendeeList, BeginLoginRequest, BeginLoginResponse, CreateEventRequest, CreateEventSeriesRequest, CreateGatheringRequest, CreateGreetingRequest, CreateOrganizationRequest, DeleteEventRequest, DeleteEventSeriesRequest, DeleteGatheringRequest, DeleteOrganizationRequest, DeliveryReceipt, DevLoginRequest, Empty, Event, EventList, EventRoleList, EventSeries, EventSeriesList, ExpandEventSeriesRequest, FederationIdentity, FindUserRequest, Gathering, GatheringList, GatheringMemberList, GetEventRequest, GetEventSeriesRequest, GetGatheringRequest, GetGreetingRequest, GetOrganizationRequest, Greeting, GreetingList, InstanceSettings, JoinGatheringRequest, LeaveGatheringRequest, ListAttendeesRequest, ListEventRolesRequest, ListEventSeriesRequest, ListEventsRequest, ListGatheringMembersRequest, ListGatheringsRequest, ListOrganizationMembersRequest, ListOrganizationsRequest, ListOriginVolumeRequest, ListPeersRequest, ListRemoteEventsRequest, Organization, OrganizationList, OrganizationMemberList, OriginVolume, OriginVolumeList, Peer, PeerList, PeeringReceipt, RemoteEventList, RemoveEventRoleRequest, RemoveGatheringOwnerRequest, RemoveOrganizationMemberRequest, RemovePeerRequest, ResumePeerRequest, SearchRequest, SearchResults, SearchUsersRequest, SetAdminRequest, SetEventRoleRequest, SetOrganizationMemberRequest, SetOriginRateLimitRequest, SetPeerRateLimitRequest, SetPeerStatusRequest, SignedDelivery, SignedPeeringRequest, UnattendEventRequest, UpdateEventRequest, UpdateEventSeriesRequest, UpdateGatheringRequest, UpdateInstanceSettingsRequest, UpdateOrganizationRequest, UserProfile, UserRef, UserRefList } from "./types.gen.ts";
-import { fromAdminListCbor, fromAttendeeListCbor, fromBeginLoginResponseCbor, fromDeliveryReceiptCbor, fromEmptyCbor, fromEventCbor, fromEventListCbor, fromEventRoleListCbor, fromEventSeriesCbor, fromEventSeriesListCbor, fromFederationIdentityCbor, fromGatheringCbor, fromGatheringListCbor, fromGatheringMemberListCbor, fromGreetingCbor, fromGreetingListCbor, fromInstanceSettingsCbor, fromOrganizationCbor, fromOrganizationListCbor, fromOrganizationMemberListCbor, fromOriginVolumeCbor, fromOriginVolumeListCbor, fromPeerCbor, fromPeerListCbor, fromPeeringReceiptCbor, fromRemoteEventListCbor, fromSearchResultsCbor, fromUserProfileCbor, fromUserRefCbor, fromUserRefListCbor, toAddGatheringOwnerRequestCbor, toAddPeerRequestCbor, toAttendEventRequestCbor, toBeginLoginRequestCbor, toCreateEventRequestCbor, toCreateEventSeriesRequestCbor, toCreateGatheringRequestCbor, toCreateGreetingRequestCbor, toCreateOrganizationRequestCbor, toDeleteEventRequestCbor, toDeleteEventSeriesRequestCbor, toDeleteGatheringRequestCbor, toDeleteOrganizationRequestCbor, toDevLoginRequestCbor, toEmptyCbor, toExpandEventSeriesRequestCbor, toFindUserRequestCbor, toGetEventRequestCbor, toGetEventSeriesRequestCbor, toGetGatheringRequestCbor, toGetGreetingRequestCbor, toGetOrganizationRequestCbor, toJoinGatheringRequestCbor, toLeaveGatheringRequestCbor, toListAttendeesRequestCbor, toListEventRolesRequestCbor, toListEventSeriesRequestCbor, toListEventsRequestCbor, toListGatheringMembersRequestCbor, toListGatheringsRequestCbor, toListOrganizationMembersRequestCbor, toListOrganizationsRequestCbor, toListOriginVolumeRequestCbor, toListPeersRequestCbor, toListRemoteEventsRequestCbor, toRemoveEventRoleRequestCbor, toRemoveGatheringOwnerRequestCbor, toRemoveOrganizationMemberRequestCbor, toRemovePeerRequestCbor, toResumePeerRequestCbor, toSearchRequestCbor, toSearchUsersRequestCbor, toSetAdminRequestCbor, toSetEventRoleRequestCbor, toSetOrganizationMemberRequestCbor, toSetOriginRateLimitRequestCbor, toSetPeerRateLimitRequestCbor, toSetPeerStatusRequestCbor, toSignedDeliveryCbor, toSignedPeeringRequestCbor, toUnattendEventRequestCbor, toUpdateEventRequestCbor, toUpdateEventSeriesRequestCbor, toUpdateGatheringRequestCbor, toUpdateInstanceSettingsRequestCbor, toUpdateOrganizationRequestCbor } from "./codec.gen.ts";
+import type { AddGatheringOwnerRequest, AddPeerRequest, AdminList, AdoptGatheringRequest, AttendEventRequest, AttendeeList, BeginLoginRequest, BeginLoginResponse, CreateEventRequest, CreateEventSeriesRequest, CreateGatheringRequest, CreateGreetingRequest, CreateOrganizationRequest, CreateWebhookRequest, DeleteEventRequest, DeleteEventSeriesRequest, DeleteGatheringRequest, DeleteOrganizationRequest, DeleteWebhookRequest, DeliveryReceipt, DevLoginRequest, Empty, Event, EventList, EventRoleList, EventSeries, EventSeriesList, ExpandEventSeriesRequest, FederationIdentity, FindUserRequest, Gathering, GatheringList, GatheringMemberList, GatheringOffer, GatheringOfferList, GetEventRequest, GetEventSeriesRequest, GetGatheringRequest, GetGreetingRequest, GetOrganizationRequest, Greeting, GreetingList, InstanceSettings, JoinGatheringRequest, LeaveGatheringRequest, ListAttendeesRequest, ListEventRolesRequest, ListEventSeriesRequest, ListEventsRequest, ListGatheringMembersRequest, ListGatheringOffersRequest, ListGatheringsRequest, ListOrganizationMembersRequest, ListOrganizationsRequest, ListOriginVolumeRequest, ListPeersRequest, ListRemoteEventsRequest, ListWebhooksRequest, OfferGatheringRequest, Organization, OrganizationList, OrganizationMemberList, OriginVolume, OriginVolumeList, Peer, PeerList, PeeringReceipt, RemoteEventList, RemoveEventRoleRequest, RemoveGatheringOwnerRequest, RemoveOrganizationMemberRequest, RemovePeerRequest, RespondToGatheringOfferRequest, ResumePeerRequest, SearchRequest, SearchResults, SearchUsersRequest, SetAdminRequest, SetEventRoleRequest, SetOrganizationMemberRequest, SetOriginRateLimitRequest, SetPeerRateLimitRequest, SetPeerStatusRequest, SignedDelivery, SignedPeeringRequest, UnattendEventRequest, UpdateEventRequest, UpdateEventSeriesRequest, UpdateGatheringRequest, UpdateInstanceSettingsRequest, UpdateOrganizationRequest, UpdateWebhookRequest, UserProfile, UserRef, UserRefList, Webhook, WebhookList, WebhookWithSecret, WithdrawGatheringOfferRequest } from "./types.gen.ts";
+import { fromAdminListCbor, fromAttendeeListCbor, fromBeginLoginResponseCbor, fromDeliveryReceiptCbor, fromEmptyCbor, fromEventCbor, fromEventListCbor, fromEventRoleListCbor, fromEventSeriesCbor, fromEventSeriesListCbor, fromFederationIdentityCbor, fromGatheringCbor, fromGatheringListCbor, fromGatheringMemberListCbor, fromGatheringOfferCbor, fromGatheringOfferListCbor, fromGreetingCbor, fromGreetingListCbor, fromInstanceSettingsCbor, fromOrganizationCbor, fromOrganizationListCbor, fromOrganizationMemberListCbor, fromOriginVolumeCbor, fromOriginVolumeListCbor, fromPeerCbor, fromPeerListCbor, fromPeeringReceiptCbor, fromRemoteEventListCbor, fromSearchResultsCbor, fromUserProfileCbor, fromUserRefCbor, fromUserRefListCbor, fromWebhookCbor, fromWebhookListCbor, fromWebhookWithSecretCbor, toAddGatheringOwnerRequestCbor, toAddPeerRequestCbor, toAdoptGatheringRequestCbor, toAttendEventRequestCbor, toBeginLoginRequestCbor, toCreateEventRequestCbor, toCreateEventSeriesRequestCbor, toCreateGatheringRequestCbor, toCreateGreetingRequestCbor, toCreateOrganizationRequestCbor, toCreateWebhookRequestCbor, toDeleteEventRequestCbor, toDeleteEventSeriesRequestCbor, toDeleteGatheringRequestCbor, toDeleteOrganizationRequestCbor, toDeleteWebhookRequestCbor, toDevLoginRequestCbor, toEmptyCbor, toExpandEventSeriesRequestCbor, toFindUserRequestCbor, toGetEventRequestCbor, toGetEventSeriesRequestCbor, toGetGatheringRequestCbor, toGetGreetingRequestCbor, toGetOrganizationRequestCbor, toJoinGatheringRequestCbor, toLeaveGatheringRequestCbor, toListAttendeesRequestCbor, toListEventRolesRequestCbor, toListEventSeriesRequestCbor, toListEventsRequestCbor, toListGatheringMembersRequestCbor, toListGatheringOffersRequestCbor, toListGatheringsRequestCbor, toListOrganizationMembersRequestCbor, toListOrganizationsRequestCbor, toListOriginVolumeRequestCbor, toListPeersRequestCbor, toListRemoteEventsRequestCbor, toListWebhooksRequestCbor, toOfferGatheringRequestCbor, toRemoveEventRoleRequestCbor, toRemoveGatheringOwnerRequestCbor, toRemoveOrganizationMemberRequestCbor, toRemovePeerRequestCbor, toRespondToGatheringOfferRequestCbor, toResumePeerRequestCbor, toSearchRequestCbor, toSearchUsersRequestCbor, toSetAdminRequestCbor, toSetEventRoleRequestCbor, toSetOrganizationMemberRequestCbor, toSetOriginRateLimitRequestCbor, toSetPeerRateLimitRequestCbor, toSetPeerStatusRequestCbor, toSignedDeliveryCbor, toSignedPeeringRequestCbor, toUnattendEventRequestCbor, toUpdateEventRequestCbor, toUpdateEventSeriesRequestCbor, toUpdateGatheringRequestCbor, toUpdateInstanceSettingsRequestCbor, toUpdateOrganizationRequestCbor, toUpdateWebhookRequestCbor, toWithdrawGatheringOfferRequestCbor } from "./codec.gen.ts";
 
 export interface AsyncServiceTransport {
   call(service: string, op: string, req: Uint8Array): Promise<Uint8Array>;
@@ -543,6 +543,58 @@ export class GatheringAsyncClient {
     const csilResp = await this.t.call("GatheringService", "remove-gathering-owner", toRemoveGatheringOwnerRequestCbor(req));
     return fromGatheringCbor(csilResp);
   }
+
+  /**
+   * Offer this gathering to an organization. Gathering owners only.
+   * @throws {ServiceError} when the API returns an error response
+   * @throws transport errors (network, timeout) raised by the transport
+   */
+  async offerGathering(req: OfferGatheringRequest): Promise<GatheringOffer> {
+    const csilResp = await this.t.call("GatheringService", "offer-gathering", toOfferGatheringRequestCbor(req));
+    return fromGatheringOfferCbor(csilResp);
+  }
+
+  /**
+   * Offers the caller can see: made for a gathering they own, or made to
+   * an organization they own.
+   * @throws {ServiceError} when the API returns an error response
+   * @throws transport errors (network, timeout) raised by the transport
+   */
+  async listGatheringOffers(req: ListGatheringOffersRequest): Promise<GatheringOfferList> {
+    const csilResp = await this.t.call("GatheringService", "list-gathering-offers", toListGatheringOffersRequestCbor(req));
+    return fromGatheringOfferListCbor(csilResp);
+  }
+
+  /**
+   * Accept or decline an offer. An owner of the receiving organization
+   * only.
+   * @throws {ServiceError} when the API returns an error response
+   * @throws transport errors (network, timeout) raised by the transport
+   */
+  async respondToGatheringOffer(req: RespondToGatheringOfferRequest): Promise<GatheringOffer> {
+    const csilResp = await this.t.call("GatheringService", "respond-to-gathering-offer", toRespondToGatheringOfferRequestCbor(req));
+    return fromGatheringOfferCbor(csilResp);
+  }
+
+  /**
+   * Take back a pending offer. The offering side only.
+   * @throws {ServiceError} when the API returns an error response
+   * @throws transport errors (network, timeout) raised by the transport
+   */
+  async withdrawGatheringOffer(req: WithdrawGatheringOfferRequest): Promise<Empty> {
+    const csilResp = await this.t.call("GatheringService", "withdraw-gathering-offer", toWithdrawGatheringOfferRequestCbor(req));
+    return fromEmptyCbor(csilResp);
+  }
+
+  /**
+   * Put a loose gathering under an organization. Administrators only.
+   * @throws {ServiceError} when the API returns an error response
+   * @throws transport errors (network, timeout) raised by the transport
+   */
+  async adoptGathering(req: AdoptGatheringRequest): Promise<Gathering> {
+    const csilResp = await this.t.call("GatheringService", "adopt-gathering", toAdoptGatheringRequestCbor(req));
+    return fromGatheringCbor(csilResp);
+  }
 }
 
 export class GreetingAsyncClient {
@@ -678,6 +730,50 @@ export class SearchAsyncClient {
   }
 }
 
+export class WebhookAsyncClient {
+  constructor(private readonly t: AsyncServiceTransport) {}
+
+  /**
+   * The webhooks on one organization or gathering, with the limit.
+   * @throws {ServiceError} when the API returns an error response
+   * @throws transport errors (network, timeout) raised by the transport
+   */
+  async listWebhooks(req: ListWebhooksRequest): Promise<WebhookList> {
+    const csilResp = await this.t.call("WebhookService", "list-webhooks", toListWebhooksRequestCbor(req));
+    return fromWebhookListCbor(csilResp);
+  }
+
+  /**
+   * Add one. Returns the signing secret, once and only here.
+   * @throws {ServiceError} when the API returns an error response
+   * @throws transport errors (network, timeout) raised by the transport
+   */
+  async createWebhook(req: CreateWebhookRequest): Promise<WebhookWithSecret> {
+    const csilResp = await this.t.call("WebhookService", "create-webhook", toCreateWebhookRequestCbor(req));
+    return fromWebhookWithSecretCbor(csilResp);
+  }
+
+  /**
+   * Change the URL, the scope, the note, or whether it is switched on.
+   * @throws {ServiceError} when the API returns an error response
+   * @throws transport errors (network, timeout) raised by the transport
+   */
+  async updateWebhook(req: UpdateWebhookRequest): Promise<Webhook> {
+    const csilResp = await this.t.call("WebhookService", "update-webhook", toUpdateWebhookRequestCbor(req));
+    return fromWebhookCbor(csilResp);
+  }
+
+  /**
+   * Remove one.
+   * @throws {ServiceError} when the API returns an error response
+   * @throws transport errors (network, timeout) raised by the transport
+   */
+  async deleteWebhook(req: DeleteWebhookRequest): Promise<Empty> {
+    const csilResp = await this.t.call("WebhookService", "delete-webhook", toDeleteWebhookRequestCbor(req));
+    return fromEmptyCbor(csilResp);
+  }
+}
+
 export class AsyncApiClient {
   readonly admin: AdminAsyncClient;
   readonly auth: AuthAsyncClient;
@@ -688,6 +784,7 @@ export class AsyncApiClient {
   readonly greeting: GreetingAsyncClient;
   readonly organization: OrganizationAsyncClient;
   readonly search: SearchAsyncClient;
+  readonly webhook: WebhookAsyncClient;
   constructor(t: AsyncServiceTransport) {
     this.admin = new AdminAsyncClient(t);
     this.auth = new AuthAsyncClient(t);
@@ -698,5 +795,6 @@ export class AsyncApiClient {
     this.greeting = new GreetingAsyncClient(t);
     this.organization = new OrganizationAsyncClient(t);
     this.search = new SearchAsyncClient(t);
+    this.webhook = new WebhookAsyncClient(t);
   }
 }

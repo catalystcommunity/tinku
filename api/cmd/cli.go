@@ -21,6 +21,7 @@ Usage:
                   [--post-login-redirect-url=URL]
   tinku migrate [--db-uri=URI] [up|down|status]
   tinku admin   [--db-uri=URI] [list|grant <handle@domain>|revoke <handle@domain>]
+  tinku dev-seed [--db-uri=URI] [--domain=example.test] --env=dev
   tinku federation generate-keys [--count=3] [--address=handle@domain]
   tinku --help
   tinku --version
@@ -31,6 +32,10 @@ Commands:
   admin     Grant, revoke or list the global administrator role. This is how
             the FIRST administrator is made: granting the role over the API
             needs the role, and at first nobody has it.
+  dev-seed  Make the local development accounts: devadmin, which holds the
+            administrator role, and devuser, which holds nothing. Idempotent,
+            and refused unless --env is dev or nonprod. There is no password:
+            development sign-in carries no credential.
   federation generate-keys
             Generate a local Ed25519 federation signing keyring (3 keys by
             default) and print it as JSON on stdout, for
@@ -44,7 +49,7 @@ Options:
                            [default: the docker-compose Postgres]
                            [env: TINKU_DB_URI]
   --api-port=PORT          Port serving CSIL-RPC and the auth callback
-                           [default: 8080] [env: TINKU_API_PORT]
+                           [default: 5080] [env: TINKU_API_PORT]
   --ops-port=PORT          Port serving /metrics, /healthz and /readyz. A
                            separate listener from the API on purpose
                            [default: 9090] [env: TINKU_OPS_PORT]
@@ -139,6 +144,8 @@ func Run(args []string) error {
 		return Migrate(args, flags)
 	case "admin":
 		return Admin(args, flags)
+	case "dev-seed":
+		return DevSeed(args, flags)
 	case "federation":
 		return Federation(args, flags)
 	default:

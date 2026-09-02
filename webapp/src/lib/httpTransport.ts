@@ -2,24 +2,33 @@
 //
 // What this file knows about the wire (matching api/internal/server):
 //
-//   - The endpoint is same-origin `/csil/v1/rpc`. The path carries no
-//     routing meaning — (service, op) live inside the envelope.
+//   - The endpoint is `/csil/v1/rpc` on the api's origin, which is not
+//     always this page's — see lib/apiBase.ts. The path carries no routing
+//     meaning: (service, op) live inside the envelope.
 //   - `Content-Type: application/cbor`. The whole body is one request
 //     envelope; the whole response body is one response envelope.
 //   - A well-formed request always answers HTTP 200, even when it failed.
 //     HTTP status codes are reserved for failures the envelope cannot
 //     express: a wrong mount (404), an over-size body (413). So a non-200
 //     here means something below CSIL-RPC went wrong.
-//   - The session is an httpOnly cookie. `credentials: "same-origin"` is
-//     what carries it; there is no bearer token to attach.
+//   - The session is an httpOnly cookie. `credentials: "include"` is what
+//     carries it; there is no bearer token to attach. "include" rather than
+//     "same-origin" because the api is usually a DIFFERENT origin — a
+//     different port of the same host — and same-origin would silently drop
+//     the cookie there, which reads as "logged out" on every call.
 import type { AsyncServiceTransport } from "~/gen/client.async.gen";
 import { fromServiceErrorCbor } from "~/gen/codec.gen";
 import { Status, statusName } from "~/transport/csil/conventions";
 import { RpcRequest, RpcResponse } from "~/transport/csil/rpc";
+import { apiBaseUrl } from "./apiBase";
 import { TinkuServiceError, TinkuTransportError } from "./errors";
 import { methodToOp, serviceToWire } from "./opNaming";
 
-export const RPC_ENDPOINT = "/csil/v1/rpc";
+/** The path, which is fixed. The origin in front of it is not — see apiBaseUrl. */
+export const RPC_PATH = "/csil/v1/rpc";
+
+/** Kept as the resolved default so a caller can log or test what it will hit. */
+export const RPC_ENDPOINT = RPC_PATH;
 
 export interface HttpTransportOptions {
   endpoint?: string;
@@ -28,7 +37,10 @@ export interface HttpTransportOptions {
 }
 
 export function createHttpTransport(options: HttpTransportOptions = {}): AsyncServiceTransport {
-  const endpoint = options.endpoint ?? RPC_ENDPOINT;
+  // Resolved once per transport rather than per call: the answer cannot
+  // change while the page is open, and re-deriving it on every request
+  // would make the address depend on when it was asked.
+  const endpoint = options.endpoint ?? `${apiBaseUrl()}${RPC_PATH}`;
   const doFetch = options.fetchImpl ?? fetch;
 
   return {
@@ -39,7 +51,7 @@ export function createHttpTransport(options: HttpTransportOptions = {}): AsyncSe
       try {
         res = await doFetch(endpoint, {
           method: "POST",
-          credentials: "same-origin",
+          credentials: "include",
           headers: { "Content-Type": "application/cbor", Accept: "application/cbor" },
           // lib.dom's BodyInit wants Uint8Array<ArrayBuffer>; the codec
           // returns Uint8Array<ArrayBufferLike>. Same bytes on every

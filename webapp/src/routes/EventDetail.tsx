@@ -95,7 +95,7 @@ export default function EventDetail(): JSX.Element {
       {(e) => (
         <>
           <h1>{e().title}</h1>
-          <p class="card-when">
+          <p class="page-when">
             <time datetime={new Date(e().startsAt).toISOString()}>
               {dateTime(e().startsAt, e().timezone)}
             </time>
@@ -105,12 +105,6 @@ export default function EventDetail(): JSX.Element {
             </time>{" "}
             <span class="card-tz">({e().timezone})</span>
           </p>
-
-          <Show when={e().seriesId}>
-            <p class="card-meta">
-              <span class="badge">{t("event.partOfSeries")}</span>
-            </p>
-          </Show>
 
           {/* The lock is announced, not merely implied by what is missing. */}
           <Show when={e().locked}>
@@ -130,10 +124,16 @@ export default function EventDetail(): JSX.Element {
             {(description) => <p class="long-form">{description()}</p>}
           </Show>
 
-          <p class="card-meta">
-            <Show when={e().isOnline}>{t("event.online")}</Show>
-            <Show when={e().isOnline && e().isInPerson}> · </Show>
-            <Show when={e().isInPerson}>{t("event.inPerson")}</Show>
+          <p class="page-meta">
+            <Show when={e().isOnline}>
+              <span class="badge">{t("event.online")}</span>
+            </Show>
+            <Show when={e().isInPerson}>
+              <span class="badge">{t("event.inPerson")}</span>
+            </Show>
+            <Show when={e().seriesId}>
+              <span class="badge">{t("event.partOfSeries")}</span>
+            </Show>
           </p>
 
           {/* Whoever runs the gathering typed this URL. It is rendered as a
@@ -174,8 +174,8 @@ export default function EventDetail(): JSX.Element {
             )}
           </Show>
 
-          <p>
-            <A href={`/gatherings/${e().gatheringId}`}>{t("gathering.singular")}</A>
+          <p class="page-actions">
+            <A href={`/gatherings/${e().gatheringId}`}>{t("event.backToGathering")}</A>
           </p>
 
           <ErrorAlert error={error()} />
@@ -246,8 +246,8 @@ export default function EventDetail(): JSX.Element {
 
             <Show when={e().viewer.canManageMembers}>
               <form onSubmit={assignRole}>
-                <fieldset>
-                  <legend>{t("roles.assign")}</legend>
+                <h3>{t("roles.assign")}</h3>
+                <div class="field-row">
                   <Field
                     label={t("organization.addMemberAddress")}
                     hint={t("organization.addMemberAddressHint")}
@@ -277,16 +277,19 @@ export default function EventDetail(): JSX.Element {
                       </select>
                     )}
                   </Field>
+                </div>
+                <div class="form-actions">
                   <button type="submit" disabled={busy() || !address().includes("@")}>
                     {t("organization.addMemberAction")}
                   </button>
-                </fieldset>
+                </div>
               </form>
             </Show>
           </section>
 
           <Show when={e().viewer.canDelete}>
-            <section>
+            <section class="danger-zone">
+              <p>{t("event.dangerNote")}</p>
               <button type="button" class="danger" onClick={remove}>
                 {t("common.delete")}
               </button>

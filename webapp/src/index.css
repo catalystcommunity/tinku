@@ -1,6 +1,12 @@
 /*
- * One stylesheet. It is small on purpose: the markup is semantic HTML, so
- * most elements need no class at all.
+ * One stylesheet. The markup is semantic HTML, so most elements need no
+ * class at all; the classes that exist name a layout or a role, never a
+ * colour or a size.
+ *
+ * The palette is the one the marketing site uses (website/site-src), so an
+ * arrival from tinku's own page does not land somewhere that looks like a
+ * different product. Every colour is a custom property defined on bare
+ * `:root`; the dark theme redefines the properties and nothing else.
  *
  * The accessibility rules here are not decoration:
  *
@@ -14,38 +20,82 @@
  *     them.
  *   * Colour is never the only carrier of meaning: a badge has text, an
  *     error has a role, the current nav link has aria-current.
+ *   * Every grid here collapses to one column below 40rem. A two-column
+ *     form on a phone is worse than a long one.
  */
 
 :root {
   color-scheme: light dark;
-  --bg: #fbfaf8;
-  --bg-raised: #ffffff;
-  --fg: #1c1a17;
-  --muted: #5d584f;
-  --line: #ddd8cf;
-  --accent: #7a4b2a;
-  --accent-fg: #ffffff;
-  --error: #8f2820;
-  --error-bg: #fbeeec;
-  --status-bg: #f1f0ea;
-  --focus: #2b6cb0;
+
+  /* Surfaces, from the page up: the page ground, a raised panel, and a
+     recessed well for a group inside a panel. */
+  --bg: #fbf8f9;
+  --bg-sunken: #f3ebee;
+  --surface: #ffffff;
+  --surface-2: #faf6f7;
+
+  --ink: #1b1418;
+  --muted: #6b5b61;
+  --line: rgba(27, 20, 24, 0.14);
+  --line-strong: rgba(27, 20, 24, 0.26);
+
+  --accent: #c04058;
+  --accent-hover: #a63449;
+  --accent-soft: rgba(192, 64, 88, 0.1);
+  /* What text sits on top of --accent. */
+  --accent-ink: #ffffff;
+  /*
+   * The accent AS TEXT, which is a different question from the accent as a
+   * fill. Body-size text needs 4.5:1 and a large fill needs 3:1, so the two
+   * cannot always be the same colour — in the dark theme they are not.
+   */
+  --accent-text: #c04058;
+
+  --danger: #a32a1f;
+  --danger-soft: rgba(163, 42, 31, 0.08);
+  --ok: #1c6b4b;
+  --ok-soft: rgba(28, 107, 75, 0.1);
+
+  --focus: #1f5fbf;
+  --shadow: 0 1px 2px rgba(27, 20, 24, 0.06), 0 8px 24px -12px rgba(27, 20, 24, 0.18);
+
+  --radius: 0.625rem;
+  --radius-sm: 0.375rem;
+  --measure: 62rem;
+
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-synthesis: none;
   line-height: 1.5;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #17161a;
-    --bg-raised: #201e24;
-    --fg: #ece8e1;
-    --muted: #aaa39a;
-    --line: #3a3742;
-    --accent: #d9a273;
-    --accent-fg: #17161a;
-    --error: #f0938a;
-    --error-bg: #35211f;
-    --status-bg: #25232b;
+    --bg: #171013;
+    --bg-sunken: #120c0f;
+    --surface: #211a1d;
+    --surface-2: #191317;
+
+    --ink: #f4ebee;
+    --muted: #ab99a0;
+    --line: rgba(244, 235, 238, 0.16);
+    --line-strong: rgba(244, 235, 238, 0.32);
+
+    --accent: #e0445f;
+    --accent-hover: #ec6178;
+    --accent-soft: rgba(224, 68, 95, 0.16);
+    /* Near-black rather than white: white on #E0445F is under 4.5:1. */
+    --accent-ink: #130a0d;
+    /* #e0445f reads at 4.2:1 on a panel, which is under the floor for text.
+       This lighter tint is 5.3:1 and is used for links and headings. */
+    --accent-text: #ec6178;
+
+    --danger: #f2938a;
+    --danger-soft: rgba(242, 147, 138, 0.12);
+    --ok: #6cc39b;
+    --ok-soft: rgba(108, 195, 155, 0.12);
+
     --focus: #8ab4f8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.7);
   }
 }
 
@@ -53,10 +103,26 @@
   box-sizing: border-box;
 }
 
+/*
+ * The header is sticky, so anything scrolled to by an anchor or by the
+ * focus move on a route change lands UNDER it without this. The heading of
+ * the page you just opened is the last thing that should be hidden.
+ */
+html {
+  scroll-padding-top: 1rem;
+}
+
+@media (min-width: 48rem) {
+  html {
+    scroll-padding-top: 5rem;
+  }
+}
+
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--fg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
 }
 
 /* One ring, everywhere, always visible against both themes. */
@@ -79,10 +145,10 @@ body {
   position: absolute;
   left: -9999px;
   top: 0;
-  z-index: 10;
+  z-index: 20;
   padding: 0.75rem 1rem;
   background: var(--accent);
-  color: var(--accent-fg);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 
@@ -107,30 +173,49 @@ body {
   border: 0;
 }
 
+/* ---- Header ---- */
+
+/*
+ * Sticky only where there is room for it. On a phone the header wraps to
+ * three rows, and a sticky one then eats a third of the screen for the
+ * whole session. It also has to be nearly opaque: at 88% the page scrolled
+ * visibly THROUGH the nav, which reads as a rendering fault.
+ */
 .app-header {
   border-bottom: 1px solid var(--line);
-  background: var(--bg-raised);
+  background: var(--surface);
+}
+
+@media (min-width: 48rem) {
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    backdrop-filter: blur(8px);
+  }
 }
 
 .app-header-inner {
-  max-width: 52rem;
+  max-width: var(--measure);
   margin: 0 auto;
-  padding: 0.75rem 1.25rem;
+  padding: 0.6rem 1.25rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem 1.5rem;
 }
 
 .brand {
   margin: 0;
-  font-weight: 700;
-  font-size: 1.1rem;
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
 }
 
 .brand a {
   display: inline-flex;
-  gap: 0.45rem;
+  gap: 0.5rem;
   align-items: center;
   color: inherit;
   text-decoration: none;
@@ -139,55 +224,86 @@ body {
 .brand__mark {
   display: block;
   flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
 }
 
 .app-header nav ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.25rem;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .app-header nav a {
-  color: var(--fg);
+  display: block;
+  color: var(--muted);
   text-decoration: none;
-  padding: 0.25rem 0;
-  border-bottom: 2px solid transparent;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .app-header nav a:hover {
-  border-bottom-color: var(--line);
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
 /* The current page is marked by aria-current; this only draws it. */
 .app-header nav a[aria-current="page"] {
-  border-bottom-color: var(--accent);
-  font-weight: 600;
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 .session {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
 .session-who {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
 }
 
+/*
+ * The sign-in panel drops under the header rather than pushing the page
+ * down: it is a detour, not a section of the document. It stays a plain
+ * block in the flow on a narrow screen, where there is no room beside
+ * anything.
+ */
 .session-form {
   flex-basis: 100%;
 }
 
+@media (min-width: 48rem) {
+  .app-header-inner {
+    position: relative;
+  }
+
+  .session-form {
+    position: absolute;
+    right: 1.25rem;
+    top: calc(100% + 0.5rem);
+    width: min(24rem, calc(100vw - 2.5rem));
+    flex-basis: auto;
+    box-shadow: var(--shadow);
+    z-index: 15;
+  }
+}
+
+/* ---- Page ---- */
+
 .app {
-  max-width: 52rem;
+  max-width: var(--measure);
   margin: 0 auto;
-  padding: 2rem 1.25rem 4rem;
+  padding: 2rem 1.25rem 5rem;
 }
 
 /* The route-change focus target must not draw a ring of its own — the
@@ -196,32 +312,59 @@ body {
   outline: none;
 }
 
+@media (min-width: 48rem) {
+  .app,
+  h1,
+  h2,
+  h3 {
+    scroll-margin-top: 5rem;
+  }
+}
+
 h1 {
-  margin: 0 0 1rem;
-  font-size: 1.75rem;
-  letter-spacing: -0.01em;
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.75rem, 1.2rem + 1.6vw, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 h2 {
-  font-size: 1.2rem;
-  margin: 2rem 0 0.75rem;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.75rem;
 }
 
 h3 {
   font-size: 1.05rem;
   margin: 0 0 0.25rem;
+  letter-spacing: -0.01em;
 }
 
-section + section {
-  margin-top: 2rem;
+p {
+  margin: 0 0 0.75rem;
+}
+
+section {
+  margin: 0 0 2rem;
+}
+
+section > h2 {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
 }
 
 a {
-  color: var(--accent);
+  color: var(--accent-text);
+  text-underline-offset: 0.15em;
+}
+
+a:hover {
+  color: var(--accent-hover);
 }
 
 .long-form {
   white-space: pre-wrap;
+  max-width: 42rem;
 }
 
 address {
@@ -229,37 +372,88 @@ address {
   color: var(--muted);
 }
 
-/* ---- Forms ---- */
+/* The identity line under a title: an address, and the domain it is from. */
+.page-address {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+/* When the thing on screen happens. The largest fact on an event's page. */
+.page-when {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* A row of facts about the thing on screen: counts, when, where. */
+.page-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.9rem;
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+  font-size: 0.925rem;
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 1.5rem;
+}
+
+/* ---- Panels ---- */
+
+.panel,
+form {
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
 
 form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  background: var(--bg-raised);
+  gap: 1rem;
+  margin: 0;
 }
 
+/*
+ * A group inside a panel: recessed rather than raised, so it reads as part
+ * of the form it sits in. A bordered box inside a bordered box otherwise
+ * looks like two forms.
+ */
 fieldset {
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
   padding: 0.75rem 1rem 1rem;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
+  min-width: 0;
 }
 
 legend {
-  font-weight: 600;
-  padding: 0 0.25rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 0.35rem;
 }
+
+/* ---- Forms ---- */
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
+  min-width: 0;
 }
 
 .field label {
@@ -281,18 +475,24 @@ legend {
 .field-error {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--error);
+  color: var(--danger);
   font-weight: 600;
 }
 
-.check-field {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+/*
+ * Fields that belong together, side by side: a start and an end, a city and
+ * a region, the parts of one recurrence rule. `auto-fit` with a floor means
+ * one column on a phone and no media query to keep in step.
+ */
+.field-row {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+  align-items: start;
 }
 
-.check-field label {
-  font-size: 0.95rem;
+.field-row--wide {
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
 }
 
 input,
@@ -301,64 +501,249 @@ select {
   font: inherit;
   color: inherit;
   background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 0.375rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
   padding: 0.5rem 0.625rem;
   width: 100%;
+  min-width: 0;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+input:hover,
+textarea:hover,
+select:hover {
+  border-color: var(--accent);
+}
+
+textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/*
+ * A checkbox is not a text field and must not inherit `width: 100%`, which
+ * stretched it across the form and pushed its label to the far edge.
+ */
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  min-width: 0;
+  flex: none;
+  accent-color: var(--accent);
+  block-size: 1.05rem;
+  inline-size: 1.05rem;
+  margin: 0;
 }
 
 /* An invalid field is marked by a border AND by the error text below it,
    never by colour alone. */
 input[aria-invalid="true"],
-textarea[aria-invalid="true"] {
-  border-color: var(--error);
+textarea[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: var(--danger);
 }
+
+/*
+ * The whole row is the target, label included, so a checkbox is not a
+ * 17-pixel square to hit.
+ */
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.check-field:hover {
+  border-color: var(--accent);
+}
+
+.check-field label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  flex: 1;
+}
+
+/* Several checkboxes in a line, wrapping as they run out of room. */
+.check-row {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(13rem, 100%), 1fr));
+}
+
+/* The buttons that end a form. */
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+}
+
+/* ---- Buttons ---- */
 
 button {
   font: inherit;
   font-weight: 600;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 1.1rem;
   border: 1px solid var(--accent);
-  border-radius: 0.375rem;
+  border-radius: var(--radius-sm);
   background: var(--accent);
-  color: var(--accent-fg);
+  color: var(--accent-ink);
   cursor: pointer;
   align-self: flex-start;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/*
+ * A disabled button reads as inert rather than as a faded accent: a washed
+ * out brand colour looks like a rendering fault, and it also drops the text
+ * contrast below the floor.
+ */
 button:disabled {
-  opacity: 0.55;
+  background: var(--bg-sunken);
+  border-color: var(--line);
+  color: var(--muted);
   cursor: not-allowed;
+}
+
+/* The quieter of two buttons in the same place. */
+button.secondary {
+  background: transparent;
+  color: var(--accent-text);
+  border-color: var(--line-strong);
+}
+
+button.secondary:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
 }
 
 button.danger {
   background: transparent;
-  color: var(--error);
-  border-color: var(--error);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 button.link-button {
   background: none;
   border: none;
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: underline;
   padding: 0 0.25rem;
   font-weight: 400;
 }
 
+button.link-button:hover:not(:disabled) {
+  background: none;
+  color: var(--accent-hover);
+}
+
+/* A small button for a row in a list. */
+button.compact {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+/*
+ * Deleting is separated from the rest of the page rather than sitting at
+ * the end of it, so that "the last button on the screen" is never the
+ * irreversible one by accident.
+ */
+.danger-zone {
+  margin-top: 3rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.danger-zone p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ---- Tabs ---- */
+
+/*
+ * Two forms that do the same job in two ways are one form with a switch.
+ * Both used to be on screen at once, which made the page twice as long as
+ * the task and asked the reader to work out which half applied.
+ */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  margin: 0 0 1rem;
+  background: var(--bg-sunken);
+  border-radius: 999px;
+  width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.tabs button {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+}
+
+.tabs button:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink);
+}
+
+.tabs button[aria-selected="true"] {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
 /* ---- Messages ---- */
 
 .alert {
-  margin: 0.75rem 0;
-  padding: 0.625rem 0.875rem;
-  border-radius: 0.375rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line);
+  border-left-width: 4px;
 }
 
 .alert-error {
-  background: var(--error-bg);
-  border-color: var(--error);
-  color: var(--error);
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
   font-weight: 600;
 }
 
@@ -367,7 +752,19 @@ button.link-button {
 }
 
 .alert-status {
-  background: var(--status-bg);
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--ink);
+}
+
+/* Nothing here yet, and why. */
+.empty {
+  margin: 0;
+  padding: 1.5rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-align: center;
 }
 
 /* ---- Lists ---- */
@@ -382,13 +779,28 @@ button.link-button {
 .cards {
   display: grid;
   gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
 }
 
 .card {
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.875rem 1rem;
-  background: var(--bg-raised);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  background: var(--surface);
+  transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.card h3 a {
+  text-decoration: none;
+}
+
+.card h3 a:hover {
+  text-decoration: underline;
 }
 
 /* A started event is dimmed, and also says so in words — the dimming is a
@@ -412,51 +824,65 @@ button.link-button {
 }
 
 .card-when {
-  color: var(--fg);
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .card-tz {
   color: var(--muted);
+  font-weight: 400;
 }
 
 .card-blurb {
-  margin: 0.5rem 0;
+  margin: 0.6rem 0 0;
 }
 
 .badge {
   display: inline-block;
-  padding: 0.05rem 0.45rem;
-  border: 1px solid var(--line);
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
-  font-size: 0.78rem;
-  color: var(--fg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 /* External records are marked by shape and by text, never by colour alone
    — the badge carries the words "Another domain". */
-.badge-external {
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 600;
-}
-
+.badge-external,
 .badge-strong {
   border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.roster {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
 }
 
 .roster li {
-  padding: 0.4rem 0;
+  padding: 0.6rem 1rem;
   border-bottom: 1px solid var(--line);
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .roster li:last-child {
   border-bottom: none;
+}
+
+.roster li > button {
+  margin-left: auto;
+}
+
+.roster-name {
+  font-weight: 600;
 }
 
 .crash-detail {
@@ -466,6 +892,247 @@ button.link-button {
   color: var(--muted);
 }
 
-.roster-name {
+/* ---- Calendar ---- */
+
+/*
+ * A month is a grid of seven columns, and it stays seven columns: a
+ * calendar that reflows to one column on a phone is a list with extra
+ * steps. It scrolls sideways instead, inside its own container, so the page
+ * body never does.
+ */
+.calendar {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.calendar__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.calendar__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+}
+
+.calendar__title h2 {
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+.calendar__nav {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.calendar__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  min-width: min(22rem, 100%);
+}
+
+.calendar__weekdays,
+.calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(6.5rem, 1fr));
+  min-width: 46rem;
+}
+
+.calendar__weekdays {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.calendar__weekdays > div {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The scroll container is the wrapper, so the grid keeps its columns. */
+.calendar:has(.calendar__grid) {
+  overflow-x: auto;
+}
+
+.calendar__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 1px;
+  background: var(--line);
+}
+
+.calendar__cell {
+  background: var(--surface);
+  min-height: 7rem;
+  padding: 0.4rem 0.5rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+/* The days either side of the month are dimmed and still readable: they are
+   context, not decoration, and somebody schedules on the 1st from the 31st. */
+.calendar__cell--outside {
+  background: var(--surface-2);
+}
+
+.calendar__cell--outside .calendar__day {
+  color: var(--muted);
+}
+
+.calendar__cell--weekend {
+  background: color-mix(in srgb, var(--surface-2) 60%, var(--surface));
+}
+
+/* Today is marked by a ring and by a bold number, never by colour alone. */
+.calendar__cell--today {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.calendar__cell--today .calendar__day {
+  font-weight: 800;
+  color: var(--accent-text);
+}
+
+.calendar__day {
+  margin: 0;
+  font-size: 0.8rem;
   font-weight: 600;
+  color: var(--muted);
+}
+
+.calendar__events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.calendar__event {
+  display: block;
+  padding: 0.2rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.calendar__event:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--ink);
+}
+
+.calendar__time {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--accent-text);
+}
+
+.calendar__event-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Typeahead ---- */
+
+.picker {
+  position: relative;
+}
+
+.picker__row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.picker__list {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem;
+  list-style: none;
+  max-height: 16rem;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.picker__option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.picker__option:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.picker__name {
+  font-weight: 600;
+}
+
+/* The domain is always shown beside a name: two instances can hold the same
+   name, and a directory shows both at once. */
+.picker__domain {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.picker__empty {
+  padding: 0.5rem 0.6rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* A secret shown once. Monospace and breakable, because it is copied by
+   hand and it must not be truncated out of sight. */
+.secret {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  word-break: break-all;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
 }

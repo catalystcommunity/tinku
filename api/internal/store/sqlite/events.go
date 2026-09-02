@@ -122,6 +122,25 @@ func (s *Store) ListEvents(ctx context.Context, f store.EventFilter) ([]store.Ev
 			"EXISTS (SELECT 1 FROM event_attendance att WHERE att.event_id = e.id AND att.user_id = "+
 				a.next(f.AttendeeID)+")")
 	}
+	if f.OwnedByOrganization != "" {
+		where = append(where,
+			"EXISTS (SELECT 1 FROM gathering_owners go2 WHERE go2.gathering_id = e.gathering_id"+
+				" AND go2.organization_id = "+a.next(f.OwnedByOrganization)+")")
+	}
+	if f.MemberID != "" {
+		// Membership OR ownership, and ownership reaches through an
+		// organization the caller owns — the same three ways
+		// GatheringAccessFor resolves it, asked here of the event's
+		// gathering. A `?` carries no position in SQLite, so the value is
+		// bound once for each use rather than named three times.
+		where = append(where, `(
+  EXISTS (SELECT 1 FROM gathering_members gm WHERE gm.gathering_id = e.gathering_id AND gm.user_id = `+a.next(f.MemberID)+`)
+  OR EXISTS (SELECT 1 FROM gathering_owners go3 WHERE go3.gathering_id = e.gathering_id
+              AND (go3.user_id = `+a.next(f.MemberID)+`
+                   OR go3.organization_id IN (SELECT om.organization_id FROM organization_members om
+                                               WHERE om.user_id = `+a.next(f.MemberID)+` AND om.role = 'owner')))
+)`)
+	}
 	if !f.StartsAfter.IsZero() {
 		where = append(where, "e.starts_at >= "+a.nextTime(f.StartsAfter))
 	}

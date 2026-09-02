@@ -1,10 +1,12 @@
 import { For, Show, createResource, createSignal, type JSX } from "solid-js";
+import type { Organization } from "~/gen/types.gen";
 import { useI18n } from "~/i18n";
 import { api } from "~/lib/api";
 import { useSession } from "~/lib/session";
 import { ErrorAlert } from "~/components/Alert";
 import { Field } from "~/components/Field";
 import { GatheringCard } from "~/components/Cards";
+import { OrganizationPicker } from "~/components/OrganizationPicker";
 import { errorField } from "~/lib/messages";
 
 /** Every gathering, plus the form to start one. */
@@ -16,6 +18,9 @@ export default function Gatherings(): JSX.Element {
   const [name, setName] = createSignal("");
   const [blurb, setBlurb] = createSignal("");
   const [description, setDescription] = createSignal("");
+  // Optional, and offered only to somebody who belongs to an organization:
+  // a picker that is always empty is a question with no answers.
+  const [owner, setOwner] = createSignal<Organization>();
   const [error, setError] = createSignal<unknown>();
   const [busy, setBusy] = createSignal(false);
 
@@ -24,14 +29,20 @@ export default function Gatherings(): JSX.Element {
     setBusy(true);
     setError(undefined);
     try {
+      const organization = owner();
       await api.gathering.createGathering({
         name: name(),
         blurb: blurb(),
         description: description(),
+        // Absent means the caller owns it themselves. Naming an
+        // organization they do not own is refused by the server, which is
+        // the only place that decision belongs.
+        owner: organization ? { kind: "organization", id: organization.id } : undefined,
       });
       setName("");
       setBlurb("");
       setDescription("");
+      setOwner(undefined);
       await refetch();
     } catch (err) {
       setError(err);
@@ -84,9 +95,22 @@ export default function Gatherings(): JSX.Element {
                 />
               )}
             </Field>
-            <button type="submit" disabled={busy() || !name().trim()}>
-              {busy() ? t("common.creating") : t("common.create")}
-            </button>
+            {/* `mine` keeps this to organizations the caller belongs to.
+                Anybody can be shown every organization on the instance; only
+                an owner of one can put a gathering under it, so offering the
+                rest would be offering a refusal. */}
+            <OrganizationPicker
+              label={t("gathering.ownerLabel")}
+              hint={t("gathering.ownerHint")}
+              mine
+              value={owner()}
+              onChange={setOwner}
+            />
+            <div class="form-actions">
+              <button type="submit" disabled={busy() || !name().trim()}>
+                {busy() ? t("common.creating") : t("common.create")}
+              </button>
+            </div>
             <ErrorAlert error={error()} />
           </form>
         </section>

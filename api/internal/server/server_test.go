@@ -5,7 +5,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,6 +191,7 @@ func TestDevAuthAbsentInProd(t *testing.T) {
 		Event:        &csilservices.EventService{Store: st},
 		Search:       &csilservices.SearchService{Store: st},
 		Admin:        &csilservices.AdminService{Store: st},
+		Webhook:      &csilservices.WebhookService{Store: st, Cfg: cfg},
 	}
 	ts := httptest.NewServer(server.New(cfg, st, nil, svcs).Handler())
 	t.Cleanup(ts.Close)
@@ -218,5 +221,72 @@ func requireReply(t *testing.T, resp transport.RpcResponse, variant, what string
 			got = *resp.Variant
 		}
 		t.Fatalf("%s: reply variant %s, want %s", what, got, variant)
+	}
+}
+
+// TestCredentialedCorsEchoesTheOrigin.
+//
+// The client and the api are two origins — one host, two ports — and every
+// call carries the session cookie. A browser REFUSES a credentialed
+// response whose Access-Control-Allow-Origin is the literal "*", so the
+// permissive default has to echo the caller's origin instead. Nothing in a
+// Go test can see that refusal; this asserts the header the browser would
+// have judged.
+func TestCredentialedCorsEchoesTheOrigin(t *testing.T) {
+	env := newTestEnv(t)
+	const origin = "http://somehost.tld:8080"
+
+	// The preflight the browser sends before a cross-origin POST.
+	req, err := http.NewRequest(http.MethodOptions, env.Server.URL+"/csil/v1/rpc", nil)
+	if err != nil {
+		t.Fatalf("building the preflight: %v", err)
+	}
+	req.Header.Set("Origin", origin)
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "content-type")
+
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		t.Fatalf("preflight: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck // nothing is read from it
+
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != origin {
+		t.Errorf("Access-Control-Allow-Origin = %q, want the caller's origin %q "+
+			"(a browser drops a credentialed response that answers \"*\")", got, origin)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Errorf("Access-Control-Allow-Credentials = %q, want true; without it the "+
+			"session cookie is not sent and every call looks logged out", got)
+	}
+	// Vary: Origin, or a cache hands one origin's answer to another.
+	if vary := resp.Header.Get("Vary"); !strings.Contains(vary, "Origin") {
+		t.Errorf("Vary = %q, want it to include Origin", vary)
+	}
+}
+
+// TestTheSessionCookieCrossesPorts. app on :8080 and api on :5080 are two
+// ORIGINS and one SITE, so a Lax cookie travels between them — which is why
+// lax stays the default and "none" exists only for a genuinely cross-site
+// split.
+func TestTheSessionCookieCrossesPorts(t *testing.T) {
+	env := newTestEnv(t)
+	client := env.newClient(t)
+
+	resp := env.call(t, client, "devauth", "dev-login",
+		csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: "ada", Domain: "example.test"}))
+	requireReply(t, resp, "UserProfile", "devauth/dev-login")
+
+	jar := client.Jar
+	if jar == nil {
+		t.Fatal("the test client has no cookie jar")
+	}
+	parsed, err := url.Parse(env.Server.URL)
+	if err != nil {
+		t.Fatalf("parsing the server URL: %v", err)
+	}
+	cookies := jar.Cookies(parsed)
+	if len(cookies) == 0 {
+		t.Fatal("no session cookie was set")
 	}
 }

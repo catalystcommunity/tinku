@@ -2,7 +2,7 @@
 #
 #   ./tools.sh dev          (or `docker compose up`)
 #
-# The webapp serves the SPA on :8081 and proxies /csil and /auth to the api
+# The webapp serves the SPA on :8080 and proxies /csil and /auth to the api
 # container, which is the same one-origin shape a real deployment has behind
 # a gateway. The api's ops port is published separately on :9090 so you can
 # curl /metrics and /readyz, and is NOT proxied through the webapp.
@@ -59,7 +59,7 @@ services:
     command: ["serve"]
     environment:
       TINKU_DB_URI: "postgresql://tinku:devpass123@postgres:5432/tinku_db?sslmode=disable"
-      TINKU_API_PORT: "8080"
+      TINKU_API_PORT: "5080"
       TINKU_OPS_PORT: "9090"
       TINKU_ENV: "dev"
       TINKU_CORS_ORIGINS: "*"
@@ -69,7 +69,7 @@ services:
       # never be sent back.
       TINKU_SESSION_COOKIE_SECURE: "false"
     ports:
-      - "8080:8080"
+      - "5080:5080"
       - "9090:9090"
     depends_on:
       postgres:
@@ -91,9 +91,18 @@ services:
     image: tinku/webapp:dev
     container_name: tinku-webapp-dev
     environment:
-      TINKU_API_URL: "http://api:8080"
+      # Where NGINX reaches the api, for the /csil and /auth proxy that a
+      # same-origin deployment uses. Inside the compose network.
+      TINKU_API_URL: "http://api:5080"
+      # Where the BROWSER reaches the api. Left empty, the client derives it
+      # from the page's own address on the api's port — which is what the
+      # published 5080 above is, so the browser talks to both ports and
+      # nothing is proxied. Set an absolute URL where the api has its own
+      # name, or "/" to route through the nginx proxy on this container
+      # instead.
+      TINKU_PUBLIC_API_URL: ""
     ports:
-      - "8081:8080"
+      - "8080:8080"
     depends_on:
       - api
     networks:

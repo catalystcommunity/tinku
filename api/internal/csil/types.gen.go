@@ -25,6 +25,12 @@ type EventID string
 // EventSeriesID is a type alias
 type EventSeriesID string
 
+// WebhookID is a type alias
+type WebhookID string
+
+// GatheringOfferID is a type alias
+type GatheringOfferID string
+
 // Empty represents a structured data type
 type Empty struct {
 }
@@ -187,8 +193,9 @@ type DeleteOrganizationRequest struct {
 
 // ListOrganizationsRequest represents a structured data type
 type ListOrganizationsRequest struct {
-	Mine *bool `json:"mine,omitempty" yaml:"mine,omitempty"`
-	Page *Page `json:"page,omitempty" yaml:"page,omitempty"`
+	Mine  *bool   `json:"mine,omitempty" yaml:"mine,omitempty"`
+	Query *string `json:"query,omitempty" yaml:"query,omitempty"`
+	Page  *Page   `json:"page,omitempty" yaml:"page,omitempty"`
 }
 
 // OrganizationList represents a structured data type
@@ -348,6 +355,61 @@ type RemoveGatheringOwnerRequest struct {
 	Owner       OwnerRefInput `json:"owner" yaml:"owner"`
 }
 
+// GatheringOfferStatus is a type alias
+type GatheringOfferStatus string
+
+// GatheringOffer represents a structured data type
+type GatheringOffer struct {
+	Id               GatheringOfferID     `json:"id" yaml:"id"`
+	GatheringId      GatheringID          `json:"gathering_id" yaml:"gathering_id"`
+	GatheringName    string               `json:"gathering_name" yaml:"gathering_name"`
+	OrganizationId   OrganizationID       `json:"organization_id" yaml:"organization_id"`
+	OrganizationName string               `json:"organization_name" yaml:"organization_name"`
+	OfferedBy        UserRef              `json:"offered_by" yaml:"offered_by"`
+	Note             string               `json:"note" yaml:"note"`
+	Status           GatheringOfferStatus `json:"status" yaml:"status"`
+	CreatedAt        time.Time            `json:"created_at" yaml:"created_at"`
+	ResolvedAt       *time.Time           `json:"resolved_at,omitempty" yaml:"resolved_at,omitempty"`
+	Viewer           ViewerContext        `json:"viewer" yaml:"viewer"`
+}
+
+// OfferGatheringRequest represents a structured data type
+type OfferGatheringRequest struct {
+	GatheringId    GatheringID    `json:"gathering_id" yaml:"gathering_id"`
+	OrganizationId OrganizationID `json:"organization_id" yaml:"organization_id"`
+	Note           string         `json:"note" yaml:"note"`
+}
+
+// ListGatheringOffersRequest represents a structured data type
+type ListGatheringOffersRequest struct {
+	OrganizationId  *OrganizationID `json:"organization_id,omitempty" yaml:"organization_id,omitempty"`
+	GatheringId     *GatheringID    `json:"gathering_id,omitempty" yaml:"gathering_id,omitempty"`
+	IncludeResolved *bool           `json:"include_resolved,omitempty" yaml:"include_resolved,omitempty"`
+}
+
+// GatheringOfferList represents a structured data type
+type GatheringOfferList struct {
+	Offers []GatheringOffer `json:"offers" yaml:"offers"`
+	Total  uint64           `json:"total" yaml:"total"`
+}
+
+// RespondToGatheringOfferRequest represents a structured data type
+type RespondToGatheringOfferRequest struct {
+	OfferId GatheringOfferID `json:"offer_id" yaml:"offer_id"`
+	Accept  bool             `json:"accept" yaml:"accept"`
+}
+
+// WithdrawGatheringOfferRequest represents a structured data type
+type WithdrawGatheringOfferRequest struct {
+	OfferId GatheringOfferID `json:"offer_id" yaml:"offer_id"`
+}
+
+// AdoptGatheringRequest represents a structured data type
+type AdoptGatheringRequest struct {
+	GatheringId    GatheringID    `json:"gathering_id" yaml:"gathering_id"`
+	OrganizationId OrganizationID `json:"organization_id" yaml:"organization_id"`
+}
+
 // Weekday is a type alias
 type Weekday string
 
@@ -486,12 +548,14 @@ type DeleteEventRequest struct {
 
 // ListEventsRequest represents a structured data type
 type ListEventsRequest struct {
-	GatheringId    *GatheringID `json:"gathering_id,omitempty" yaml:"gathering_id,omitempty"`
-	StartsAfter    *time.Time   `json:"starts_after,omitempty" yaml:"starts_after,omitempty"`
-	StartsBefore   *time.Time   `json:"starts_before,omitempty" yaml:"starts_before,omitempty"`
-	AttendingOnly  *bool        `json:"attending_only,omitempty" yaml:"attending_only,omitempty"`
-	IncludeStarted *bool        `json:"include_started,omitempty" yaml:"include_started,omitempty"`
-	Page           *Page        `json:"page,omitempty" yaml:"page,omitempty"`
+	GatheringId         *GatheringID    `json:"gathering_id,omitempty" yaml:"gathering_id,omitempty"`
+	OwnedByOrganization *OrganizationID `json:"owned_by_organization,omitempty" yaml:"owned_by_organization,omitempty"`
+	Mine                *bool           `json:"mine,omitempty" yaml:"mine,omitempty"`
+	StartsAfter         *time.Time      `json:"starts_after,omitempty" yaml:"starts_after,omitempty"`
+	StartsBefore        *time.Time      `json:"starts_before,omitempty" yaml:"starts_before,omitempty"`
+	AttendingOnly       *bool           `json:"attending_only,omitempty" yaml:"attending_only,omitempty"`
+	IncludeStarted      *bool           `json:"include_started,omitempty" yaml:"include_started,omitempty"`
+	Page                *Page           `json:"page,omitempty" yaml:"page,omitempty"`
 }
 
 // EventList represents a structured data type
@@ -943,4 +1007,76 @@ type OriginVolumeList struct {
 type ListOriginVolumeRequest struct {
 	PeerId *string `json:"peer_id,omitempty" yaml:"peer_id,omitempty"`
 	Page   *Page   `json:"page,omitempty" yaml:"page,omitempty"`
+}
+
+// WebhookOwnerKind is a type alias
+type WebhookOwnerKind string
+
+// WebhookScope is a type alias
+type WebhookScope string
+
+// WebhookAction is a type alias
+type WebhookAction string
+
+// WebhookSubject is a type alias
+type WebhookSubject string
+
+// Webhook represents a structured data type
+type Webhook struct {
+	Id             WebhookID        `json:"id" yaml:"id"`
+	OwnerKind      WebhookOwnerKind `json:"owner_kind" yaml:"owner_kind"`
+	OwnerId        string           `json:"owner_id" yaml:"owner_id"`
+	Url            string           `json:"url" yaml:"url"`
+	Scope          WebhookScope     `json:"scope" yaml:"scope"`
+	Active         bool             `json:"active" yaml:"active"`
+	IncludeDetails bool             `json:"include_details" yaml:"include_details"`
+	Note           string           `json:"note" yaml:"note"`
+	LastStatus     *uint64          `json:"last_status,omitempty" yaml:"last_status,omitempty"`
+	LastAttemptAt  *time.Time       `json:"last_attempt_at,omitempty" yaml:"last_attempt_at,omitempty"`
+	FailureCount   uint64           `json:"failure_count" yaml:"failure_count"`
+	CreatedAt      time.Time        `json:"created_at" yaml:"created_at"`
+	UpdatedAt      time.Time        `json:"updated_at" yaml:"updated_at"`
+}
+
+// WebhookWithSecret represents a structured data type
+type WebhookWithSecret struct {
+	Webhook Webhook `json:"webhook" yaml:"webhook"`
+	Secret  string  `json:"secret" yaml:"secret"`
+}
+
+// CreateWebhookRequest represents a structured data type
+type CreateWebhookRequest struct {
+	OwnerKind      WebhookOwnerKind `json:"owner_kind" yaml:"owner_kind"`
+	OwnerId        string           `json:"owner_id" yaml:"owner_id"`
+	Url            string           `json:"url" yaml:"url"`
+	Scope          WebhookScope     `json:"scope" yaml:"scope"`
+	Note           string           `json:"note" yaml:"note"`
+	IncludeDetails bool             `json:"include_details" yaml:"include_details"`
+}
+
+// UpdateWebhookRequest represents a structured data type
+type UpdateWebhookRequest struct {
+	Id             WebhookID     `json:"id" yaml:"id"`
+	Url            *string       `json:"url,omitempty" yaml:"url,omitempty"`
+	Scope          *WebhookScope `json:"scope,omitempty" yaml:"scope,omitempty"`
+	Note           *string       `json:"note,omitempty" yaml:"note,omitempty"`
+	Active         *bool         `json:"active,omitempty" yaml:"active,omitempty"`
+	IncludeDetails *bool         `json:"include_details,omitempty" yaml:"include_details,omitempty"`
+}
+
+// DeleteWebhookRequest represents a structured data type
+type DeleteWebhookRequest struct {
+	Id WebhookID `json:"id" yaml:"id"`
+}
+
+// ListWebhooksRequest represents a structured data type
+type ListWebhooksRequest struct {
+	OwnerKind WebhookOwnerKind `json:"owner_kind" yaml:"owner_kind"`
+	OwnerId   string           `json:"owner_id" yaml:"owner_id"`
+}
+
+// WebhookList represents a structured data type
+type WebhookList struct {
+	Webhooks []Webhook `json:"webhooks" yaml:"webhooks"`
+	Limit    uint64    `json:"limit" yaml:"limit"`
 }

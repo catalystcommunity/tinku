@@ -508,8 +508,8 @@ def _deploy_website(root: Path) -> None:
             "Set a real one before deploying."
         )
 
-    registry = _require("REGISTRY_INTERNAL")
-    registry_path = _require("REGISTRY_INTERNAL_PATH")
+    registry = _require("REGISTRY")
+    registry_path = _require("REGISTRY_PATH")
     namespace = _require("K8S_NAMESPACE")
     release = _require("HELM_RELEASE")
     chart = _require("HELM_CHART")
@@ -561,11 +561,9 @@ def _deploy_website(root: Path) -> None:
     auth = base64.b64encode(
         f"{registry_user}:{registry_password}".encode()
     ).decode()
-    external = os.environ.get("REGISTRY_EXTERNAL", "").strip()
-    auths = {registry: {"auth": auth}}
-    if external:
-        auths[external] = {"auth": auth}
-    (docker_dir / "config.json").write_text(json.dumps({"auths": auths}))
+    (docker_dir / "config.json").write_text(
+        json.dumps({"auths": {registry: {"auth": auth}}})
+    )
     (docker_dir / "config.json").chmod(0o600)
 
     _section("Waiting for the BuildKit sidecar")
@@ -591,9 +589,13 @@ def _deploy_website(root: Path) -> None:
     )
 
     _section("Pushing the image")
-    # The internal registry is plain HTTP, which is what --insecure is for.
+    # An internal registry on a bare address serves plain HTTP. The public
+    # one does not, so the flag is a setting rather than a constant.
+    push = ["crane", "push"]
+    if os.environ.get("REGISTRY_INSECURE", "").strip().lower() == "true":
+        push.append("--insecure")
     for tag in (version, "latest"):
-        _run(["crane", "push", "--insecure", str(image_tar), f"{image}:{tag}"], cwd=root)
+        _run([*push, str(image_tar), f"{image}:{tag}"], cwd=root)
     image_tar.unlink()
 
     _section("Deploying")

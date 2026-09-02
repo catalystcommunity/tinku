@@ -53,6 +53,7 @@ type Services struct {
 	// an instance that does not federate answers "unknown service or op" —
 	// which is the honest answer, and tells a prober nothing.
 	Federation csil.FederationService
+	Webhook    csil.WebhookService
 }
 
 // typedHandler decodes a request payload, calls a service method, and
@@ -146,6 +147,19 @@ func buildRoutes(svcs Services) map[string]map[string]typedHandler {
 			"leave-gathering":        routeFallible(csil.DecodeLeaveGatheringRequest, svcs.Gathering.LeaveGathering, csil.EncodeGathering, "Gathering"),
 			"add-gathering-owner":    routeFallible(csil.DecodeAddGatheringOwnerRequest, svcs.Gathering.AddGatheringOwner, csil.EncodeGathering, "Gathering"),
 			"remove-gathering-owner": routeFallible(csil.DecodeRemoveGatheringOwnerRequest, svcs.Gathering.RemoveGatheringOwner, csil.EncodeGathering, "Gathering"),
+			// Moving a gathering under an organization: offered and
+			// accepted by two sides, or adopted by an administrator.
+			"offer-gathering":            routeFallible(csil.DecodeOfferGatheringRequest, svcs.Gathering.OfferGathering, csil.EncodeGatheringOffer, "GatheringOffer"),
+			"list-gathering-offers":      routeFallible(csil.DecodeListGatheringOffersRequest, svcs.Gathering.ListGatheringOffers, csil.EncodeGatheringOfferList, "GatheringOfferList"),
+			"respond-to-gathering-offer": routeFallible(csil.DecodeRespondToGatheringOfferRequest, svcs.Gathering.RespondToGatheringOffer, csil.EncodeGatheringOffer, "GatheringOffer"),
+			"withdraw-gathering-offer":   routeFallible(csil.DecodeWithdrawGatheringOfferRequest, svcs.Gathering.WithdrawGatheringOffer, csil.EncodeEmpty, "Empty"),
+			"adopt-gathering":            routeFallible(csil.DecodeAdoptGatheringRequest, svcs.Gathering.AdoptGathering, csil.EncodeGathering, "Gathering"),
+		},
+		"webhook": {
+			"list-webhooks":  routeFallible(csil.DecodeListWebhooksRequest, svcs.Webhook.ListWebhooks, csil.EncodeWebhookList, "WebhookList"),
+			"create-webhook": routeFallible(csil.DecodeCreateWebhookRequest, svcs.Webhook.CreateWebhook, csil.EncodeWebhookWithSecret, "WebhookWithSecret"),
+			"update-webhook": routeFallible(csil.DecodeUpdateWebhookRequest, svcs.Webhook.UpdateWebhook, csil.EncodeWebhook, "Webhook"),
+			"delete-webhook": routeFallible(csil.DecodeDeleteWebhookRequest, svcs.Webhook.DeleteWebhook, csil.EncodeEmpty, "Empty"),
 		},
 		"event": {
 			"list-events":         routeFallible(csil.DecodeListEventsRequest, svcs.Event.ListEvents, csil.EncodeEventList, "EventList"),

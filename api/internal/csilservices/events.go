@@ -12,6 +12,7 @@ import (
 	"github.com/catalystcommunity/tinku/api/internal/csil"
 	"github.com/catalystcommunity/tinku/api/internal/federation"
 	"github.com/catalystcommunity/tinku/api/internal/store"
+	"github.com/catalystcommunity/tinku/api/internal/webhooks"
 )
 
 // EventService implements csil.EventService — events, series, attendance
@@ -33,6 +34,10 @@ type EventService struct {
 	// site checks, so nothing else has to know whether federation exists.
 	Publisher *federation.Publisher
 	Now       func() time.Time
+	// Notify queues webhook deliveries for what this service changes.
+	// Nil in a test that does not care, which is why every call goes
+	// through Dispatch rather than touching the field.
+	Notify *webhooks.Dispatcher
 }
 
 // publish queues an event, or its tombstone, for every outbound peer.
@@ -184,6 +189,19 @@ func (s *EventService) ListEvents(ctx context.Context, req csil.ListEventsReques
 		}
 		f.AttendeeID = c.ID
 	}
+	if req.OwnedByOrganization != nil {
+		f.OwnedByOrganization = string(*req.OwnedByOrganization)
+	}
+	// `mine` is a wider question than `attending_only`: what is on for the
+	// groups I am part of, rather than what I have said I am coming to. An
+	// anonymous caller belongs to nothing, so the honest answer is an empty
+	// list rather than an error.
+	if req.Mine != nil && *req.Mine {
+		if c.ID == "" {
+			return csil.EventList{Events: []csil.Event{}}, nil
+		}
+		f.MemberID = c.ID
+	}
 
 	events, total, err := s.Store.ListEvents(ctx, f)
 	if err != nil {
@@ -273,6 +291,7 @@ func (s *EventService) CreateEvent(ctx context.Context, req csil.CreateEventRequ
 		return csil.Event{}, err
 	}
 	s.publish(ctx, event, false)
+	s.notifyEvent(ctx, webhooks.ActionCreated, event)
 	return s.present(ctx, c, event)
 }
 
@@ -350,6 +369,7 @@ func (s *EventService) UpdateEvent(ctx context.Context, req csil.UpdateEventRequ
 		return csil.Event{}, err
 	}
 	s.publish(ctx, updated, false)
+	s.notifyEvent(ctx, webhooks.ActionUpdated, updated)
 	return s.present(ctx, c, updated)
 }
 
@@ -381,6 +401,7 @@ func (s *EventService) DeleteEvent(ctx context.Context, req csil.DeleteEventRequ
 	// The tombstone goes out AFTER the row is gone, so a peer never holds
 	// an event this instance no longer has.
 	s.publish(ctx, event, true)
+	s.notifyEvent(ctx, webhooks.ActionDeleted, event)
 	return csil.Empty{}, nil
 }
 

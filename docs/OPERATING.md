@@ -19,11 +19,12 @@ so no single missing variable can leave a guard off.
 | Environment variable | Flag | Default | Meaning |
 | --- | --- | --- | --- |
 | `TINKU_ENV` | `--env` | `prod` | The deployment: `dev`, `nonprod`, or `prod`. |
-| `TINKU_API_PORT` | `--api-port` | `8080` | The port for CSIL-RPC and the auth callback. |
+| `TINKU_API_PORT` | `--api-port` | `5080` | The port for CSIL-RPC and the auth callback. |
 | `TINKU_OPS_PORT` | `--ops-port` | `9090` | The port for `/metrics`, `/healthz`, and `/readyz`. |
 | `TINKU_DB_URI` | `--db-uri` | The Compose PostgreSQL | The database. Its scheme selects the backend. |
 | `TINKU_MIGRATE_ON_BOOT` | `--skip-migrate` | `true` | Applies the migrations at start. |
 | `TINKU_CORS_ORIGINS` | `--cors-origins` | `*` | The allowed origins. |
+| `TINKU_SESSION_COOKIE_SAMESITE` | *(none)* | `lax` | `lax` or `none`. See "The client is a different origin". |
 | `TINKU_ORIGIN_DOMAIN` | `--origin-domain-override` | *(derived)* | Forces this node's name. Only for a local run with no linkkeys. |
 
 ### This node's name
@@ -55,7 +56,7 @@ node that starts as `localhost` keeps `localhost` in every address it made.
 | Environment variable | Flag | Default | Meaning |
 | --- | --- | --- | --- |
 | `TINKU_SESSION_TTL` | none | `720h` | How long a new session stays valid. |
-| `TINKU_SESSION_COOKIE_SECURE` | `--session-cookie-insecure` | `true` | Sets the `Secure` attribute on the cookie. |
+| `TINKU_SESSION_COOKIE_SECURE` | `--session-cookie-insecure` | `true` | Sets the `Secure` attribute on the cookie. Forced on when SameSite is `none`. |
 | `TINKU_SESSION_NONCE_SECRET` | none | A random value | Signs the login nonce. |
 
 ### Linkkeys
@@ -641,3 +642,52 @@ results:
 A high `service_error` rate on `create-greeting` means that clients call it
 without a session. A high `unknown_service_or_op` rate means that a client
 is newer than this API.
+
+
+## The client is a different origin
+
+The web client and the API listen on two ports: the client on 8080, the API
+on 5080. They are therefore two ORIGINS, and the browser calls the API
+directly rather than through the client's server.
+
+Three settings have to agree, and two of them fail in ways that are hard to
+read from a log.
+
+**Where the browser looks for the API.** The client resolves it at run time,
+so one built image serves every deployment:
+
+1. `TINKU_PUBLIC_API_URL` on the WEBAPP container. The image renders it into
+   `/config.js` at start, and the client reads it there. Set it to `/` for a
+   deployment with something in front that proxies `/csil` and `/auth`, so
+   that the client stays same-origin.
+2. Failing that — including when the variable is unset or empty, which
+   render identically — the same host the page came from, on port 5080.
+   This is why a port-forward needs BOTH ports: the browser talks to each.
+
+**CORS.** Every call carries the session cookie, and a browser REFUSES a
+credentialed response whose `Access-Control-Allow-Origin` is `*`. The API
+therefore echoes the caller's origin instead of answering `*`, even when
+`TINKU_CORS_ORIGINS` is the default wildcard. Name the real origins in a
+deployment that faces the public:
+
+```
+TINKU_CORS_ORIGINS=https://tinku.example
+```
+
+**The cookie.** `lax` is right whenever the client and the API are the same
+SITE, and different PORTS of one host are the same site — `:8080` and
+`:5080` of `tinku.example` need nothing here.
+
+Set `TINKU_SESSION_COOKIE_SAMESITE=none` only when they are genuinely
+cross-site, such as a client on `app.example.com` calling an API on
+`api.example.net`. A browser drops a `SameSite=None` cookie that is not
+`Secure`, so that combination needs HTTPS; the setting forces `Secure` on to
+match, whatever `TINKU_SESSION_COOKIE_SECURE` says.
+
+**The linkkeys callback** is served by the API, so a successful login lands
+on the API's origin unless it is told otherwise. Point
+`TINKU_POST_LOGIN_REDIRECT_URL` at the CLIENT:
+
+```
+TINKU_POST_LOGIN_REDIRECT_URL=https://tinku.example/
+```

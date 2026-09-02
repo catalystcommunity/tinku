@@ -120,9 +120,21 @@ func (s *Store) ListOrganizations(ctx context.Context, f store.OrganizationFilte
 		return nil, 0, fmt.Errorf("counting organizations: %w", err)
 	}
 
+	// A typeahead ranks a name match above a description match, because
+	// only the name is shown: an answer whose reason is invisible reads as
+	// a wrong answer. Within each band the newest is first, as an
+	// unfiltered list is.
+	order := ` ORDER BY g.created_at DESC, g.id DESC`
+	if f.Query != "" {
+		prefix := a.next(likePrefix(f.Query))
+		anywhere := a.next(likeFold(f.Query))
+		order = ` ORDER BY (lower(g.name) LIKE ` + prefix + `) DESC,` +
+			` (lower(g.name) LIKE ` + anywhere + `) DESC, g.created_at DESC, g.id DESC`
+	}
+
 	limit, offset := clamp(f.Page)
 	rows, err := s.db.QueryContext(ctx, organizationColumnsSQL+clause+
-		` ORDER BY g.created_at DESC, g.id DESC LIMIT `+a.next(limit)+` OFFSET `+a.next(offset), a.vals...)
+		order+` LIMIT `+a.next(limit)+` OFFSET `+a.next(offset), a.vals...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("listing organizations: %w", err)
 	}

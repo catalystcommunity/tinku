@@ -143,6 +143,21 @@ func (v *UpdateOrganizationRequest) Validate() error {
 	return nil
 }
 
+// ValidateListOrganizationsRequest validates the ListOrganizationsRequest struct
+func (v *ListOrganizationsRequest) Validate() error {
+	if v.Query != nil {
+		if len((*v.Query)) < 0 {
+			return fmt.Errorf("field 'Query' must have at least 0 elements")
+		}
+	}
+	if v.Query != nil {
+		if len((*v.Query)) > 120 {
+			return fmt.Errorf("field 'Query' must have at most 120 elements")
+		}
+	}
+	return nil
+}
+
 // ValidateGathering validates the Gathering struct
 func (v *Gathering) Validate() error {
 	if len(v.Name) < 1 {
@@ -220,6 +235,28 @@ func (v *UpdateGatheringRequest) Validate() error {
 		if len((*v.Description)) > 10000 {
 			return fmt.Errorf("field 'Description' must have at most 10000 elements")
 		}
+	}
+	return nil
+}
+
+// ValidateGatheringOffer validates the GatheringOffer struct
+func (v *GatheringOffer) Validate() error {
+	if len(v.Note) < 0 {
+		return fmt.Errorf("field 'Note' must have at least 0 elements")
+	}
+	if len(v.Note) > 500 {
+		return fmt.Errorf("field 'Note' must have at most 500 elements")
+	}
+	return nil
+}
+
+// ValidateOfferGatheringRequest validates the OfferGatheringRequest struct
+func (v *OfferGatheringRequest) Validate() error {
+	if len(v.Note) < 0 {
+		return fmt.Errorf("field 'Note' must have at least 0 elements")
+	}
+	if len(v.Note) > 500 {
+		return fmt.Errorf("field 'Note' must have at most 500 elements")
 	}
 	return nil
 }
@@ -800,6 +837,65 @@ func (v *ListRemoteEventsRequest) Validate() error {
 	if v.Query != nil {
 		if len((*v.Query)) > 200 {
 			return fmt.Errorf("field 'Query' must have at most 200 elements")
+		}
+	}
+	return nil
+}
+
+// ValidateWebhook validates the Webhook struct
+func (v *Webhook) Validate() error {
+	if len(v.Url) < 1 {
+		return fmt.Errorf("field 'Url' must have at least 1 elements")
+	}
+	if len(v.Url) > 2000 {
+		return fmt.Errorf("field 'Url' must have at most 2000 elements")
+	}
+	if len(v.Note) < 0 {
+		return fmt.Errorf("field 'Note' must have at least 0 elements")
+	}
+	if len(v.Note) > 200 {
+		return fmt.Errorf("field 'Note' must have at most 200 elements")
+	}
+	return nil
+}
+
+// ValidateCreateWebhookRequest validates the CreateWebhookRequest struct
+func (v *CreateWebhookRequest) Validate() error {
+	if len(v.Url) < 1 {
+		return fmt.Errorf("field 'Url' must have at least 1 elements")
+	}
+	if len(v.Url) > 2000 {
+		return fmt.Errorf("field 'Url' must have at most 2000 elements")
+	}
+	if len(v.Note) < 0 {
+		return fmt.Errorf("field 'Note' must have at least 0 elements")
+	}
+	if len(v.Note) > 200 {
+		return fmt.Errorf("field 'Note' must have at most 200 elements")
+	}
+	return nil
+}
+
+// ValidateUpdateWebhookRequest validates the UpdateWebhookRequest struct
+func (v *UpdateWebhookRequest) Validate() error {
+	if v.Url != nil {
+		if len((*v.Url)) < 1 {
+			return fmt.Errorf("field 'Url' must have at least 1 elements")
+		}
+	}
+	if v.Url != nil {
+		if len((*v.Url)) > 2000 {
+			return fmt.Errorf("field 'Url' must have at most 2000 elements")
+		}
+	}
+	if v.Note != nil {
+		if len((*v.Note)) < 0 {
+			return fmt.Errorf("field 'Note' must have at least 0 elements")
+		}
+	}
+	if v.Note != nil {
+		if len((*v.Note)) > 200 {
+			return fmt.Errorf("field 'Note' must have at most 200 elements")
 		}
 	}
 	return nil

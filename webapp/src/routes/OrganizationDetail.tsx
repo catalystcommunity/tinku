@@ -4,8 +4,10 @@ import { useI18n } from "~/i18n";
 import { api } from "~/lib/api";
 import { ErrorAlert, StatusMessage } from "~/components/Alert";
 import { Field } from "~/components/Field";
+import { OfferInbox } from "~/components/Offers";
 import { OriginBadge } from "~/components/OriginBadge";
 import { PublishControl } from "~/components/PublishControl";
+import { Webhooks } from "~/components/Webhooks";
 
 /** One organization: its blurb, its roster, and the roster controls its owners get. */
 export default function OrganizationDetail(): JSX.Element {
@@ -81,7 +83,7 @@ export default function OrganizationDetail(): JSX.Element {
       {(g) => (
         <>
           <h1>{g().name}</h1>
-          <p>
+          <p class="page-address">
             <OriginBadge origin={g().origin} local={g().slug} />
           </p>
           {/* An external record that shares a local name is the case worth
@@ -91,7 +93,7 @@ export default function OrganizationDetail(): JSX.Element {
               {t("origin.externalWarning", { domain: g().origin.domain })}
             </p>
           </Show>
-          <p class="card-meta">
+          <p class="page-meta">
             {plural("organization.members", g().memberCount)} · {plural("organization.owners", g().ownerCount)}
           </p>
 
@@ -150,7 +152,7 @@ export default function OrganizationDetail(): JSX.Element {
                           */}
                           <button
                             type="button"
-                            class="link-button"
+                            class="danger compact"
                             aria-label={t("organization.removeMember", {
                               name: m.displayName || m.handle,
                             })}
@@ -168,8 +170,8 @@ export default function OrganizationDetail(): JSX.Element {
 
             <Show when={g().viewer.canManageMembers}>
               <form onSubmit={addMember}>
-                <fieldset>
-                  <legend>{t("organization.addMemberLegend")}</legend>
+                <h3>{t("organization.addMemberLegend")}</h3>
+                <div class="field-row">
                   <Field
                     label={t("organization.addMemberAddress")}
                     hint={t("organization.addMemberAddressHint")}
@@ -197,10 +199,12 @@ export default function OrganizationDetail(): JSX.Element {
                       </select>
                     )}
                   </Field>
+                </div>
+                <div class="form-actions">
                   <button type="submit" disabled={busy() || !address().includes("@")}>
                     {t("organization.addMemberAction")}
                   </button>
-                </fieldset>
+                </div>
               </form>
             </Show>
           </section>
@@ -212,16 +216,33 @@ export default function OrganizationDetail(): JSX.Element {
             wonders why they cannot delete their own organization deserves the
             answer.
           */}
-          <section>
-            <Show
-              when={g().viewer.canDelete}
-              fallback={<p class="card-meta">{t("organization.deleteNeedsAdmin")}</p>}
-            >
+          <Show when={g().viewer.canManageMembers}>
+            {/* Accepting puts the gathering's owners on the roster, so the
+                roster has to be refetched too — the organization record and
+                its members are two resources, and only refreshing one shows
+                a stale roster next to a fresh count. */}
+            <OfferInbox
+              organizationId={params.id}
+              onAccepted={() => {
+                void refetchOrganization();
+                void refetchMembers();
+              }}
+            />
+            <Webhooks ownerKind="organization" ownerId={params.id} />
+          </Show>
+
+          {/* No fallback: an administrator-only power is not news to
+              somebody who never tried to use it. The message that explains
+              the rule belongs where the rule bites, which is nowhere on
+              this page for anybody else. */}
+          <Show when={g().viewer.canDelete}>
+            <section class="danger-zone">
+              <p>{t("organization.dangerNote")}</p>
               <button type="button" class="danger" onClick={remove}>
                 {t("common.delete")}
               </button>
-            </Show>
-          </section>
+            </section>
+          </Show>
         </>
       )}
     </Show>

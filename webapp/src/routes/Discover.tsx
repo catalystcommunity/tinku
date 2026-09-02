@@ -1,10 +1,14 @@
-import { For, Show, createSignal, type JSX } from "solid-js";
+import { For, Show, createResource, createSignal, type JSX } from "solid-js";
 import { createStore } from "solid-js/store";
-import type { SearchRequest, SearchResults } from "~/gen/types.gen";
+import type { ListEventsRequest, Organization, SearchRequest, SearchResults } from "~/gen/types.gen";
 import { useI18n } from "~/i18n";
 import { api } from "~/lib/api";
+import { useSession } from "~/lib/session";
 import { ErrorAlert } from "~/components/Alert";
+import { Calendar } from "~/components/Calendar";
 import { CheckField, Field } from "~/components/Field";
+import { OrganizationPicker } from "~/components/OrganizationPicker";
+import { monthWindow } from "~/lib/month";
 import {
   EventCard,
   GatheringCard,
@@ -21,6 +25,53 @@ import {
  */
 export default function Discover(): JSX.Element {
   const { t, plural } = useI18n();
+  const { user } = useSession();
+
+  // Two ways to look at the same directory: a search that answers a
+  // question, and a calendar that answers "what is on". The tab is the
+  // whole difference — neither view is a filter of the other, and putting
+  // both on screen at once made the page twice as long as either job.
+  const [view, setView] = createSignal<"search" | "calendar">("search");
+
+  const today = new Date();
+  const [month, setMonth] = createSignal({ year: today.getFullYear(), month: today.getMonth() });
+  const [mineOnly, setMineOnly] = createSignal(false);
+  const [organization, setOrganization] = createSignal<Organization>();
+
+  // The calendar asks the server for one window at a time. Everything it
+  // keys on is in the key, so changing a toggle refetches rather than
+  // filtering a stale answer in the browser.
+  const [calendarEvents] = createResource(
+    () => ({
+      view: view(),
+      year: month().year,
+      month: month().month,
+      mine: mineOnly(),
+      organizationId: organization()?.id,
+      // The signed-in person is part of the key: "mine" means nothing until
+      // there is a "me", and signing in has to refetch rather than leave
+      // somebody else's answer on screen.
+      user: user()?.id,
+    }),
+    async (key) => {
+      if (key.view !== "calendar") {
+        return { events: [], total: 0 };
+      }
+      const { from, to } = monthWindow(key.year, key.month);
+      const req: ListEventsRequest = {
+        startsAfter: from,
+        startsBefore: to,
+        // A calendar shows the past: the month you are looking at is often
+        // one that has already happened, and a grid with holes in it where
+        // last week was is not a calendar.
+        includeStarted: true,
+        page: { limit: 250, offset: 0 },
+      };
+      if (key.mine) req.mine = true;
+      if (key.organizationId) req.ownedByOrganization = key.organizationId;
+      return api.event.listEvents(req);
+    },
+  );
 
   const [form, setForm] = createStore({
     query: "",
@@ -81,6 +132,70 @@ export default function Discover(): JSX.Element {
     <>
       <h1>{t("discover.title")}</h1>
 
+      <div class="tabs" role="tablist" aria-label={t("discover.viewLabel")}>
+        <button
+          type="button"
+          role="tab"
+          id="discover-tab-search"
+          aria-selected={view() === "search"}
+          aria-controls="discover-panel-search"
+          onClick={() => setView("search")}
+        >
+          {t("discover.viewSearch")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="discover-tab-calendar"
+          aria-selected={view() === "calendar"}
+          aria-controls="discover-panel-calendar"
+          onClick={() => setView("calendar")}
+        >
+          {t("discover.viewCalendar")}
+        </button>
+      </div>
+
+      <div
+        id="discover-panel-calendar"
+        role="tabpanel"
+        aria-labelledby="discover-tab-calendar"
+        hidden={view() !== "calendar"}
+      >
+        <Calendar
+          events={calendarEvents()?.events ?? []}
+          year={month().year}
+          month={month().month}
+          loading={calendarEvents.loading}
+          onMove={(year, m) => setMonth({ year, month: m })}
+          controls={
+            <>
+              {/* "Mine" needs a session to mean anything, so it is offered
+                  only to somebody who has one. */}
+              <Show when={user()}>
+                <CheckField
+                  label={t("discover.mineOnly")}
+                  checked={mineOnly()}
+                  onChange={setMineOnly}
+                />
+              </Show>
+              <OrganizationPicker
+                label={t("discover.byOrganization")}
+                placeholder={t("discover.byOrganizationPlaceholder")}
+                value={organization()}
+                onChange={setOrganization}
+              />
+            </>
+          }
+        />
+      </div>
+
+      <div
+        id="discover-panel-search"
+        role="tabpanel"
+        aria-labelledby="discover-tab-search"
+        hidden={view() !== "search"}
+      >
+
       <form onSubmit={submit}>
         <Field label={t("discover.searchLabel")}>
           {(control) => (
@@ -96,72 +211,80 @@ export default function Discover(): JSX.Element {
 
         <fieldset>
           <legend>{t("discover.placeLegend")}</legend>
-          <Field label={t("discover.localityLabel")}>
-            {(control) => (
-              <input
-                {...control}
-                type="text"
-                autocomplete="address-level2"
-                value={form.locality}
-                onInput={(e) => setForm("locality", e.currentTarget.value)}
-              />
-            )}
-          </Field>
-          <Field label={t("discover.regionLabel")}>
-            {(control) => (
-              <input
-                {...control}
-                type="text"
-                autocomplete="address-level1"
-                value={form.region}
-                onInput={(e) => setForm("region", e.currentTarget.value)}
-              />
-            )}
-          </Field>
+          <div class="field-row">
+            <Field label={t("discover.localityLabel")}>
+              {(control) => (
+                <input
+                  {...control}
+                  type="text"
+                  autocomplete="address-level2"
+                  value={form.locality}
+                  onInput={(e) => setForm("locality", e.currentTarget.value)}
+                />
+              )}
+            </Field>
+            <Field label={t("discover.regionLabel")}>
+              {(control) => (
+                <input
+                  {...control}
+                  type="text"
+                  autocomplete="address-level1"
+                  value={form.region}
+                  onInput={(e) => setForm("region", e.currentTarget.value)}
+                />
+              )}
+            </Field>
+          </div>
         </fieldset>
 
         <fieldset>
           <legend>{t("discover.timeLegend")}</legend>
-          <Field label={t("discover.fromLabel")}>
-            {(control) => (
-              <input
-                {...control}
-                type="date"
-                value={form.from}
-                onInput={(e) => setForm("from", e.currentTarget.value)}
-              />
-            )}
-          </Field>
-          <Field label={t("discover.toLabel")}>
-            {(control) => (
-              <input
-                {...control}
-                type="date"
-                value={form.to}
-                onInput={(e) => setForm("to", e.currentTarget.value)}
-              />
-            )}
-          </Field>
-          <CheckField
-            label={t("discover.onlineOnly")}
-            checked={form.onlineOnly}
-            onChange={(v) => setForm("onlineOnly", v)}
-          />
-          <CheckField
-            label={t("discover.inPersonOnly")}
-            checked={form.inPersonOnly}
-            onChange={(v) => setForm("inPersonOnly", v)}
-          />
-          <CheckField
-            label={t("discover.includeStarted")}
-            checked={form.includeStarted}
-            onChange={(v) => setForm("includeStarted", v)}
-          />
+          <div class="field-row">
+            <Field label={t("discover.fromLabel")}>
+              {(control) => (
+                <input
+                  {...control}
+                  type="date"
+                  value={form.from}
+                  onInput={(e) => setForm("from", e.currentTarget.value)}
+                />
+              )}
+            </Field>
+            <Field label={t("discover.toLabel")}>
+              {(control) => (
+                <input
+                  {...control}
+                  type="date"
+                  value={form.to}
+                  onInput={(e) => setForm("to", e.currentTarget.value)}
+                />
+              )}
+            </Field>
+          </div>
+          <div class="check-row">
+            <CheckField
+              label={t("discover.onlineOnly")}
+              checked={form.onlineOnly}
+              onChange={(v) => setForm("onlineOnly", v)}
+            />
+            <CheckField
+              label={t("discover.inPersonOnly")}
+              checked={form.inPersonOnly}
+              onChange={(v) => setForm("inPersonOnly", v)}
+            />
+            <CheckField
+              label={t("discover.includeStarted")}
+              checked={form.includeStarted}
+              onChange={(v) => setForm("includeStarted", v)}
+            />
+          </div>
         </fieldset>
 
-        <button type="submit" disabled={busy()}>
-          {busy() ? t("common.loading") : t("discover.searchAction")}
-        </button>
+        <div class="form-actions">
+          <button type="submit" disabled={busy()}>
+            {busy() ? t("common.loading") : t("discover.searchAction")}
+          </button>
+        </div>
       </form>
 
       <ErrorAlert error={error()} />
@@ -213,6 +336,7 @@ export default function Discover(): JSX.Element {
           )}
         </Show>
       </section>
+      </div>
     </>
   );
 }

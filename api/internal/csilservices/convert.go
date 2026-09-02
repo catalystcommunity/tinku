@@ -322,3 +322,27 @@ func toAdminUser(u *store.User) csil.AdminUser {
 	}
 	return admin
 }
+
+// toGatheringOffer renders one offer. The three parties each travel with
+// their domain: a directory holds names from more than one instance, and a
+// name without its domain is not an identity.
+func toGatheringOffer(o *store.GatheringOffer, viewer csil.ViewerContext) csil.GatheringOffer {
+	return csil.GatheringOffer{
+		Id:               csil.GatheringOfferID(o.ID),
+		GatheringId:      csil.GatheringID(o.GatheringID),
+		GatheringName:    o.GatheringName,
+		OrganizationId:   csil.OrganizationID(o.OrganizationID),
+		OrganizationName: o.OrganizationName,
+		OfferedBy: csil.UserRef{
+			UserId:         csil.UserID(o.OfferedByID),
+			Handle:         o.OfferedByHandle,
+			DisplayName:    o.OfferedByName,
+			LinkkeysDomain: o.OfferedByDomain,
+		},
+		Note:       o.Note,
+		Status:     csil.GatheringOfferStatus(o.Status),
+		CreatedAt:  o.CreatedAt,
+		ResolvedAt: o.ResolvedAt,
+		Viewer:     viewer,
+	}
+}

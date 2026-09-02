@@ -8,6 +8,7 @@ import (
 
 	"github.com/catalystcommunity/tinku/api/internal/csil"
 	"github.com/catalystcommunity/tinku/api/internal/store"
+	"github.com/catalystcommunity/tinku/api/internal/webhooks"
 )
 
 // The series half of EventService.
@@ -134,6 +135,7 @@ func (s *EventService) CreateEventSeries(ctx context.Context, req csil.CreateEve
 	if err := s.ensureHorizon(ctx, series, s.now().Add(defaultHorizon)); err != nil {
 		return csil.EventSeries{}, err
 	}
+	s.notifySeries(ctx, webhooks.ActionCreated, series)
 	return s.rereadSeries(ctx, c, series.ID)
 }
 
@@ -236,6 +238,10 @@ func (s *EventService) UpdateEventSeries(ctx context.Context, req csil.UpdateEve
 	if err := s.ensureHorizon(ctx, updated, now.Add(defaultHorizon)); err != nil {
 		return csil.EventSeries{}, err
 	}
+	// The rule is what changed. The occurrences it rewrote are not reported
+	// one by one: a monthly rule with a year's horizon would send twelve
+	// deliveries for one edit and say the same thing twelve times.
+	s.notifySeries(ctx, webhooks.ActionUpdated, updated)
 	return s.rereadSeries(ctx, c, series.ID)
 }
 
@@ -265,6 +271,7 @@ func (s *EventService) DeleteEventSeries(ctx context.Context, req csil.DeleteEve
 	if err := s.Store.DeleteEventSeries(ctx, series.ID); err != nil {
 		return csil.Empty{}, err
 	}
+	s.notifySeries(ctx, webhooks.ActionDeleted, series)
 	return csil.Empty{}, nil
 }
 

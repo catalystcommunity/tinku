@@ -223,7 +223,7 @@ content is what happens between two of them.
 
 ## The web client
 
-Two rules. Both have tests.
+Three rules. The first two have tests.
 
 **No component holds a string a person reads.** Every message is a key in
 `webapp/src/i18n/en-US.ts`. Never join fragments to make a sentence: word
@@ -243,6 +243,23 @@ form control: it ties the label, the hint and the error together. Use
 `components/Alert.tsx` for a failure. Give each button in a list an
 `aria-label` that says which row it acts on. Colour must never be the only
 carrier of meaning.
+
+**One stylesheet, and it holds every colour.** `webapp/src/index.css`
+defines the palette as custom properties on bare `:root`; the dark theme
+redefines the properties and nothing else. The palette is the marketing
+site's (`website/site-src/content/extra_files/styles.css`) — change one and
+change the other. Never write a colour in a component.
+
+`--accent` is a fill and `--accent-text` is text. They differ in the dark
+theme because a fill needs 3:1 and body text needs 4.5:1, and `#e0445f`
+reaches only 4.2:1 on a panel.
+
+The layout classes are the whole vocabulary: `.field-row` puts fields side
+by side and collapses on a phone, `.check-row` does the same for
+checkboxes, `.form-actions` holds the buttons that end a form,
+`.danger-zone` holds a deletion, `.page-address` and `.page-meta` are the
+lines under a title. A `<form>` is already a panel — do not put a
+`<fieldset>` around the whole of one, which draws a box inside a box.
 
 ## Tests
 
