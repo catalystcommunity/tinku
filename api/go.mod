@@ -5,7 +5,7 @@ go 1.26.4
 replace github.com/catalystcommunity/tinku/coredb => ../coredb
 
 require (
-	github.com/catalystcommunity/linkkeys/sdks/regular-rp/go v0.0.0-20260831021739-02c163cb5e77
+	github.com/catalystcommunity/linkkeys/sdks/regular-rp/go v0.0.0-20261111162043-3227a58c78a7
 	github.com/catalystcommunity/tinku/coredb v0.0.0-00010101000000-000000000000
 	github.com/oklog/ulid/v2 v2.1.2
 	github.com/prometheus/client_golang v1.24.1

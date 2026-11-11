@@ -82,12 +82,22 @@ type Config struct {
 	// the login flow redirects to.
 	LinkkeysIDPDomain string
 	LinkkeysIDPURL    string
-	// LinkkeysPKIURL, LinkkeysPKIAPIKey and LinkkeysPKIAllowInvalidCerts
-	// configure the relying-party sidecar that holds the private keys. The
-	// api never touches a private key itself.
-	LinkkeysPKIURL               string
-	LinkkeysPKIAPIKey            string
-	LinkkeysPKIAllowInvalidCerts bool
+	// LinkkeysRPTCPAddress, LinkkeysRPFingerprints and LinkkeysPKIAPIKey
+	// configure the relying-party server that holds the private keys. The
+	// api calls its Rp service over CSIL-RPC on TCP+TLS, pinned to the
+	// fingerprints. The api never touches a private key itself.
+	LinkkeysRPTCPAddress   string
+	LinkkeysRPFingerprints []string
+	LinkkeysPKIAPIKey      string
+	// LinkkeysApplicationID names tinku in Rp/sign-request. Linkkeys
+	// v0.16.7 keys standing consent by (user, RP domain, application), so
+	// a change makes every person consent again. Empty means
+	// FederationApplicationID, which is the same ID that tinku's
+	// application keys are enrolled under.
+	LinkkeysApplicationID string
+	// LinkkeysLegacyPKIURL holds TINKU_LINKKEYS_PKI_URL only so that serve
+	// can tell an operator that the setting no longer does anything.
+	LinkkeysLegacyPKIURL string
 
 	// AppCallbackURL is the absolute URL the identity provider redirects
 	// back to: tinku-api's own `GET /auth/callback`, not a SPA route. It
@@ -218,9 +228,11 @@ func Load(flags map[string]string) Config {
 		LinkkeysDomain:               getEnv("TINKU_LINKKEYS_DOMAIN", ""),
 		LinkkeysIDPDomain:            getEnv("TINKU_LINKKEYS_IDP_DOMAIN", ""),
 		LinkkeysIDPURL:               getEnv("TINKU_LINKKEYS_IDP_URL", ""),
-		LinkkeysPKIURL:               getEnv("TINKU_LINKKEYS_PKI_URL", ""),
+		LinkkeysRPTCPAddress:         getEnv("TINKU_LINKKEYS_RP_TCP_ADDRESS", ""),
+		LinkkeysRPFingerprints:       getEnvList("TINKU_LINKKEYS_RP_FINGERPRINTS", nil),
 		LinkkeysPKIAPIKey:            getEnv("TINKU_LINKKEYS_PKI_API_KEY", ""),
-		LinkkeysPKIAllowInvalidCerts: getEnvBool("TINKU_LINKKEYS_PKI_ALLOW_INVALID_CERTS", false),
+		LinkkeysApplicationID:        getEnv("TINKU_LINKKEYS_APPLICATION_ID", ""),
+		LinkkeysLegacyPKIURL:         getEnv("TINKU_LINKKEYS_PKI_URL", ""),
 
 		AppCallbackURL:       getEnv("TINKU_APP_CALLBACK_URL", ""),
 		PostLoginRedirectURL: getEnv("TINKU_POST_LOGIN_REDIRECT_URL", "/"),
@@ -288,8 +300,14 @@ func (c *Config) applyFlags(flags map[string]string) {
 			c.LinkkeysIDPDomain = value
 		case "linkkeys-idp-url":
 			c.LinkkeysIDPURL = value
+		case "linkkeys-rp-tcp-address":
+			c.LinkkeysRPTCPAddress = value
+		case "linkkeys-rp-fingerprints":
+			c.LinkkeysRPFingerprints = splitList(value, c.LinkkeysRPFingerprints)
+		case "linkkeys-application-id":
+			c.LinkkeysApplicationID = value
 		case "linkkeys-pki-url":
-			c.LinkkeysPKIURL = value
+			c.LinkkeysLegacyPKIURL = value
 		case "linkkeys-pki-api-key":
 			c.LinkkeysPKIAPIKey = value
 		case "app-callback-url":
@@ -377,11 +395,22 @@ func (c Config) LinkkeysRPDomain() string {
 	return c.LinkkeysIDPDomain
 }
 
-// LinkkeysConfigured reports whether the relying-party sidecar can be
+// LinkkeysConfigured reports whether the relying-party server can be
 // reached. When it is false, begin-login and the callback refuse; dev-auth
 // (if its own gates pass) is then the only way to get a session.
 func (c Config) LinkkeysConfigured() bool {
-	return c.LinkkeysPKIURL != "" && c.LinkkeysIDPDomain != "" && c.LinkkeysIDPURL != "" && c.AppCallbackURL != ""
+	return c.LinkkeysRPTCPAddress != "" && len(c.LinkkeysRPFingerprints) > 0 && c.LinkkeysPKIAPIKey != "" &&
+		c.LinkkeysIDPDomain != "" && c.LinkkeysIDPURL != "" && c.AppCallbackURL != ""
+}
+
+// LinkkeysAppID is the application ID that login sends: the explicit
+// setting, else the federation application ID. One ID for both keeps
+// consent and application keys under the same application principal.
+func (c Config) LinkkeysAppID() string {
+	if c.LinkkeysApplicationID != "" {
+		return c.LinkkeysApplicationID
+	}
+	return c.FederationApplicationID
 }
 
 // DevAuthAllowed is the environment half of the dev-auth gate: the flag

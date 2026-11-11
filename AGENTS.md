@@ -128,6 +128,25 @@ differences that the dialects force:
 Ids are ULIDs that `store.NewID` makes in Go. The database does not make
 them, because only one of the two dialects can.
 
+## Login
+
+`api/internal/linkkeys/client.go` calls the RP server's `Rp` service over
+CSIL-RPC on pinned TLS, through the regular-rp Go SDK (pinned by commit; the
+SDK module has no tag of its own). There are no `/v1alpha/*.json` routes.
+
+- Every `sign-request` names the application (`LinkkeysAppID`, default the
+  federation application ID `tinku`) and sends `linkkeys.ClaimRequest`.
+  Linkkeys 0.16.7+ keeps consent for each application, so a change to the
+  ID makes every person consent again.
+- `handle` is a REQUIRED claim. Silent consent asks again only for a new
+  required claim, so a claim tinku depends on must be required.
+  `CompleteLogin` reads the claims from `userinfo-fetch` and refuses a login
+  with no handle. Never fall back to the assertion's user ID: it is opaque.
+- `CompleteLogin` checks the domain, the audience, the nonce and the times.
+  `verify-assertion` checks only the signature.
+- `api/internal/server/login_test.go` pins the wire payload with a fake RP
+  at the SDK transport seam.
+
 ## Federation
 
 Off unless switched on, and off in every test that does not turn it on. The
@@ -223,6 +242,30 @@ content is what happens between two of them.
 
 ## The web client
 
+The client is Zest web components (`@catalystcommunity/*`, pinned exact
+versions) with no application framework. Do not add one. SolidJS was
+removed.
+
+- Each page and each stateful part is a custom element that extends
+  `TinkuElement` (`webapp/src/ui/element.ts`, a Zest `BaseComponent` in the
+  light DOM). `build()` makes the elements one time, `update()` changes the
+  parts that changed, `connected()` adds subscriptions with `own` and
+  `listen`. `static watches` lists the store collections it reads.
+- Make every form control in `build()`, never in `update()`. A control made
+  again loses the text and the focus. Make a list again only when its data
+  object changes.
+- `Resource<T>` replaces a fetch-in-render. It drops a response that is
+  older than the newest request.
+- App state is one `BasicDataService` (`webapp/src/state/store.ts`): the
+  session (`lib/session.ts`), the route (`app/router.ts`, Zest
+  `SimpleRouter`), and the locale (`i18n/index.ts`). Links are plain
+  `<a href>`; `routeLinks()` routes the click.
+- A throw in `build()` or `update()` sends `tinku-crash`. The shell shows
+  the crash panel inside the main landmark.
+- After an `await`, call `this.isActive()` before you change the element.
+  Do not name a member `render`, `title`, `remove`, `hidden`, or any other
+  `HTMLElement` member.
+
 Three rules. The first two have tests.
 
 **No component holds a string a person reads.** Every message is a key in
@@ -232,15 +275,18 @@ order changes between languages. A message with a value in it has a
 `plural()` picks with `Intl.PluralRules`.
 
 Dates, times and numbers go through the formatters in
-`webapp/src/i18n/index.tsx`. An event shows in **its own** timezone, never
+`webapp/src/i18n/index.ts`. An event shows in **its own** timezone, never
 in the reader's.
 
 A recurrence rule is described on the client, from the structured rule
 (`webapp/src/i18n/recurrence.ts`). The server never sends a sentence.
 
-**Accessibility is behaviour, not style.** Use `components/Field.tsx` for a
-form control: it ties the label, the hint and the error together. Use
-`components/Alert.tsx` for a failure. Give each button in a list an
+**Accessibility is behaviour, not style.** Use the builders in
+`components/Field.ts` for a form control (`textField`, `textArea`,
+`selectField`, `numberField`, `checkField`, `dateTimeField`, `button`): they
+tie the label, the hint and the error together, and put "(required)" in the
+label as one catalog message. Use `errorAlert()` from `components/Alert.ts`
+for a failure. Give each button in a list an
 `aria-label` that says which row it acts on. Colour must never be the only
 carrier of meaning.
 
@@ -249,6 +295,13 @@ defines the palette as custom properties on bare `:root`; the dark theme
 redefines the properties and nothing else. The palette is the marketing
 site's (`website/site-src/content/extra_files/styles.css`) — change one and
 change the other. Never write a colour in a component.
+
+The Zest controls draw from the `--zest-*` tokens, which `index.css` sets
+from the palette on bare `:root`. Do not style a native `input`, `select`
+or `button` in the sheet: the rule also reaches the native element inside
+each light DOM control and wins over the control. A `push-button` variant
+gives the role: `primary` (accent fill), `default`, `danger`, `flat`; class
+`compact` for a row button.
 
 `--accent` is a fill and `--accent-text` is text. They differ in the dark
 theme because a fill needs 3:1 and body text needs 4.5:1, and `#e0445f`

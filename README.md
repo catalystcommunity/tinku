@@ -6,7 +6,7 @@ linkkeys, starts an **organization** or a **gathering**, and schedules
 again.
 
 Tinku also shows the local development flow these repositories use for a Go
-API with a SolidJS client:
+API with a Zest web-components client:
 
 - A **CSIL** schema is the contract. All API code comes from it.
 - The API speaks **CSIL-RPC** (CBOR envelopes over `POST /csil/v1/rpc`).
@@ -221,7 +221,7 @@ development sign-in carries no credential.
 | `csil/` | The CSIL schema. This is the contract. |
 | `coredb/` | The goose migrations, for both dialects. A Go module. |
 | `api/` | The Go API. A Go module. |
-| `webapp/` | The SolidJS client. |
+| `webapp/` | The Zest web-components client. |
 | `clients/` | Generated standalone clients for other applications. |
 | `version/` | The version this repository releases. |
 | `website/` | The marketing site. PySocha builds it; Caddy serves it. |
@@ -263,7 +263,7 @@ development sign-in carries no credential.
 ## How a request moves
 
 ```
-SolidJS component
+Zest custom element
   -> generated client        webapp/src/gen/client.async.gen.ts
   -> HTTP transport          webapp/src/lib/httpTransport.ts
   ~~ POST /csil/v1/rpc, one CBOR envelope ~~
@@ -359,11 +359,15 @@ The full flow uses a linkkeys relying party:
 
 1. The client calls `auth.begin-login` with a domain.
 2. The API makes a nonce. The relying party signs a request that holds it.
+   The request names the application (`tinku`) and asks for claims:
+   `handle` is required and `display_name` is optional.
 3. The API gives the identity-provider URL to the client.
 4. The identity provider sends the browser to `GET /auth/callback`.
-5. The API decrypts the token and verifies the assertion, the audience, and
-   the nonce.
-6. The API makes a user record and a session. It sets the session cookie.
+5. The API decrypts the token and verifies the assertion, the domain, the
+   audience, the nonce, and the times.
+6. The API gets the released claims with `userinfo-fetch`. A login without
+   a `handle` fails.
+7. The API makes a user record and a session. It sets the session cookie.
 
 Step 4 is not a CSIL operation. An identity provider can only send a
 browser to a plain GET URL.
@@ -376,13 +380,21 @@ Set these to make the flow work:
 ```sh
 TINKU_LINKKEYS_IDP_DOMAIN=idp.example.com
 TINKU_LINKKEYS_IDP_URL=https://idp.example.com
-TINKU_LINKKEYS_PKI_URL=http://linkkeys-rp:8080
+TINKU_LINKKEYS_RP_TCP_ADDRESS=linkkeys-rp:4987
+TINKU_LINKKEYS_RP_FINGERPRINTS=<sha256 hex of the RP TLS key>
+TINKU_LINKKEYS_PKI_API_KEY=<the RP API key>
 TINKU_APP_CALLBACK_URL=https://tinku.example.com/auth/callback
 TINKU_SESSION_NONCE_SECRET=<a fixed random value>
 ```
 
 Without them, `auth.begin-login` refuses and the reads still work. Use
 `--dev-auth` for local work.
+
+Linkkeys v0.16.7 and later keep consent for each application. The API
+sends `TINKU_LINKKEYS_APPLICATION_ID`, else `TINKU_FEDERATION_APPLICATION_ID`
+(`tinku`). Do not change it: each person must then consent again. Give the
+RP API-key account a display name that people know. The consent screen
+shows it.
 
 `TINKU_SESSION_NONCE_SECRET` must be the same on every replica. The API
 makes a random value at start if you do not set one. Logins then fail after
@@ -439,12 +451,13 @@ inventing a security guarantee.
 
 ## The web client
 
-The client is a SolidJS single-page app. Two rules shape it.
+The client is a single-page app made of Zest web components, with no
+application framework. Two rules shape it.
 
 **Every string a person reads is in a catalog.** No component holds English.
 `webapp/src/i18n/en-US.ts` holds every message; a component names a key.
 To add a language, add a catalog and one entry to `catalogs` in
-`webapp/src/i18n/index.tsx`. No component changes.
+`webapp/src/i18n/index.ts`. No component changes.
 
 The catalog obeys four rules, and `i18n.test.ts` holds two of them:
 
@@ -463,11 +476,11 @@ ordinal, the weekday and the period in its own order.
 
 | Behaviour | Where |
 | --- | --- |
-| A skip link, first in the tab order. | `App.tsx` |
-| Focus moves to the main landmark on each route change. | `App.tsx` |
-| `aria-current="page"` on the current navigation link. | `App.tsx` |
-| A label, a hint and an error are tied to each control with `aria-describedby`. | `components/Field.tsx` |
-| An error is announced with `role="alert"`. A status is announced politely. | `components/Alert.tsx` |
+| A skip link, first in the tab order. | `App.ts` |
+| Focus moves to the main landmark on each route change. | `App.ts` |
+| `aria-current="page"` on the current navigation link. | `App.ts` |
+| A label, a hint and an error are tied to each control. | `components/Field.ts` |
+| An error is announced with `role="alert"`. A status is announced politely. | `components/Alert.ts` |
 | A visible focus ring that no rule removes. | `index.css` |
 | Colour is never the only carrier of meaning. | everywhere |
 

@@ -16,7 +16,8 @@ Usage:
                   [--skip-migrate] [--cors-origins=LIST] [--dev-auth]
                   [--session-cookie-insecure]
                   [--linkkeys-domain=DOMAIN] [--linkkeys-idp-domain=DOMAIN]
-                  [--linkkeys-idp-url=URL] [--linkkeys-pki-url=URL]
+                  [--linkkeys-idp-url=URL] [--linkkeys-rp-tcp-address=HOST:PORT]
+                  [--linkkeys-rp-fingerprints=LIST] [--linkkeys-application-id=ID]
                   [--linkkeys-pki-api-key=KEY] [--app-callback-url=URL]
                   [--post-login-redirect-url=URL]
   tinku migrate [--db-uri=URI] [up|down|status]
@@ -68,21 +69,30 @@ Options:
                            for a plain-HTTP local run
                            [env: TINKU_SESSION_COOKIE_SECURE]
 
-Linkkeys (all four of the first organization are needed before login works):
+Linkkeys (the first six are needed before login works):
   --linkkeys-idp-domain=DOMAIN  Identity domain whose assertions we trust
                                 [env: TINKU_LINKKEYS_IDP_DOMAIN]
   --linkkeys-idp-url=URL        Base URL of the IDP authorize page
                                 [env: TINKU_LINKKEYS_IDP_URL]
-  --linkkeys-pki-url=URL        Relying-party sidecar base URL
-                                [env: TINKU_LINKKEYS_PKI_URL]
+  --linkkeys-rp-tcp-address=HOST:PORT
+                                The relying-party server's CSIL-RPC endpoint
+                                [env: TINKU_LINKKEYS_RP_TCP_ADDRESS]
+  --linkkeys-rp-fingerprints=LIST
+                                Comma-separated SHA-256 hex pins of the RP
+                                server's TLS key
+                                [env: TINKU_LINKKEYS_RP_FINGERPRINTS]
+  --linkkeys-pki-api-key=KEY    Relying-party API key
+                                [env: TINKU_LINKKEYS_PKI_API_KEY]
   --app-callback-url=URL        Absolute URL of this API's /auth/callback,
                                 which the signed request is bound to
                                 [env: TINKU_APP_CALLBACK_URL]
   --linkkeys-domain=DOMAIN      Our own relying-party identity, the audience
                                 on an assertion. Falls back to the IDP domain
                                 [env: TINKU_LINKKEYS_DOMAIN]
-  --linkkeys-pki-api-key=KEY    Relying-party API key
-                                [env: TINKU_LINKKEYS_PKI_API_KEY]
+  --linkkeys-application-id=ID  The application that sign-in names. Consent is
+                                kept for each application, so keep it stable
+                                [default: the federation application ID, tinku]
+                                [env: TINKU_LINKKEYS_APPLICATION_ID]
   --post-login-redirect-url=URL Where /auth/callback sends the browser
                                 [default: /] [env: TINKU_POST_LOGIN_REDIRECT_URL]
 
@@ -107,7 +117,7 @@ Linkkeys (all four of the first organization are needed before login works):
 
 Environment-only settings (no flag) are declared in
 api/internal/config/config.go: TINKU_SESSION_TTL,
-TINKU_SESSION_NONCE_SECRET, TINKU_LINKKEYS_PKI_ALLOW_INVALID_CERTS,
+TINKU_SESSION_NONCE_SECRET,
 TINKU_FEDERATION_FAILURE_WINDOW, and TINKU_FEDERATION_POLL_INTERVAL.
 `
 

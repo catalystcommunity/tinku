@@ -65,15 +65,34 @@ node that starts as `localhost` keeps `localhost` in every address it made.
 | --- | --- | --- |
 | `TINKU_LINKKEYS_IDP_DOMAIN` | `--linkkeys-idp-domain` | The identity domain that tinku trusts. |
 | `TINKU_LINKKEYS_IDP_URL` | `--linkkeys-idp-url` | The base URL of the authorize page. |
-| `TINKU_LINKKEYS_PKI_URL` | `--linkkeys-pki-url` | The base URL of the relying-party sidecar. |
+| `TINKU_LINKKEYS_RP_TCP_ADDRESS` | `--linkkeys-rp-tcp-address` | The CSIL-RPC address (`host:port`) of the relying-party server. |
+| `TINKU_LINKKEYS_RP_FINGERPRINTS` | `--linkkeys-rp-fingerprints` | Comma-separated SHA-256 hex pins of the relying-party TLS key. |
+| `TINKU_LINKKEYS_PKI_API_KEY` | `--linkkeys-pki-api-key` | The relying-party API key. |
 | `TINKU_APP_CALLBACK_URL` | `--app-callback-url` | The absolute URL of `GET /auth/callback`. |
 | `TINKU_LINKKEYS_DOMAIN` | `--linkkeys-domain` | The relying-party identity. It is the audience on an assertion. |
-| `TINKU_LINKKEYS_PKI_API_KEY` | `--linkkeys-pki-api-key` | The relying-party API key. |
-| `TINKU_LINKKEYS_PKI_ALLOW_INVALID_CERTS` | none | Skips TLS verification. Use only in a dev cluster. |
+| `TINKU_LINKKEYS_APPLICATION_ID` | `--linkkeys-application-id` | The application that sign-in names. The default is `TINKU_FEDERATION_APPLICATION_ID` (`tinku`). |
 | `TINKU_POST_LOGIN_REDIRECT_URL` | `--post-login-redirect-url` | Where the callback sends the browser. |
 
-Login works only when the first four are set. Without them,
+Login works only when the first six are set. Without them,
 `auth.begin-login` refuses and the reads continue to work.
+
+The API calls the relying party's `Rp` service over CSIL-RPC on TLS, pinned
+to the fingerprints. `TINKU_LINKKEYS_PKI_URL` and
+`TINKU_LINKKEYS_PKI_ALLOW_INVALID_CERTS` are removed: the JSON routes that
+they pointed at do not exist on a linkkeys relying party. The API writes a
+warning if `TINKU_LINKKEYS_PKI_URL` is set.
+
+Linkkeys v0.16.7 keeps consent for each (person, relying-party domain,
+application). Every sign-request names the application and sends tinku's
+claim request: `handle` is required and `display_name` is optional. The
+shared relying parties have no claim configuration, so a request that
+sends no claims gets no claims. Thus:
+
+- After the upgrade, each person consents one more time.
+- A change to the application ID makes each person consent again.
+- The consent screen shows the display name of the API-key account. Give it
+  a name that people know.
+- The person's identity domain must run linkkeys v0.16.7 or later.
 
 ### Development login
 
