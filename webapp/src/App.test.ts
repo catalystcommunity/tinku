@@ -1,11 +1,10 @@
 // UI tests that drive the app through a fake TRANSPORT rather than a fake
-// API client: everything below App — the generated clients, the CBOR codec,
-// the envelope encoding — is the real code, so a schema change that breaks
-// the SPA breaks this test too.
-import { render, screen, waitFor } from "@solidjs/testing-library";
+// API client: everything below the shell — the generated clients, the CBOR
+// codec, the envelope encoding — is the real code, so a schema change that
+// breaks the SPA breaks this test too.
+import { screen, waitFor } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
-import App from "./App";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AsyncServiceTransport } from "~/gen/client.async.gen";
 import {
   toAttendeeListCbor,
@@ -15,12 +14,14 @@ import {
   toEventSeriesListCbor,
   toGatheringCbor,
   toGatheringListCbor,
+  toOrganizationListCbor,
   toServiceErrorCbor,
 } from "~/gen/codec.gen";
 import type { Event, Gathering, ViewerContext } from "~/gen/types.gen";
-import { I18nProvider } from "~/i18n";
 import { TinkuServiceError } from "~/lib/errors";
-import { SessionProvider } from "~/lib/session";
+import { resetSession, useSession } from "~/lib/session";
+import { routeLinks, startRouter } from "~/app/router";
+import "./App";
 
 vi.mock("~/lib/api", async () => {
   const { AsyncApiClient } = await import("~/gen/client.async.gen");
@@ -122,7 +123,7 @@ function fakeTransport(): AsyncServiceTransport {
         case "AuthService/whoami":
           // Nobody is logged in. The transport signals a declared error arm
           // the way the real one does — by throwing the same type, so
-          // session.tsx's "unauthenticated is expected" branch is the one
+          // session.ts's "unauthenticated is expected" branch is the one
           // that runs.
           throw new TinkuServiceError({ code: 2, message: "no active session" });
         case "GatheringService/list-gatherings":
@@ -139,6 +140,8 @@ function fakeTransport(): AsyncServiceTransport {
           return toAttendeeListCbor({ eventId: started.id, attendees: [], total: 0 });
         case "EventService/list-event-roles":
           return toEventRoleListCbor({ roles: [] });
+        case "OrganizationService/list-organizations":
+          return toOrganizationListCbor({ organizations: [], total: 0 });
         default:
           return toServiceErrorCbor({ code: 1, message: `unexpected call ${service}/${op}` });
       }
@@ -146,14 +149,18 @@ function fakeTransport(): AsyncServiceTransport {
   };
 }
 
+let stopLinks: (() => void) | undefined;
+
+// The session answer is app state; a test must not inherit the last one.
+afterEach(() => resetSession());
+
+/** Boot the app as index.ts does, into the test document. */
 function renderApp() {
-  return render(() => (
-    <I18nProvider locale="en-US">
-      <SessionProvider>
-        <App />
-      </SessionProvider>
-    </I18nProvider>
-  ));
+  stopLinks?.();
+  startRouter();
+  stopLinks = routeLinks();
+  void useSession().refresh();
+  document.body.append(document.createElement("tinku-app"));
 }
 
 describe("the app shell", () => {
@@ -177,6 +184,9 @@ describe("the app shell", () => {
       expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument(),
     );
     expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+    // The disclosure state is on the button that takes the focus, not on
+    // the push-button host, which a screen reader does not read.
+    expect(screen.getByRole("button", { name: "Sign in" })).toHaveAttribute("aria-expanded", "false");
   });
 });
 

@@ -99,6 +99,36 @@
   }
 }
 
+/*
+ * The Zest tokens, from the palette. The tokens follow the properties
+ * above, so the dark theme changes them with no second list. Set on bare
+ * :root, never a family or widget token: a family token set to var(...)
+ * on :root resolves there, and a change on a parent no longer reaches it.
+ */
+:root {
+  --zest-font-family: inherit;
+  --zest-color-window: var(--surface);
+  --zest-color-window-text: var(--ink);
+  --zest-color-face: var(--surface);
+  --zest-color-face-text: var(--accent-text);
+  --zest-color-field: var(--bg);
+  --zest-color-field-text: var(--ink);
+  --zest-color-highlight: var(--accent);
+  --zest-color-highlight-text: var(--accent-ink);
+  --zest-color-border: var(--line-strong);
+  --zest-color-secondary-text: var(--muted);
+  --zest-color-disabled-text: var(--muted);
+  --zest-color-invalid: var(--danger);
+  --zest-color-focus: var(--focus);
+  --zest-focus-width: 3px;
+  --zest-control-radius: var(--radius-sm);
+}
+
+/* A class `display` rule must not beat the `hidden` attribute. */
+[hidden] {
+  display: none !important;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -261,6 +291,14 @@ body {
 
 .session {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.session-in,
+.session-out {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -495,57 +533,36 @@ legend {
   grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
 }
 
-input,
-textarea,
-select {
-  font: inherit;
-  color: inherit;
-  background: var(--bg);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  padding: 0.5rem 0.625rem;
+/*
+ * The controls are Zest controls (text-field, text-area, combo-box,
+ * spin-box, check-box, push-button, date-time-picker). They draw
+ * themselves from the --zest-* tokens, which the palette sets below, so
+ * this sheet styles no native input, select or button: a page rule for
+ * `input` or `button` also reaches the native element INSIDE each light
+ * DOM control and wins over the control's own rules.
+ */
+.field-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* A control in a field fills the field. */
+.field > text-field,
+.field > text-area,
+.field > combo-box,
+.field > spin-box,
+.field > date-time-picker,
+form > text-field,
+form > text-area,
+.field-row > text-field,
+.field-row > text-area {
+  display: block;
   width: 100%;
   min-width: 0;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-input:hover,
-textarea:hover,
-select:hover {
-  border-color: var(--accent);
-}
-
-textarea {
-  min-height: 6rem;
+text-area textarea {
   resize: vertical;
-}
-
-::placeholder {
-  color: var(--muted);
-  opacity: 1;
-}
-
-/*
- * A checkbox is not a text field and must not inherit `width: 100%`, which
- * stretched it across the form and pushed its label to the far edge.
- */
-input[type="checkbox"],
-input[type="radio"] {
-  width: auto;
-  min-width: 0;
-  flex: none;
-  accent-color: var(--accent);
-  block-size: 1.05rem;
-  inline-size: 1.05rem;
-  margin: 0;
-}
-
-/* An invalid field is marked by a border AND by the error text below it,
-   never by colour alone. */
-input[aria-invalid="true"],
-textarea[aria-invalid="true"],
-select[aria-invalid="true"] {
-  border-color: var(--danger);
 }
 
 /*
@@ -591,78 +608,19 @@ select[aria-invalid="true"] {
 
 /* ---- Buttons ---- */
 
-button {
-  font: inherit;
-  font-weight: 600;
-  padding: 0.5rem 1.1rem;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--accent-ink);
-  cursor: pointer;
-  align-self: flex-start;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
-}
-
-button:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-}
-
 /*
- * A disabled button reads as inert rather than as a faded accent: a washed
- * out brand colour looks like a rendering fault, and it also drops the text
- * contrast below the floor.
+ * push-button variants carry the roles of the old classes: `primary` is
+ * the accent fill, `default` the quieter of two, `danger` a deletion and
+ * `flat` a link-like action. The palette reaches them through the tokens.
  */
-button:disabled {
-  background: var(--bg-sunken);
-  border-color: var(--line);
-  color: var(--muted);
-  cursor: not-allowed;
-}
-
-/* The quieter of two buttons in the same place. */
-button.secondary {
-  background: transparent;
-  color: var(--accent-text);
-  border-color: var(--line-strong);
-}
-
-button.secondary:hover:not(:disabled) {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent-text);
-}
-
-button.danger {
-  background: transparent;
-  color: var(--danger);
-  border-color: var(--danger);
-}
-
-button.danger:hover:not(:disabled) {
-  background: var(--danger-soft);
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-button.link-button {
-  background: none;
-  border: none;
-  color: var(--accent-text);
-  text-decoration: underline;
-  padding: 0 0.25rem;
-  font-weight: 400;
-}
-
-button.link-button:hover:not(:disabled) {
-  background: none;
-  color: var(--accent-hover);
+push-button {
+  align-self: flex-start;
+  font-weight: 600;
 }
 
 /* A small button for a row in a list. */
-button.compact {
-  padding: 0.25rem 0.6rem;
+push-button.compact {
+  --zest-control-height: 2em;
   font-size: 0.85rem;
 }
 
@@ -709,12 +667,21 @@ button.compact {
   flex-wrap: wrap;
 }
 
+/*
+ * A tab is a native button, not a push-button: role="tab" and
+ * aria-selected must be on the element that takes the focus. These rules
+ * are scoped to `.tabs`, so they reach no button inside a Zest control.
+ */
 .tabs button {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
   background: transparent;
-  border-color: transparent;
+  border: 1px solid transparent;
   color: var(--muted);
   border-radius: 999px;
   padding: 0.4rem 1rem;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .tabs button:hover:not(:disabled) {
@@ -755,6 +722,14 @@ button.compact {
   background: var(--ok-soft);
   border-color: var(--ok);
   color: var(--ink);
+}
+
+/* An empty status region stays in the accessibility tree, so that the
+   text it gets later is read, but takes no room. */
+.alert-status:empty {
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 /* Nothing here yet, and why. */
@@ -1058,70 +1033,9 @@ button.compact {
   white-space: nowrap;
 }
 
-/* ---- Typeahead ---- */
-
+/* The organization picker is an editable combo-box. */
 .picker {
   position: relative;
-}
-
-.picker__row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.picker__list {
-  position: absolute;
-  z-index: 5;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin: 0.25rem 0 0;
-  padding: 0.25rem;
-  list-style: none;
-  max-height: 16rem;
-  overflow-y: auto;
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
-}
-
-.picker__option {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.1rem;
-  width: 100%;
-  text-align: left;
-  padding: 0.4rem 0.6rem;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  font-weight: 400;
-}
-
-.picker__option:hover:not(:disabled) {
-  background: var(--accent-soft);
-  color: var(--ink);
-}
-
-.picker__name {
-  font-weight: 600;
-}
-
-/* The domain is always shown beside a name: two instances can hold the same
-   name, and a directory shows both at once. */
-.picker__domain {
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.picker__empty {
-  padding: 0.5rem 0.6rem;
-  color: var(--muted);
-  font-size: 0.9rem;
 }
 
 /* A secret shown once. Monospace and breakable, because it is copied by

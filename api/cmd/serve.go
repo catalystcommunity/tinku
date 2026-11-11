@@ -105,7 +105,10 @@ func Serve(flags map[string]string) error {
 
 	// ---- 4. services, readiness, API listener ----
 	sink := server.NewSessionSink()
-	pki := buildPKIClient(cfg)
+	pki, err := buildPKIClient(cfg)
+	if err != nil {
+		return fmt.Errorf("linkkeys: %w", err)
+	}
 	// One dispatcher, shared by every service that changes something. It
 	// only ever writes rows; the sender below is what opens a socket, so a
 	// request that changed something never waits on a receiver.
@@ -464,14 +467,32 @@ func sweepExpiredSessions(ctx context.Context, st store.Store) {
 // buildPKIClient constructs the linkkeys relying-party client, or returns
 // nil when linkkeys is not fully configured. Nil is a supported state, not a
 // failure: begin-login and the callback then refuse with a clear message
-// while everything else keeps working.
-func buildPKIClient(cfg config.Config) csilservices.PKIClient {
-	if !cfg.LinkkeysConfigured() {
-		return nil
+// while everything else keeps working. A bad application ID is a failure:
+// the RP would refuse every sign-in.
+func buildPKIClient(cfg config.Config) (csilservices.PKIClient, error) {
+	if cfg.LinkkeysLegacyPKIURL != "" {
+		log.Warn("TINKU_LINKKEYS_PKI_URL is ignored: the /v1alpha JSON routes do not exist on a linkkeys RP. " +
+			"Set TINKU_LINKKEYS_RP_TCP_ADDRESS and TINKU_LINKKEYS_RP_FINGERPRINTS.")
 	}
-	log.WithFields(log.Fields{"idp": cfg.LinkkeysIDPDomain, "rp": cfg.LinkkeysRPDomain()}).
-		Info("linkkeys relying party configured (http transport)")
-	return linkkeys.New(cfg.LinkkeysPKIURL, cfg.LinkkeysPKIAPIKey, cfg.LinkkeysPKIAllowInvalidCerts)
+	if !cfg.LinkkeysConfigured() {
+		return nil, nil
+	}
+	client, err := linkkeys.New(linkkeys.Config{
+		TCPAddress:    cfg.LinkkeysRPTCPAddress,
+		Fingerprints:  cfg.LinkkeysRPFingerprints,
+		APIKey:        cfg.LinkkeysPKIAPIKey,
+		ApplicationID: cfg.LinkkeysAppID(),
+		APIBase:       cfg.LinkkeysIDPURL,
+	})
+	if err != nil {
+		return nil, err
+	}
+	log.WithFields(log.Fields{
+		"idp":         cfg.LinkkeysIDPDomain,
+		"rp":          cfg.LinkkeysRPDomain(),
+		"application": cfg.LinkkeysAppID(),
+	}).Info("linkkeys relying party configured (CSIL-RPC over pinned TLS)")
+	return client, nil
 }
 
 // redact strips the password from a database URI so it can be logged. A URI

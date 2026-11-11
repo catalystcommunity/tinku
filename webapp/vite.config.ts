@@ -1,9 +1,7 @@
 import { defineConfig } from 'vite'
-import solid from 'vite-plugin-solid'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
-  plugins: [solid()],
   resolve: {
     alias: {
       // `~` is the src root, matching tsconfig.app.json's path mapping and
@@ -11,6 +9,12 @@ export default defineConfig({
       // deep in pages/ needs a ../../ import of the generated client.
       '~': fileURLToPath(new URL('./src', import.meta.url)),
     },
+  },
+  build: {
+    // Keep light-dark() in the Zest tokens. An older CSS target rewrites it
+    // to a page-wide media query, and color-scheme on one part of the page
+    // then does nothing.
+    cssTarget: ['chrome123', 'firefox120', 'safari17.5'],
   },
   server: {
     // 8080 is the UI, here and in the compose stack, so the address a person

@@ -39,12 +39,13 @@ services:
   # Uncomment once the TINKU_LINKKEYS_* settings below are filled in for a
   # local relying party. Until then dev auth is how you log in.
   # linkkeys-rp:
-  #   image: containers.catalystsquad.com/public/linkkeys:latest
+  #   image: containers.catalystsquad.com/public/linkkeys:0.16.7
   #   container_name: tinku-linkkeys-rp-dev
   #   environment:
   #     ENABLE_RP_ENDPOINTS: "true"
-  #   ports:
-  #     - "8082:8080"
+  #   # tinku-api calls the RP over CSIL-RPC on TLS
+  #   # (TINKU_LINKKEYS_RP_TCP_ADDRESS, TINKU_LINKKEYS_RP_FINGERPRINTS).
+  #   # Use linkkeys 0.16.7 or later: sign-in names the application.
   #   networks:
   #     - tinku
 
@@ -83,7 +84,7 @@ services:
     networks:
       - tinku
 
-  # The SolidJS SPA behind nginx-unprivileged.
+  # The Zest SPA behind nginx-unprivileged.
   webapp:
     build:
       context: .
