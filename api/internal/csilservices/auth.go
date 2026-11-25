@@ -249,21 +249,14 @@ func HashToken(token string) string {
 // checks the expiry, but tinku does not depend on that.
 func assertionCurrent(a *linkkeys.Assertion, now time.Time) error {
 	const skew = 2 * time.Minute
-	expires, err := time.Parse(time.RFC3339, a.ExpiresAt)
-	if err != nil {
-		return fmt.Errorf("expires_at %q: %w", a.ExpiresAt, err)
+	if a.ExpiresAt.IsZero() {
+		return fmt.Errorf("no expires_at")
 	}
-	if now.After(expires.Add(skew)) {
-		return fmt.Errorf("expired at %s", expires)
+	if now.After(a.ExpiresAt.Add(skew)) {
+		return fmt.Errorf("expired at %s", a.ExpiresAt)
 	}
-	if a.IssuedAt != "" {
-		issued, err := time.Parse(time.RFC3339, a.IssuedAt)
-		if err != nil {
-			return fmt.Errorf("issued_at %q: %w", a.IssuedAt, err)
-		}
-		if issued.After(now.Add(skew)) {
-			return fmt.Errorf("issued in the future at %s", issued)
-		}
+	if !a.IssuedAt.IsZero() && a.IssuedAt.After(now.Add(skew)) {
+		return fmt.Errorf("issued in the future at %s", a.IssuedAt)
 	}
 	return nil
 }

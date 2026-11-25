@@ -5,22 +5,13 @@ package tinkuclient
 
 import (
 	"context"
-	"fmt"
 )
 
-// ClientError is returned by a generated client call: a structured error the
-// service returned (Code/Message), or a transport-level failure (Err).
-type ClientError struct {
-	Code    int64
-	Message string
-	Err     error
-}
-
-func (e *ClientError) Error() string {
-	if e.Err != nil {
-		return "transport error: " + e.Err.Error()
-	}
-	return fmt.Sprintf("service error %d: %s", e.Code, e.Message)
+// WireReply is a status-zero CSIL-RPC reply: Variant names the declared output arm
+// that Payload encodes. A transport returns it from CallReply.
+type WireReply struct {
+	Variant *string
+	Payload []byte
 }
 
 // Transport is the caller-supplied byte carrier: it performs the call named by
@@ -28,9 +19,12 @@ func (e *ClientError) Error() string {
 // bytes, or an error. Both names are the verbatim CSIL names (service as written,
 // op in kebab-case as written), ready to go on the wire unmodified. The generated
 // client owns (de)serialization via the codec; the carrier only moves bytes, so
-// it can be HTTP, a queue, or an in-process loop.
+// it can be HTTP, a queue, or an in-process loop. CallReply serves operations
+// that declare several reply arms: it also returns the reply variant, so the
+// client can return the success arm or the declared error arm.
 type Transport interface {
 	Call(ctx context.Context, service string, op string, req []byte) ([]byte, error)
+	CallReply(ctx context.Context, service string, op string, req []byte) (WireReply, error)
 }
 
 // AuthClient is a typed client for the AuthService service. The client owns
@@ -45,29 +39,61 @@ func NewAuthClient(transport Transport) *AuthClient {
 
 func (c *AuthClient) BeginLogin(ctx context.Context, req BeginLoginRequest) (BeginLoginResponse, error) {
 	var csilZero BeginLoginResponse
-	csilResp, csilErr := c.transport.Call(ctx, "AuthService", "begin-login", EncodeBeginLoginRequest(req))
+	csilReq, csilErr := EncodeBeginLoginRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "AuthService", "begin-login", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeBeginLoginResponse(csilResp)
+	csilResp, csilErr := ResolveRPCReply("AuthService", "begin-login", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeBeginLoginResponse(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *AuthClient) Logout(ctx context.Context, req Empty) (Empty, error) {
 	var csilZero Empty
-	csilResp, csilErr := c.transport.Call(ctx, "AuthService", "logout", EncodeEmpty(req))
+	csilReq, csilErr := EncodeEmpty(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilResp, csilErr := c.transport.Call(ctx, "AuthService", "logout", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEmpty(csilResp)
+	value, err := DecodeEmpty(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *AuthClient) Whoami(ctx context.Context, req Empty) (UserProfile, error) {
 	var csilZero UserProfile
-	csilResp, csilErr := c.transport.Call(ctx, "AuthService", "whoami", EncodeEmpty(req))
+	csilReq, csilErr := EncodeEmpty(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "AuthService", "whoami", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeUserProfile(csilResp)
+	csilResp, csilErr := ResolveRPCReply("AuthService", "whoami", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeUserProfile(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 // DevAuthClient is a typed client for the DevAuthService service. The client owns
@@ -82,11 +108,23 @@ func NewDevAuthClient(transport Transport) *DevAuthClient {
 
 func (c *DevAuthClient) DevLogin(ctx context.Context, req DevLoginRequest) (UserProfile, error) {
 	var csilZero UserProfile
-	csilResp, csilErr := c.transport.Call(ctx, "DevAuthService", "dev-login", EncodeDevLoginRequest(req))
+	csilReq, csilErr := EncodeDevLoginRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "DevAuthService", "dev-login", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeUserProfile(csilResp)
+	csilResp, csilErr := ResolveRPCReply("DevAuthService", "dev-login", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeUserProfile(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 // GreetingClient is a typed client for the GreetingService service. The client owns
@@ -101,29 +139,61 @@ func NewGreetingClient(transport Transport) *GreetingClient {
 
 func (c *GreetingClient) ListGreetings(ctx context.Context, req Empty) (GreetingList, error) {
 	var csilZero GreetingList
-	csilResp, csilErr := c.transport.Call(ctx, "GreetingService", "list-greetings", EncodeEmpty(req))
+	csilReq, csilErr := EncodeEmpty(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilResp, csilErr := c.transport.Call(ctx, "GreetingService", "list-greetings", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGreetingList(csilResp)
+	value, err := DecodeGreetingList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GreetingClient) GetGreeting(ctx context.Context, req GetGreetingRequest) (Greeting, error) {
 	var csilZero Greeting
-	csilResp, csilErr := c.transport.Call(ctx, "GreetingService", "get-greeting", EncodeGetGreetingRequest(req))
+	csilReq, csilErr := EncodeGetGreetingRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GreetingService", "get-greeting", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGreeting(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GreetingService", "get-greeting", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGreeting(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GreetingClient) CreateGreeting(ctx context.Context, req CreateGreetingRequest) (Greeting, error) {
 	var csilZero Greeting
-	csilResp, csilErr := c.transport.Call(ctx, "GreetingService", "create-greeting", EncodeCreateGreetingRequest(req))
+	csilReq, csilErr := EncodeCreateGreetingRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GreetingService", "create-greeting", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGreeting(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GreetingService", "create-greeting", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGreeting(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 // OrganizationClient is a typed client for the OrganizationService service. The client owns
@@ -138,74 +208,170 @@ func NewOrganizationClient(transport Transport) *OrganizationClient {
 
 func (c *OrganizationClient) ListOrganizations(ctx context.Context, req ListOrganizationsRequest) (OrganizationList, error) {
 	var csilZero OrganizationList
-	csilResp, csilErr := c.transport.Call(ctx, "OrganizationService", "list-organizations", EncodeListOrganizationsRequest(req))
+	csilReq, csilErr := EncodeListOrganizationsRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "OrganizationService", "list-organizations", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeOrganizationList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("OrganizationService", "list-organizations", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeOrganizationList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *OrganizationClient) GetOrganization(ctx context.Context, req GetOrganizationRequest) (Organization, error) {
 	var csilZero Organization
-	csilResp, csilErr := c.transport.Call(ctx, "OrganizationService", "get-organization", EncodeGetOrganizationRequest(req))
+	csilReq, csilErr := EncodeGetOrganizationRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "OrganizationService", "get-organization", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeOrganization(csilResp)
+	csilResp, csilErr := ResolveRPCReply("OrganizationService", "get-organization", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeOrganization(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *OrganizationClient) CreateOrganization(ctx context.Context, req CreateOrganizationRequest) (Organization, error) {
 	var csilZero Organization
-	csilResp, csilErr := c.transport.Call(ctx, "OrganizationService", "create-organization", EncodeCreateOrganizationRequest(req))
+	csilReq, csilErr := EncodeCreateOrganizationRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "OrganizationService", "create-organization", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeOrganization(csilResp)
+	csilResp, csilErr := ResolveRPCReply("OrganizationService", "create-organization", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeOrganization(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *OrganizationClient) UpdateOrganization(ctx context.Context, req UpdateOrganizationRequest) (Organization, error) {
 	var csilZero Organization
-	csilResp, csilErr := c.transport.Call(ctx, "OrganizationService", "update-organization", EncodeUpdateOrganizationRequest(req))
+	csilReq, csilErr := EncodeUpdateOrganizationRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "OrganizationService", "update-organization", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeOrganization(csilResp)
+	csilResp, csilErr := ResolveRPCReply("OrganizationService", "update-organization", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeOrganization(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *OrganizationClient) DeleteOrganization(ctx context.Context, req DeleteOrganizationRequest) (Empty, error) {
 	var csilZero Empty
-	csilResp, csilErr := c.transport.Call(ctx, "OrganizationService", "delete-organization", EncodeDeleteOrganizationRequest(req))
+	csilReq, csilErr := EncodeDeleteOrganizationRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "OrganizationService", "delete-organization", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEmpty(csilResp)
+	csilResp, csilErr := ResolveRPCReply("OrganizationService", "delete-organization", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEmpty(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *OrganizationClient) ListOrganizationMembers(ctx context.Context, req ListOrganizationMembersRequest) (OrganizationMemberList, error) {
 	var csilZero OrganizationMemberList
-	csilResp, csilErr := c.transport.Call(ctx, "OrganizationService", "list-organization-members", EncodeListOrganizationMembersRequest(req))
+	csilReq, csilErr := EncodeListOrganizationMembersRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "OrganizationService", "list-organization-members", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeOrganizationMemberList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("OrganizationService", "list-organization-members", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeOrganizationMemberList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *OrganizationClient) SetOrganizationMember(ctx context.Context, req SetOrganizationMemberRequest) (OrganizationMemberList, error) {
 	var csilZero OrganizationMemberList
-	csilResp, csilErr := c.transport.Call(ctx, "OrganizationService", "set-organization-member", EncodeSetOrganizationMemberRequest(req))
+	csilReq, csilErr := EncodeSetOrganizationMemberRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "OrganizationService", "set-organization-member", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeOrganizationMemberList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("OrganizationService", "set-organization-member", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeOrganizationMemberList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *OrganizationClient) RemoveOrganizationMember(ctx context.Context, req RemoveOrganizationMemberRequest) (OrganizationMemberList, error) {
 	var csilZero OrganizationMemberList
-	csilResp, csilErr := c.transport.Call(ctx, "OrganizationService", "remove-organization-member", EncodeRemoveOrganizationMemberRequest(req))
+	csilReq, csilErr := EncodeRemoveOrganizationMemberRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "OrganizationService", "remove-organization-member", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeOrganizationMemberList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("OrganizationService", "remove-organization-member", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeOrganizationMemberList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 // GatheringClient is a typed client for the GatheringService service. The client owns
@@ -220,137 +386,317 @@ func NewGatheringClient(transport Transport) *GatheringClient {
 
 func (c *GatheringClient) ListGatherings(ctx context.Context, req ListGatheringsRequest) (GatheringList, error) {
 	var csilZero GatheringList
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "list-gatherings", EncodeListGatheringsRequest(req))
+	csilReq, csilErr := EncodeListGatheringsRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "list-gatherings", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGatheringList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "list-gatherings", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGatheringList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) GetGathering(ctx context.Context, req GetGatheringRequest) (Gathering, error) {
 	var csilZero Gathering
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "get-gathering", EncodeGetGatheringRequest(req))
+	csilReq, csilErr := EncodeGetGatheringRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "get-gathering", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGathering(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "get-gathering", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGathering(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) CreateGathering(ctx context.Context, req CreateGatheringRequest) (Gathering, error) {
 	var csilZero Gathering
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "create-gathering", EncodeCreateGatheringRequest(req))
+	csilReq, csilErr := EncodeCreateGatheringRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "create-gathering", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGathering(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "create-gathering", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGathering(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) UpdateGathering(ctx context.Context, req UpdateGatheringRequest) (Gathering, error) {
 	var csilZero Gathering
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "update-gathering", EncodeUpdateGatheringRequest(req))
+	csilReq, csilErr := EncodeUpdateGatheringRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "update-gathering", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGathering(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "update-gathering", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGathering(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) DeleteGathering(ctx context.Context, req DeleteGatheringRequest) (Empty, error) {
 	var csilZero Empty
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "delete-gathering", EncodeDeleteGatheringRequest(req))
+	csilReq, csilErr := EncodeDeleteGatheringRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "delete-gathering", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEmpty(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "delete-gathering", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEmpty(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) ListGatheringMembers(ctx context.Context, req ListGatheringMembersRequest) (GatheringMemberList, error) {
 	var csilZero GatheringMemberList
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "list-gathering-members", EncodeListGatheringMembersRequest(req))
+	csilReq, csilErr := EncodeListGatheringMembersRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "list-gathering-members", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGatheringMemberList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "list-gathering-members", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGatheringMemberList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) JoinGathering(ctx context.Context, req JoinGatheringRequest) (Gathering, error) {
 	var csilZero Gathering
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "join-gathering", EncodeJoinGatheringRequest(req))
+	csilReq, csilErr := EncodeJoinGatheringRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "join-gathering", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGathering(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "join-gathering", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGathering(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) LeaveGathering(ctx context.Context, req LeaveGatheringRequest) (Gathering, error) {
 	var csilZero Gathering
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "leave-gathering", EncodeLeaveGatheringRequest(req))
+	csilReq, csilErr := EncodeLeaveGatheringRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "leave-gathering", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGathering(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "leave-gathering", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGathering(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) AddGatheringOwner(ctx context.Context, req AddGatheringOwnerRequest) (Gathering, error) {
 	var csilZero Gathering
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "add-gathering-owner", EncodeAddGatheringOwnerRequest(req))
+	csilReq, csilErr := EncodeAddGatheringOwnerRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "add-gathering-owner", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGathering(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "add-gathering-owner", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGathering(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) RemoveGatheringOwner(ctx context.Context, req RemoveGatheringOwnerRequest) (Gathering, error) {
 	var csilZero Gathering
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "remove-gathering-owner", EncodeRemoveGatheringOwnerRequest(req))
+	csilReq, csilErr := EncodeRemoveGatheringOwnerRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "remove-gathering-owner", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGathering(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "remove-gathering-owner", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGathering(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) OfferGathering(ctx context.Context, req OfferGatheringRequest) (GatheringOffer, error) {
 	var csilZero GatheringOffer
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "offer-gathering", EncodeOfferGatheringRequest(req))
+	csilReq, csilErr := EncodeOfferGatheringRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "offer-gathering", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGatheringOffer(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "offer-gathering", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGatheringOffer(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) ListGatheringOffers(ctx context.Context, req ListGatheringOffersRequest) (GatheringOfferList, error) {
 	var csilZero GatheringOfferList
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "list-gathering-offers", EncodeListGatheringOffersRequest(req))
+	csilReq, csilErr := EncodeListGatheringOffersRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "list-gathering-offers", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGatheringOfferList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "list-gathering-offers", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGatheringOfferList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) RespondToGatheringOffer(ctx context.Context, req RespondToGatheringOfferRequest) (GatheringOffer, error) {
 	var csilZero GatheringOffer
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "respond-to-gathering-offer", EncodeRespondToGatheringOfferRequest(req))
+	csilReq, csilErr := EncodeRespondToGatheringOfferRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "respond-to-gathering-offer", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGatheringOffer(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "respond-to-gathering-offer", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGatheringOffer(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) WithdrawGatheringOffer(ctx context.Context, req WithdrawGatheringOfferRequest) (Empty, error) {
 	var csilZero Empty
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "withdraw-gathering-offer", EncodeWithdrawGatheringOfferRequest(req))
+	csilReq, csilErr := EncodeWithdrawGatheringOfferRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "withdraw-gathering-offer", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEmpty(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "withdraw-gathering-offer", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEmpty(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *GatheringClient) AdoptGathering(ctx context.Context, req AdoptGatheringRequest) (Gathering, error) {
 	var csilZero Gathering
-	csilResp, csilErr := c.transport.Call(ctx, "GatheringService", "adopt-gathering", EncodeAdoptGatheringRequest(req))
+	csilReq, csilErr := EncodeAdoptGatheringRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "GatheringService", "adopt-gathering", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeGathering(csilResp)
+	csilResp, csilErr := ResolveRPCReply("GatheringService", "adopt-gathering", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeGathering(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 // EventClient is a typed client for the EventService service. The client owns
@@ -365,155 +711,359 @@ func NewEventClient(transport Transport) *EventClient {
 
 func (c *EventClient) ListEvents(ctx context.Context, req ListEventsRequest) (EventList, error) {
 	var csilZero EventList
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "list-events", EncodeListEventsRequest(req))
+	csilReq, csilErr := EncodeListEventsRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "list-events", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEventList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "list-events", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEventList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) GetEvent(ctx context.Context, req GetEventRequest) (Event, error) {
 	var csilZero Event
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "get-event", EncodeGetEventRequest(req))
+	csilReq, csilErr := EncodeGetEventRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "get-event", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEvent(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "get-event", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEvent(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) CreateEvent(ctx context.Context, req CreateEventRequest) (Event, error) {
 	var csilZero Event
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "create-event", EncodeCreateEventRequest(req))
+	csilReq, csilErr := EncodeCreateEventRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "create-event", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEvent(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "create-event", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEvent(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) UpdateEvent(ctx context.Context, req UpdateEventRequest) (Event, error) {
 	var csilZero Event
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "update-event", EncodeUpdateEventRequest(req))
+	csilReq, csilErr := EncodeUpdateEventRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "update-event", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEvent(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "update-event", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEvent(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) DeleteEvent(ctx context.Context, req DeleteEventRequest) (Empty, error) {
 	var csilZero Empty
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "delete-event", EncodeDeleteEventRequest(req))
+	csilReq, csilErr := EncodeDeleteEventRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "delete-event", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEmpty(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "delete-event", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEmpty(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) AttendEvent(ctx context.Context, req AttendEventRequest) (Event, error) {
 	var csilZero Event
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "attend-event", EncodeAttendEventRequest(req))
+	csilReq, csilErr := EncodeAttendEventRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "attend-event", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEvent(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "attend-event", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEvent(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) UnattendEvent(ctx context.Context, req UnattendEventRequest) (Event, error) {
 	var csilZero Event
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "unattend-event", EncodeUnattendEventRequest(req))
+	csilReq, csilErr := EncodeUnattendEventRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "unattend-event", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEvent(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "unattend-event", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEvent(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) ListAttendees(ctx context.Context, req ListAttendeesRequest) (AttendeeList, error) {
 	var csilZero AttendeeList
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "list-attendees", EncodeListAttendeesRequest(req))
+	csilReq, csilErr := EncodeListAttendeesRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "list-attendees", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeAttendeeList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "list-attendees", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeAttendeeList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) ListEventSeries(ctx context.Context, req ListEventSeriesRequest) (EventSeriesList, error) {
 	var csilZero EventSeriesList
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "list-event-series", EncodeListEventSeriesRequest(req))
+	csilReq, csilErr := EncodeListEventSeriesRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "list-event-series", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEventSeriesList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "list-event-series", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEventSeriesList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) GetEventSeries(ctx context.Context, req GetEventSeriesRequest) (EventSeries, error) {
 	var csilZero EventSeries
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "get-event-series", EncodeGetEventSeriesRequest(req))
+	csilReq, csilErr := EncodeGetEventSeriesRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "get-event-series", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEventSeries(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "get-event-series", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEventSeries(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) CreateEventSeries(ctx context.Context, req CreateEventSeriesRequest) (EventSeries, error) {
 	var csilZero EventSeries
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "create-event-series", EncodeCreateEventSeriesRequest(req))
+	csilReq, csilErr := EncodeCreateEventSeriesRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "create-event-series", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEventSeries(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "create-event-series", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEventSeries(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) UpdateEventSeries(ctx context.Context, req UpdateEventSeriesRequest) (EventSeries, error) {
 	var csilZero EventSeries
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "update-event-series", EncodeUpdateEventSeriesRequest(req))
+	csilReq, csilErr := EncodeUpdateEventSeriesRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "update-event-series", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEventSeries(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "update-event-series", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEventSeries(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) DeleteEventSeries(ctx context.Context, req DeleteEventSeriesRequest) (Empty, error) {
 	var csilZero Empty
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "delete-event-series", EncodeDeleteEventSeriesRequest(req))
+	csilReq, csilErr := EncodeDeleteEventSeriesRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "delete-event-series", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEmpty(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "delete-event-series", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEmpty(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) ExpandEventSeries(ctx context.Context, req ExpandEventSeriesRequest) (EventList, error) {
 	var csilZero EventList
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "expand-event-series", EncodeExpandEventSeriesRequest(req))
+	csilReq, csilErr := EncodeExpandEventSeriesRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "expand-event-series", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEventList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "expand-event-series", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEventList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) SetEventRole(ctx context.Context, req SetEventRoleRequest) (EventRoleList, error) {
 	var csilZero EventRoleList
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "set-event-role", EncodeSetEventRoleRequest(req))
+	csilReq, csilErr := EncodeSetEventRoleRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "set-event-role", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEventRoleList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "set-event-role", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEventRoleList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) RemoveEventRole(ctx context.Context, req RemoveEventRoleRequest) (EventRoleList, error) {
 	var csilZero EventRoleList
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "remove-event-role", EncodeRemoveEventRoleRequest(req))
+	csilReq, csilErr := EncodeRemoveEventRoleRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "remove-event-role", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEventRoleList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "remove-event-role", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEventRoleList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *EventClient) ListEventRoles(ctx context.Context, req ListEventRolesRequest) (EventRoleList, error) {
 	var csilZero EventRoleList
-	csilResp, csilErr := c.transport.Call(ctx, "EventService", "list-event-roles", EncodeListEventRolesRequest(req))
+	csilReq, csilErr := EncodeListEventRolesRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "EventService", "list-event-roles", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEventRoleList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("EventService", "list-event-roles", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEventRoleList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 // SearchClient is a typed client for the SearchService service. The client owns
@@ -528,11 +1078,23 @@ func NewSearchClient(transport Transport) *SearchClient {
 
 func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (SearchResults, error) {
 	var csilZero SearchResults
-	csilResp, csilErr := c.transport.Call(ctx, "SearchService", "search", EncodeSearchRequest(req))
+	csilReq, csilErr := EncodeSearchRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "SearchService", "search", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeSearchResults(csilResp)
+	csilResp, csilErr := ResolveRPCReply("SearchService", "search", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeSearchResults(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 // AdminClient is a typed client for the AdminService service. The client owns
@@ -547,56 +1109,128 @@ func NewAdminClient(transport Transport) *AdminClient {
 
 func (c *AdminClient) ListAdmins(ctx context.Context, req Empty) (AdminList, error) {
 	var csilZero AdminList
-	csilResp, csilErr := c.transport.Call(ctx, "AdminService", "list-admins", EncodeEmpty(req))
+	csilReq, csilErr := EncodeEmpty(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "AdminService", "list-admins", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeAdminList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("AdminService", "list-admins", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeAdminList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *AdminClient) SetAdmin(ctx context.Context, req SetAdminRequest) (AdminList, error) {
 	var csilZero AdminList
-	csilResp, csilErr := c.transport.Call(ctx, "AdminService", "set-admin", EncodeSetAdminRequest(req))
+	csilReq, csilErr := EncodeSetAdminRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "AdminService", "set-admin", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeAdminList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("AdminService", "set-admin", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeAdminList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *AdminClient) FindUser(ctx context.Context, req FindUserRequest) (UserRef, error) {
 	var csilZero UserRef
-	csilResp, csilErr := c.transport.Call(ctx, "AdminService", "find-user", EncodeFindUserRequest(req))
+	csilReq, csilErr := EncodeFindUserRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "AdminService", "find-user", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeUserRef(csilResp)
+	csilResp, csilErr := ResolveRPCReply("AdminService", "find-user", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeUserRef(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *AdminClient) SearchUsers(ctx context.Context, req SearchUsersRequest) (UserRefList, error) {
 	var csilZero UserRefList
-	csilResp, csilErr := c.transport.Call(ctx, "AdminService", "search-users", EncodeSearchUsersRequest(req))
+	csilReq, csilErr := EncodeSearchUsersRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "AdminService", "search-users", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeUserRefList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("AdminService", "search-users", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeUserRefList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *AdminClient) GetInstanceSettings(ctx context.Context, req Empty) (InstanceSettings, error) {
 	var csilZero InstanceSettings
-	csilResp, csilErr := c.transport.Call(ctx, "AdminService", "get-instance-settings", EncodeEmpty(req))
+	csilReq, csilErr := EncodeEmpty(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "AdminService", "get-instance-settings", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeInstanceSettings(csilResp)
+	csilResp, csilErr := ResolveRPCReply("AdminService", "get-instance-settings", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeInstanceSettings(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *AdminClient) UpdateInstanceSettings(ctx context.Context, req UpdateInstanceSettingsRequest) (InstanceSettings, error) {
 	var csilZero InstanceSettings
-	csilResp, csilErr := c.transport.Call(ctx, "AdminService", "update-instance-settings", EncodeUpdateInstanceSettingsRequest(req))
+	csilReq, csilErr := EncodeUpdateInstanceSettingsRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "AdminService", "update-instance-settings", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeInstanceSettings(csilResp)
+	csilResp, csilErr := ResolveRPCReply("AdminService", "update-instance-settings", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeInstanceSettings(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 // FederationClient is a typed client for the FederationService service. The client owns
@@ -611,110 +1245,254 @@ func NewFederationClient(transport Transport) *FederationClient {
 
 func (c *FederationClient) FederationIdentity(ctx context.Context, req Empty) (FederationIdentity, error) {
 	var csilZero FederationIdentity
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "federation-identity", EncodeEmpty(req))
+	csilReq, csilErr := EncodeEmpty(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "federation-identity", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeFederationIdentity(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "federation-identity", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeFederationIdentity(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) ListPeers(ctx context.Context, req ListPeersRequest) (PeerList, error) {
 	var csilZero PeerList
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "list-peers", EncodeListPeersRequest(req))
+	csilReq, csilErr := EncodeListPeersRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "list-peers", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodePeerList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "list-peers", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodePeerList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) AddPeer(ctx context.Context, req AddPeerRequest) (Peer, error) {
 	var csilZero Peer
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "add-peer", EncodeAddPeerRequest(req))
+	csilReq, csilErr := EncodeAddPeerRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "add-peer", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodePeer(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "add-peer", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodePeer(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) SetPeerStatus(ctx context.Context, req SetPeerStatusRequest) (Peer, error) {
 	var csilZero Peer
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "set-peer-status", EncodeSetPeerStatusRequest(req))
+	csilReq, csilErr := EncodeSetPeerStatusRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "set-peer-status", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodePeer(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "set-peer-status", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodePeer(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) ResumePeer(ctx context.Context, req ResumePeerRequest) (Peer, error) {
 	var csilZero Peer
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "resume-peer", EncodeResumePeerRequest(req))
+	csilReq, csilErr := EncodeResumePeerRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "resume-peer", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodePeer(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "resume-peer", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodePeer(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) RemovePeer(ctx context.Context, req RemovePeerRequest) (Empty, error) {
 	var csilZero Empty
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "remove-peer", EncodeRemovePeerRequest(req))
+	csilReq, csilErr := EncodeRemovePeerRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "remove-peer", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEmpty(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "remove-peer", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEmpty(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) DeliverEvents(ctx context.Context, req SignedDelivery) (DeliveryReceipt, error) {
 	var csilZero DeliveryReceipt
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "deliver-events", EncodeSignedDelivery(req))
+	csilReq, csilErr := EncodeSignedDelivery(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "deliver-events", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeDeliveryReceipt(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "deliver-events", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeDeliveryReceipt(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) RequestPeering(ctx context.Context, req SignedPeeringRequest) (PeeringReceipt, error) {
 	var csilZero PeeringReceipt
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "request-peering", EncodeSignedPeeringRequest(req))
+	csilReq, csilErr := EncodeSignedPeeringRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "request-peering", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodePeeringReceipt(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "request-peering", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodePeeringReceipt(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) ListRemoteEvents(ctx context.Context, req ListRemoteEventsRequest) (RemoteEventList, error) {
 	var csilZero RemoteEventList
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "list-remote-events", EncodeListRemoteEventsRequest(req))
+	csilReq, csilErr := EncodeListRemoteEventsRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "list-remote-events", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeRemoteEventList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "list-remote-events", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeRemoteEventList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) SetPeerRateLimit(ctx context.Context, req SetPeerRateLimitRequest) (Peer, error) {
 	var csilZero Peer
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "set-peer-rate-limit", EncodeSetPeerRateLimitRequest(req))
+	csilReq, csilErr := EncodeSetPeerRateLimitRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "set-peer-rate-limit", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodePeer(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "set-peer-rate-limit", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodePeer(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) ListOriginVolume(ctx context.Context, req ListOriginVolumeRequest) (OriginVolumeList, error) {
 	var csilZero OriginVolumeList
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "list-origin-volume", EncodeListOriginVolumeRequest(req))
+	csilReq, csilErr := EncodeListOriginVolumeRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "list-origin-volume", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeOriginVolumeList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "list-origin-volume", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeOriginVolumeList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *FederationClient) SetOriginRateLimit(ctx context.Context, req SetOriginRateLimitRequest) (OriginVolume, error) {
 	var csilZero OriginVolume
-	csilResp, csilErr := c.transport.Call(ctx, "FederationService", "set-origin-rate-limit", EncodeSetOriginRateLimitRequest(req))
+	csilReq, csilErr := EncodeSetOriginRateLimitRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "FederationService", "set-origin-rate-limit", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeOriginVolume(csilResp)
+	csilResp, csilErr := ResolveRPCReply("FederationService", "set-origin-rate-limit", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeOriginVolume(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 // WebhookClient is a typed client for the WebhookService service. The client owns
@@ -729,36 +1507,84 @@ func NewWebhookClient(transport Transport) *WebhookClient {
 
 func (c *WebhookClient) ListWebhooks(ctx context.Context, req ListWebhooksRequest) (WebhookList, error) {
 	var csilZero WebhookList
-	csilResp, csilErr := c.transport.Call(ctx, "WebhookService", "list-webhooks", EncodeListWebhooksRequest(req))
+	csilReq, csilErr := EncodeListWebhooksRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "WebhookService", "list-webhooks", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeWebhookList(csilResp)
+	csilResp, csilErr := ResolveRPCReply("WebhookService", "list-webhooks", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeWebhookList(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *WebhookClient) CreateWebhook(ctx context.Context, req CreateWebhookRequest) (WebhookWithSecret, error) {
 	var csilZero WebhookWithSecret
-	csilResp, csilErr := c.transport.Call(ctx, "WebhookService", "create-webhook", EncodeCreateWebhookRequest(req))
+	csilReq, csilErr := EncodeCreateWebhookRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "WebhookService", "create-webhook", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeWebhookWithSecret(csilResp)
+	csilResp, csilErr := ResolveRPCReply("WebhookService", "create-webhook", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeWebhookWithSecret(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *WebhookClient) UpdateWebhook(ctx context.Context, req UpdateWebhookRequest) (Webhook, error) {
 	var csilZero Webhook
-	csilResp, csilErr := c.transport.Call(ctx, "WebhookService", "update-webhook", EncodeUpdateWebhookRequest(req))
+	csilReq, csilErr := EncodeUpdateWebhookRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "WebhookService", "update-webhook", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeWebhook(csilResp)
+	csilResp, csilErr := ResolveRPCReply("WebhookService", "update-webhook", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeWebhook(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }
 
 func (c *WebhookClient) DeleteWebhook(ctx context.Context, req DeleteWebhookRequest) (Empty, error) {
 	var csilZero Empty
-	csilResp, csilErr := c.transport.Call(ctx, "WebhookService", "delete-webhook", EncodeDeleteWebhookRequest(req))
+	csilReq, csilErr := EncodeDeleteWebhookRequest(req)
+	if csilErr != nil {
+		return csilZero, &RPCEncodeError{csilErr}
+	}
+	csilReply, csilErr := c.transport.CallReply(ctx, "WebhookService", "delete-webhook", csilReq)
 	if csilErr != nil {
 		return csilZero, csilErr
 	}
-	return DecodeEmpty(csilResp)
+	csilResp, csilErr := ResolveRPCReply("WebhookService", "delete-webhook", csilReply.Variant, csilReply.Payload)
+	if csilErr != nil {
+		return csilZero, csilErr
+	}
+	value, err := DecodeEmpty(csilResp)
+	if err != nil {
+		return csilZero, &RPCDecodeError{err}
+	}
+	return value, nil
 }

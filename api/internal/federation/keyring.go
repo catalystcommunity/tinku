@@ -12,6 +12,7 @@ import (
 	"time"
 
 	regularrp "github.com/catalystcommunity/linkkeys/sdks/regular-rp/go"
+	api "github.com/catalystcommunity/linkkeys/sdks/regular-rp/go/generated"
 )
 
 // LocalKeyring is this instance's own Ed25519 signing keys — the
@@ -178,7 +179,7 @@ func (kr *LocalKeyring) ActiveSigners(excludeKeyID string) []regularrp.Applicati
 		}
 		seed := make([]byte, len(k.Seed))
 		copy(seed, k.Seed[:])
-		out = append(out, regularrp.ApplicationSigner{KeyID: k.KeyID, Algorithm: "ed25519", PrivateKeyBytes: seed})
+		out = append(out, regularrp.ApplicationSigner{KeyID: k.KeyID, Algorithm: api.KeyAlgorithmEd25519, PrivateKeyBytes: seed})
 	}
 	return out
 }
@@ -195,7 +196,7 @@ func (kr *LocalKeyring) SignerFor(keyID string) (regularrp.ApplicationSigner, bo
 		if k.KeyID == keyID {
 			seed := make([]byte, len(k.Seed))
 			copy(seed, k.Seed[:])
-			return regularrp.ApplicationSigner{KeyID: k.KeyID, Algorithm: "ed25519", PrivateKeyBytes: seed}, true
+			return regularrp.ApplicationSigner{KeyID: k.KeyID, Algorithm: api.KeyAlgorithmEd25519, PrivateKeyBytes: seed}, true
 		}
 	}
 	return regularrp.ApplicationSigner{}, false

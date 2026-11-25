@@ -14,9 +14,9 @@ import (
 func (e *testEnv) createOrganization(t *testing.T, client *http.Client, name string) csil.Organization {
 	t.Helper()
 	resp := e.call(t, client, "organization", "create-organization",
-		csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{
+		mustEncode(csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{
 			Name: name, Blurb: "a blurb", Description: "a longer description",
-		}))
+		})))
 	requireReply(t, resp, "Organization", "organization/create-organization")
 	organization, err := csil.DecodeOrganization(resp.Payload)
 	if err != nil {
@@ -28,9 +28,9 @@ func (e *testEnv) createOrganization(t *testing.T, client *http.Client, name str
 func (e *testEnv) offer(t *testing.T, client *http.Client, gatheringID csil.GatheringID, organizationID csil.OrganizationID) csil.GatheringOffer {
 	t.Helper()
 	resp := e.call(t, client, "gathering", "offer-gathering",
-		csil.EncodeOfferGatheringRequest(csil.OfferGatheringRequest{
+		mustEncode(csil.EncodeOfferGatheringRequest(csil.OfferGatheringRequest{
 			GatheringId: gatheringID, OrganizationId: organizationID, Note: "we would like a home",
-		}))
+		})))
 	requireReply(t, resp, "GatheringOffer", "gathering/offer-gathering")
 	offer, err := csil.DecodeGatheringOffer(resp.Payload)
 	if err != nil {
@@ -52,9 +52,9 @@ func TestAnOfferNeedsBothSides(t *testing.T) {
 
 	// Bob cannot help himself to Ada's gathering.
 	resp := env.call(t, bob, "gathering", "offer-gathering",
-		csil.EncodeOfferGatheringRequest(csil.OfferGatheringRequest{
+		mustEncode(csil.EncodeOfferGatheringRequest(csil.OfferGatheringRequest{
 			GatheringId: gathering.Id, OrganizationId: organization.Id,
-		}))
+		})))
 	requireServiceError(t, resp, 3, "an organization owner offering somebody else's gathering")
 
 	offer := env.offer(t, ada, gathering.Id, organization.Id)
@@ -64,31 +64,31 @@ func TestAnOfferNeedsBothSides(t *testing.T) {
 
 	// Ada cannot accept her own offer: she is not the receiving side.
 	resp = env.call(t, ada, "gathering", "respond-to-gathering-offer",
-		csil.EncodeRespondToGatheringOfferRequest(csil.RespondToGatheringOfferRequest{
+		mustEncode(csil.EncodeRespondToGatheringOfferRequest(csil.RespondToGatheringOfferRequest{
 			OfferId: offer.Id, Accept: true,
-		}))
+		})))
 	requireServiceError(t, resp, 3, "the offerer accepting their own offer")
 
 	// Nor can a bystander.
 	resp = env.call(t, eve, "gathering", "respond-to-gathering-offer",
-		csil.EncodeRespondToGatheringOfferRequest(csil.RespondToGatheringOfferRequest{
+		mustEncode(csil.EncodeRespondToGatheringOfferRequest(csil.RespondToGatheringOfferRequest{
 			OfferId: offer.Id, Accept: true,
-		}))
+		})))
 	requireServiceError(t, resp, 3, "a bystander accepting an offer")
 
 	// The receiving side can.
 	resp = env.call(t, bob, "gathering", "respond-to-gathering-offer",
-		csil.EncodeRespondToGatheringOfferRequest(csil.RespondToGatheringOfferRequest{
+		mustEncode(csil.EncodeRespondToGatheringOfferRequest(csil.RespondToGatheringOfferRequest{
 			OfferId: offer.Id, Accept: true,
-		}))
+		})))
 	requireReply(t, resp, "GatheringOffer", "gathering/respond-to-gathering-offer")
 
 	// Answering twice is refused rather than racing: the status check is in
 	// the UPDATE.
 	resp = env.call(t, bob, "gathering", "respond-to-gathering-offer",
-		csil.EncodeRespondToGatheringOfferRequest(csil.RespondToGatheringOfferRequest{
+		mustEncode(csil.EncodeRespondToGatheringOfferRequest(csil.RespondToGatheringOfferRequest{
 			OfferId: offer.Id, Accept: true,
-		}))
+		})))
 	requireServiceError(t, resp, 1, "answering an offer twice")
 }
 
@@ -107,19 +107,19 @@ func TestAcceptingAnOfferKeepsTheOldOwnerAndTheMembers(t *testing.T) {
 	// Carol is a MEMBER of the gathering. She joined a gathering; she did
 	// not apply to an organization.
 	resp := env.call(t, carol, "gathering", "join-gathering",
-		csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id}))
+		mustEncode(csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id})))
 	requireReply(t, resp, "Gathering", "gathering/join-gathering")
 
 	offer := env.offer(t, ada, gathering.Id, organization.Id)
 	resp = env.call(t, bob, "gathering", "respond-to-gathering-offer",
-		csil.EncodeRespondToGatheringOfferRequest(csil.RespondToGatheringOfferRequest{
+		mustEncode(csil.EncodeRespondToGatheringOfferRequest(csil.RespondToGatheringOfferRequest{
 			OfferId: offer.Id, Accept: true,
-		}))
+		})))
 	requireReply(t, resp, "GatheringOffer", "gathering/respond-to-gathering-offer")
 
 	// The organization is now AN owner, and Ada is still one.
 	resp = env.call(t, ada, "gathering", "get-gathering",
-		csil.EncodeGetGatheringRequest(csil.GetGatheringRequest{Id: gathering.Id}))
+		mustEncode(csil.EncodeGetGatheringRequest(csil.GetGatheringRequest{Id: gathering.Id})))
 	requireReply(t, resp, "Gathering", "gathering/get-gathering")
 	after, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -147,9 +147,9 @@ func TestAcceptingAnOfferKeepsTheOldOwnerAndTheMembers(t *testing.T) {
 	// Ada is on the organization's roster now, because her ownership runs
 	// through it. Carol is NOT: she joined a gathering.
 	resp = env.call(t, bob, "organization", "list-organization-members",
-		csil.EncodeListOrganizationMembersRequest(csil.ListOrganizationMembersRequest{
+		mustEncode(csil.EncodeListOrganizationMembersRequest(csil.ListOrganizationMembersRequest{
 			OrganizationId: organization.Id,
-		}))
+		})))
 	requireReply(t, resp, "OrganizationMemberList", "organization/list-organization-members")
 	roster, err := csil.DecodeOrganizationMemberList(resp.Payload)
 	if err != nil {
@@ -188,16 +188,16 @@ func TestOnlyAnAdministratorAdopts(t *testing.T) {
 
 	// Bob owns the organization and still cannot take a gathering into it.
 	resp := env.call(t, bob, "gathering", "adopt-gathering",
-		csil.EncodeAdoptGatheringRequest(csil.AdoptGatheringRequest{
+		mustEncode(csil.EncodeAdoptGatheringRequest(csil.AdoptGatheringRequest{
 			GatheringId: gathering.Id, OrganizationId: organization.Id,
-		}))
+		})))
 	requireServiceError(t, resp, 3, "an organization owner adopting a gathering")
 
 	env.makeAdmin(t, string(bobProfile.Id))
 	resp = env.call(t, bob, "gathering", "adopt-gathering",
-		csil.EncodeAdoptGatheringRequest(csil.AdoptGatheringRequest{
+		mustEncode(csil.EncodeAdoptGatheringRequest(csil.AdoptGatheringRequest{
 			GatheringId: gathering.Id, OrganizationId: organization.Id,
-		}))
+		})))
 	requireReply(t, resp, "Gathering", "gathering/adopt-gathering")
 	adopted, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -227,18 +227,18 @@ func TestWithdrawingAnOfferIsTheOfferersOwn(t *testing.T) {
 	offer := env.offer(t, ada, gathering.Id, organization.Id)
 
 	resp := env.call(t, bob, "gathering", "withdraw-gathering-offer",
-		csil.EncodeWithdrawGatheringOfferRequest(csil.WithdrawGatheringOfferRequest{OfferId: offer.Id}))
+		mustEncode(csil.EncodeWithdrawGatheringOfferRequest(csil.WithdrawGatheringOfferRequest{OfferId: offer.Id})))
 	requireServiceError(t, resp, 3, "the receiving side withdrawing an offer")
 
 	resp = env.call(t, ada, "gathering", "withdraw-gathering-offer",
-		csil.EncodeWithdrawGatheringOfferRequest(csil.WithdrawGatheringOfferRequest{OfferId: offer.Id}))
+		mustEncode(csil.EncodeWithdrawGatheringOfferRequest(csil.WithdrawGatheringOfferRequest{OfferId: offer.Id})))
 	requireReply(t, resp, "Empty", "gathering/withdraw-gathering-offer")
 
 	// And the organization has nothing left to answer.
 	resp = env.call(t, bob, "gathering", "list-gathering-offers",
-		csil.EncodeListGatheringOffersRequest(csil.ListGatheringOffersRequest{
+		mustEncode(csil.EncodeListGatheringOffersRequest(csil.ListGatheringOffersRequest{
 			OrganizationId: &organization.Id,
-		}))
+		})))
 	requireReply(t, resp, "GatheringOfferList", "gathering/list-gathering-offers")
 	list, err := csil.DecodeGatheringOfferList(resp.Payload)
 	if err != nil {
@@ -271,7 +271,7 @@ func TestOffersAreOnlyVisibleToASide(t *testing.T) {
 		{"a bystander", eve, 0},
 	} {
 		resp := env.call(t, side.client, "gathering", "list-gathering-offers",
-			csil.EncodeListGatheringOffersRequest(csil.ListGatheringOffersRequest{}))
+			mustEncode(csil.EncodeListGatheringOffersRequest(csil.ListGatheringOffersRequest{})))
 		requireReply(t, resp, "GatheringOfferList", "gathering/list-gathering-offers")
 		list, err := csil.DecodeGatheringOfferList(resp.Payload)
 		if err != nil {
@@ -295,15 +295,15 @@ func TestCreatingAGatheringUnderAnOrganization(t *testing.T) {
 	owner := csil.OwnerRefInput{Kind: "organization", Id: string(organization.Id)}
 
 	resp := env.call(t, eve, "gathering", "create-gathering",
-		csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
+		mustEncode(csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
 			Name: "Not Yours", Owner: &owner,
-		}))
+		})))
 	requireServiceError(t, resp, 3, "starting a gathering under somebody else's organization")
 
 	resp = env.call(t, ada, "gathering", "create-gathering",
-		csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
+		mustEncode(csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
 			Name: "Thursday Bouldering", Owner: &owner,
-		}))
+		})))
 	requireReply(t, resp, "Gathering", "gathering/create-gathering")
 	gathering, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -320,9 +320,9 @@ func TestCreatingAGatheringUnderAnOrganization(t *testing.T) {
 
 	// The list filter finds it, which is what the organization's page uses.
 	resp = env.call(t, ada, "gathering", "list-gatherings",
-		csil.EncodeListGatheringsRequest(csil.ListGatheringsRequest{
+		mustEncode(csil.EncodeListGatheringsRequest(csil.ListGatheringsRequest{
 			OwnedByOrganization: &organization.Id,
-		}))
+		})))
 	requireReply(t, resp, "GatheringList", "gathering/list-gatherings")
 	list, err := csil.DecodeGatheringList(resp.Payload)
 	if err != nil {
@@ -345,15 +345,15 @@ func TestTheOrganizationTypeaheadPrefersTheName(t *testing.T) {
 	// "climbing" is in one name and in the other's description.
 	env.createOrganization(t, ada, "Front Range Climbing")
 	resp := env.call(t, ada, "organization", "create-organization",
-		csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{
+		mustEncode(csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{
 			Name: "Boulder Society", Blurb: "we do climbing on Thursdays",
 			Description: "climbing, mostly",
-		}))
+		})))
 	requireReply(t, resp, "Organization", "organization/create-organization")
 
 	query := "climbing"
 	resp = env.call(t, ada, "organization", "list-organizations",
-		csil.EncodeListOrganizationsRequest(csil.ListOrganizationsRequest{Query: &query}))
+		mustEncode(csil.EncodeListOrganizationsRequest(csil.ListOrganizationsRequest{Query: &query})))
 	requireReply(t, resp, "OrganizationList", "organization/list-organizations")
 	list, err := csil.DecodeOrganizationList(resp.Payload)
 	if err != nil {
@@ -377,7 +377,7 @@ func TestTheCalendarFiltersEvents(t *testing.T) {
 	organization := env.createOrganization(t, ada, "Front Range Climbers")
 	owner := csil.OwnerRefInput{Kind: "organization", Id: string(organization.Id)}
 	resp := env.call(t, ada, "gathering", "create-gathering",
-		csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{Name: "Under The Org", Owner: &owner}))
+		mustEncode(csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{Name: "Under The Org", Owner: &owner})))
 	requireReply(t, resp, "Gathering", "gathering/create-gathering")
 	underOrg, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -390,7 +390,7 @@ func TestTheCalendarFiltersEvents(t *testing.T) {
 
 	list := func(client *http.Client, req csil.ListEventsRequest) csil.EventList {
 		t.Helper()
-		resp := env.call(t, client, "event", "list-events", csil.EncodeListEventsRequest(req))
+		resp := env.call(t, client, "event", "list-events", mustEncode(csil.EncodeListEventsRequest(req)))
 		requireReply(t, resp, "EventList", "event/list-events")
 		out, err := csil.DecodeEventList(resp.Payload)
 		if err != nil {

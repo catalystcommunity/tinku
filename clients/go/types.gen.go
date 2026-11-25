@@ -37,14 +37,23 @@ type Empty struct {
 
 // ViewerContext represents a structured data type
 type ViewerContext struct {
-	IsAdmin          bool `json:"is_admin" yaml:"is_admin"`
-	IsOwner          bool `json:"is_owner" yaml:"is_owner"`
-	IsOrganizer      bool `json:"is_organizer" yaml:"is_organizer"`
-	IsPresenter      bool `json:"is_presenter" yaml:"is_presenter"`
-	IsMember         bool `json:"is_member" yaml:"is_member"`
-	HasJoined        bool `json:"has_joined" yaml:"has_joined"`
-	CanEdit          bool `json:"can_edit" yaml:"can_edit"`
-	CanDelete        bool `json:"can_delete" yaml:"can_delete"`
+	// receive-only
+	IsAdmin bool `json:"is_admin" yaml:"is_admin"`
+	// receive-only
+	IsOwner bool `json:"is_owner" yaml:"is_owner"`
+	// receive-only
+	IsOrganizer bool `json:"is_organizer" yaml:"is_organizer"`
+	// receive-only
+	IsPresenter bool `json:"is_presenter" yaml:"is_presenter"`
+	// receive-only
+	IsMember bool `json:"is_member" yaml:"is_member"`
+	// receive-only
+	HasJoined bool `json:"has_joined" yaml:"has_joined"`
+	// receive-only
+	CanEdit bool `json:"can_edit" yaml:"can_edit"`
+	// receive-only
+	CanDelete bool `json:"can_delete" yaml:"can_delete"`
+	// receive-only
 	CanManageMembers bool `json:"can_manage_members" yaml:"can_manage_members"`
 }
 
@@ -54,23 +63,39 @@ type Page struct {
 	Offset *uint64 `json:"offset,omitempty" yaml:"offset,omitempty"`
 }
 
-// PublishSetting is a type alias
 type PublishSetting string
 
-// PublishSource is a type alias
+const (
+	PublishSettingUnset PublishSetting = "unset"
+	PublishSettingIn    PublishSetting = "in"
+	PublishSettingOut   PublishSetting = "out"
+)
+
 type PublishSource string
+
+const (
+	PublishSourceInstance     PublishSource = "instance"
+	PublishSourceOrganization PublishSource = "organization"
+	PublishSourceGathering    PublishSource = "gathering"
+)
 
 // PublishDecision represents a structured data type
 type PublishDecision struct {
-	Publishing  bool          `json:"publishing" yaml:"publishing"`
-	Source      PublishSource `json:"source" yaml:"source"`
-	CanOverride bool          `json:"can_override" yaml:"can_override"`
+	// receive-only
+	Publishing bool `json:"publishing" yaml:"publishing"`
+	// receive-only
+	Source PublishSource `json:"source" yaml:"source"`
+	// receive-only
+	CanOverride bool `json:"can_override" yaml:"can_override"`
 }
 
 // Origin represents a structured data type
 type Origin struct {
-	Domain      string  `json:"domain" yaml:"domain"`
-	IsExternal  bool    `json:"is_external" yaml:"is_external"`
+	// receive-only
+	Domain string `json:"domain" yaml:"domain"`
+	// receive-only
+	IsExternal bool `json:"is_external" yaml:"is_external"`
+	// receive-only
 	PeerAddress *string `json:"peer_address,omitempty" yaml:"peer_address,omitempty"`
 }
 
@@ -82,8 +107,12 @@ type ServiceError struct {
 	ResourceType *string `json:"resource_type,omitempty" yaml:"resource_type,omitempty"`
 }
 
-// UserKind is a type alias
 type UserKind string
+
+const (
+	UserKindHuman  UserKind = "human"
+	UserKindSystem UserKind = "system"
+)
 
 // BeginLoginRequest represents a structured data type
 type BeginLoginRequest struct {
@@ -97,12 +126,18 @@ type BeginLoginResponse struct {
 
 // UserProfile represents a structured data type
 type UserProfile struct {
-	Id             UserID    `json:"id" yaml:"id"`
-	LinkkeysDomain string    `json:"linkkeys_domain" yaml:"linkkeys_domain"`
-	Handle         string    `json:"handle" yaml:"handle"`
-	DisplayName    string    `json:"display_name" yaml:"display_name"`
-	Kind           UserKind  `json:"kind" yaml:"kind"`
-	CreatedAt      time.Time `json:"created_at" yaml:"created_at"`
+	// receive-only
+	Id UserID `json:"id" yaml:"id"`
+	// receive-only
+	LinkkeysDomain string `json:"linkkeys_domain" yaml:"linkkeys_domain"`
+	// receive-only
+	Handle string `json:"handle" yaml:"handle"`
+	// receive-only
+	DisplayName string `json:"display_name" yaml:"display_name"`
+	// receive-only
+	Kind UserKind `json:"kind" yaml:"kind"`
+	// receive-only
+	CreatedAt time.Time `json:"created_at" yaml:"created_at"`
 }
 
 // DevLoginRequest represents a structured data type
@@ -113,11 +148,15 @@ type DevLoginRequest struct {
 
 // Greeting represents a structured data type
 type Greeting struct {
-	Id           GreetingID `json:"id" yaml:"id"`
-	AuthorId     *UserID    `json:"author_id,omitempty" yaml:"author_id,omitempty"`
-	AuthorHandle *string    `json:"author_handle,omitempty" yaml:"author_handle,omitempty"`
-	Message      string     `json:"message" yaml:"message"`
-	CreatedAt    time.Time  `json:"created_at" yaml:"created_at"`
+	// receive-only
+	Id GreetingID `json:"id" yaml:"id"`
+	// receive-only
+	AuthorId *UserID `json:"author_id,omitempty" yaml:"author_id,omitempty"`
+	// receive-only
+	AuthorHandle *string `json:"author_handle,omitempty" yaml:"author_handle,omitempty"`
+	Message      string  `json:"message" yaml:"message"`
+	// receive-only
+	CreatedAt time.Time `json:"created_at" yaml:"created_at"`
 }
 
 // GreetingList represents a structured data type
@@ -135,34 +174,53 @@ type GetGreetingRequest struct {
 	Id GreetingID `json:"id" yaml:"id"`
 }
 
-// OrganizationRole is a type alias
 type OrganizationRole string
+
+const (
+	OrganizationRoleOwner  OrganizationRole = "owner"
+	OrganizationRoleMember OrganizationRole = "member"
+)
 
 // Organization represents a structured data type
 type Organization struct {
-	Id            OrganizationID `json:"id" yaml:"id"`
-	Slug          string         `json:"slug" yaml:"slug"`
-	OriginDomain  string         `json:"origin_domain" yaml:"origin_domain"`
-	Name          string         `json:"name" yaml:"name"`
-	Blurb         string         `json:"blurb" yaml:"blurb"`
-	Description   string         `json:"description" yaml:"description"`
-	MemberCount   uint64         `json:"member_count" yaml:"member_count"`
+	// receive-only
+	Id OrganizationID `json:"id" yaml:"id"`
+	// receive-only
+	Slug string `json:"slug" yaml:"slug"`
+	// receive-only
+	OriginDomain string `json:"origin_domain" yaml:"origin_domain"`
+	Name         string `json:"name" yaml:"name"`
+	Blurb        string `json:"blurb" yaml:"blurb"`
+	Description  string `json:"description" yaml:"description"`
+	// receive-only
+	MemberCount uint64 `json:"member_count" yaml:"member_count"`
+	// receive-only
 	OwnerCount    uint64         `json:"owner_count" yaml:"owner_count"`
 	PublishEvents PublishSetting `json:"publish_events" yaml:"publish_events"`
-	Origin        Origin         `json:"origin" yaml:"origin"`
-	Viewer        ViewerContext  `json:"viewer" yaml:"viewer"`
-	CreatedAt     time.Time      `json:"created_at" yaml:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at" yaml:"updated_at"`
+	// receive-only
+	Origin Origin `json:"origin" yaml:"origin"`
+	// receive-only
+	Viewer ViewerContext `json:"viewer" yaml:"viewer"`
+	// receive-only
+	CreatedAt time.Time `json:"created_at" yaml:"created_at"`
+	// receive-only
+	UpdatedAt time.Time `json:"updated_at" yaml:"updated_at"`
 }
 
 // OrganizationMember represents a structured data type
 type OrganizationMember struct {
-	UserId         UserID           `json:"user_id" yaml:"user_id"`
-	Handle         string           `json:"handle" yaml:"handle"`
-	LinkkeysDomain string           `json:"linkkeys_domain" yaml:"linkkeys_domain"`
-	DisplayName    string           `json:"display_name" yaml:"display_name"`
-	Role           OrganizationRole `json:"role" yaml:"role"`
-	JoinedAt       time.Time        `json:"joined_at" yaml:"joined_at"`
+	// receive-only
+	UserId UserID `json:"user_id" yaml:"user_id"`
+	// receive-only
+	Handle string `json:"handle" yaml:"handle"`
+	// receive-only
+	LinkkeysDomain string `json:"linkkeys_domain" yaml:"linkkeys_domain"`
+	// receive-only
+	DisplayName string `json:"display_name" yaml:"display_name"`
+	// receive-only
+	Role OrganizationRole `json:"role" yaml:"role"`
+	// receive-only
+	JoinedAt time.Time `json:"joined_at" yaml:"joined_at"`
 }
 
 // CreateOrganizationRequest represents a structured data type
@@ -230,19 +288,26 @@ type RemoveOrganizationMemberRequest struct {
 	UserId         UserID         `json:"user_id" yaml:"user_id"`
 }
 
-// OwnerKind is a type alias
 type OwnerKind string
+
+const (
+	OwnerKindUser         OwnerKind = "user"
+	OwnerKindOrganization OwnerKind = "organization"
+)
 
 // GatheringRole is a type alias
 type GatheringRole string
 
 // OwnerRef represents a structured data type
 type OwnerRef struct {
-	Kind         OwnerKind `json:"kind" yaml:"kind"`
-	Id           string    `json:"id" yaml:"id"`
-	DisplayName  string    `json:"display_name" yaml:"display_name"`
-	Handle       string    `json:"handle" yaml:"handle"`
-	OriginDomain string    `json:"origin_domain" yaml:"origin_domain"`
+	Kind OwnerKind `json:"kind" yaml:"kind"`
+	Id   string    `json:"id" yaml:"id"`
+	// receive-only
+	DisplayName string `json:"display_name" yaml:"display_name"`
+	// receive-only
+	Handle string `json:"handle" yaml:"handle"`
+	// receive-only
+	OriginDomain string `json:"origin_domain" yaml:"origin_domain"`
 }
 
 // OwnerRefInput represents a structured data type
@@ -253,31 +318,48 @@ type OwnerRefInput struct {
 
 // Gathering represents a structured data type
 type Gathering struct {
-	Id            GatheringID     `json:"id" yaml:"id"`
-	Slug          string          `json:"slug" yaml:"slug"`
-	OriginDomain  string          `json:"origin_domain" yaml:"origin_domain"`
-	Name          string          `json:"name" yaml:"name"`
-	Blurb         string          `json:"blurb" yaml:"blurb"`
-	Description   string          `json:"description" yaml:"description"`
-	Owners        []OwnerRef      `json:"owners" yaml:"owners"`
-	MemberCount   uint64          `json:"member_count" yaml:"member_count"`
-	EventCount    uint64          `json:"event_count" yaml:"event_count"`
-	NextEventAt   *time.Time      `json:"next_event_at,omitempty" yaml:"next_event_at,omitempty"`
-	PublishEvents PublishSetting  `json:"publish_events" yaml:"publish_events"`
-	Publish       PublishDecision `json:"publish" yaml:"publish"`
-	Origin        Origin          `json:"origin" yaml:"origin"`
-	Viewer        ViewerContext   `json:"viewer" yaml:"viewer"`
-	CreatedAt     time.Time       `json:"created_at" yaml:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at" yaml:"updated_at"`
+	// receive-only
+	Id GatheringID `json:"id" yaml:"id"`
+	// receive-only
+	Slug string `json:"slug" yaml:"slug"`
+	// receive-only
+	OriginDomain string `json:"origin_domain" yaml:"origin_domain"`
+	Name         string `json:"name" yaml:"name"`
+	Blurb        string `json:"blurb" yaml:"blurb"`
+	Description  string `json:"description" yaml:"description"`
+	// receive-only
+	Owners []OwnerRef `json:"owners" yaml:"owners"`
+	// receive-only
+	MemberCount uint64 `json:"member_count" yaml:"member_count"`
+	// receive-only
+	EventCount uint64 `json:"event_count" yaml:"event_count"`
+	// receive-only
+	NextEventAt   *time.Time     `json:"next_event_at,omitempty" yaml:"next_event_at,omitempty"`
+	PublishEvents PublishSetting `json:"publish_events" yaml:"publish_events"`
+	// receive-only
+	Publish PublishDecision `json:"publish" yaml:"publish"`
+	// receive-only
+	Origin Origin `json:"origin" yaml:"origin"`
+	// receive-only
+	Viewer ViewerContext `json:"viewer" yaml:"viewer"`
+	// receive-only
+	CreatedAt time.Time `json:"created_at" yaml:"created_at"`
+	// receive-only
+	UpdatedAt time.Time `json:"updated_at" yaml:"updated_at"`
 }
 
 // GatheringMember represents a structured data type
 type GatheringMember struct {
-	UserId         UserID    `json:"user_id" yaml:"user_id"`
-	Handle         string    `json:"handle" yaml:"handle"`
-	LinkkeysDomain string    `json:"linkkeys_domain" yaml:"linkkeys_domain"`
-	DisplayName    string    `json:"display_name" yaml:"display_name"`
-	JoinedAt       time.Time `json:"joined_at" yaml:"joined_at"`
+	// receive-only
+	UserId UserID `json:"user_id" yaml:"user_id"`
+	// receive-only
+	Handle string `json:"handle" yaml:"handle"`
+	// receive-only
+	LinkkeysDomain string `json:"linkkeys_domain" yaml:"linkkeys_domain"`
+	// receive-only
+	DisplayName string `json:"display_name" yaml:"display_name"`
+	// receive-only
+	JoinedAt time.Time `json:"joined_at" yaml:"joined_at"`
 }
 
 // CreateGatheringRequest represents a structured data type
@@ -355,22 +437,38 @@ type RemoveGatheringOwnerRequest struct {
 	Owner       OwnerRefInput `json:"owner" yaml:"owner"`
 }
 
-// GatheringOfferStatus is a type alias
 type GatheringOfferStatus string
+
+const (
+	GatheringOfferStatusPending   GatheringOfferStatus = "pending"
+	GatheringOfferStatusAccepted  GatheringOfferStatus = "accepted"
+	GatheringOfferStatusDeclined  GatheringOfferStatus = "declined"
+	GatheringOfferStatusWithdrawn GatheringOfferStatus = "withdrawn"
+)
 
 // GatheringOffer represents a structured data type
 type GatheringOffer struct {
-	Id               GatheringOfferID     `json:"id" yaml:"id"`
-	GatheringId      GatheringID          `json:"gathering_id" yaml:"gathering_id"`
-	GatheringName    string               `json:"gathering_name" yaml:"gathering_name"`
-	OrganizationId   OrganizationID       `json:"organization_id" yaml:"organization_id"`
-	OrganizationName string               `json:"organization_name" yaml:"organization_name"`
-	OfferedBy        UserRef              `json:"offered_by" yaml:"offered_by"`
-	Note             string               `json:"note" yaml:"note"`
-	Status           GatheringOfferStatus `json:"status" yaml:"status"`
-	CreatedAt        time.Time            `json:"created_at" yaml:"created_at"`
-	ResolvedAt       *time.Time           `json:"resolved_at,omitempty" yaml:"resolved_at,omitempty"`
-	Viewer           ViewerContext        `json:"viewer" yaml:"viewer"`
+	// receive-only
+	Id GatheringOfferID `json:"id" yaml:"id"`
+	// receive-only
+	GatheringId GatheringID `json:"gathering_id" yaml:"gathering_id"`
+	// receive-only
+	GatheringName string `json:"gathering_name" yaml:"gathering_name"`
+	// receive-only
+	OrganizationId OrganizationID `json:"organization_id" yaml:"organization_id"`
+	// receive-only
+	OrganizationName string `json:"organization_name" yaml:"organization_name"`
+	// receive-only
+	OfferedBy UserRef `json:"offered_by" yaml:"offered_by"`
+	Note      string  `json:"note" yaml:"note"`
+	// receive-only
+	Status GatheringOfferStatus `json:"status" yaml:"status"`
+	// receive-only
+	CreatedAt time.Time `json:"created_at" yaml:"created_at"`
+	// receive-only
+	ResolvedAt *time.Time `json:"resolved_at,omitempty" yaml:"resolved_at,omitempty"`
+	// receive-only
+	Viewer ViewerContext `json:"viewer" yaml:"viewer"`
 }
 
 // OfferGatheringRequest represents a structured data type
@@ -410,11 +508,26 @@ type AdoptGatheringRequest struct {
 	OrganizationId OrganizationID `json:"organization_id" yaml:"organization_id"`
 }
 
-// Weekday is a type alias
 type Weekday string
 
-// RecurrenceFreq is a type alias
+const (
+	WeekdayMonday    Weekday = "monday"
+	WeekdayTuesday   Weekday = "tuesday"
+	WeekdayWednesday Weekday = "wednesday"
+	WeekdayThursday  Weekday = "thursday"
+	WeekdayFriday    Weekday = "friday"
+	WeekdaySaturday  Weekday = "saturday"
+	WeekdaySunday    Weekday = "sunday"
+)
+
 type RecurrenceFreq string
+
+const (
+	RecurrenceFreqWeekly    RecurrenceFreq = "weekly"
+	RecurrenceFreqMonthly   RecurrenceFreq = "monthly"
+	RecurrenceFreqQuarterly RecurrenceFreq = "quarterly"
+	RecurrenceFreqYearly    RecurrenceFreq = "yearly"
+)
 
 // RecurrenceRule represents a structured data type
 type RecurrenceRule struct {
@@ -439,73 +552,108 @@ type Location struct {
 
 // Event represents a structured data type
 type Event struct {
-	Id              EventID        `json:"id" yaml:"id"`
-	GatheringId     GatheringID    `json:"gathering_id" yaml:"gathering_id"`
-	SeriesId        *EventSeriesID `json:"series_id,omitempty" yaml:"series_id,omitempty"`
-	Title           string         `json:"title" yaml:"title"`
-	Description     *string        `json:"description,omitempty" yaml:"description,omitempty"`
-	IsOnline        bool           `json:"is_online" yaml:"is_online"`
-	IsInPerson      bool           `json:"is_in_person" yaml:"is_in_person"`
-	OnlineUrl       *string        `json:"online_url,omitempty" yaml:"online_url,omitempty"`
-	Location        *Location      `json:"location,omitempty" yaml:"location,omitempty"`
-	StartsAt        time.Time      `json:"starts_at" yaml:"starts_at"`
-	EndsAt          time.Time      `json:"ends_at" yaml:"ends_at"`
-	Timezone        string         `json:"timezone" yaml:"timezone"`
-	Locked          bool           `json:"locked" yaml:"locked"`
-	AttendeeCount   uint64         `json:"attendee_count" yaml:"attendee_count"`
-	ViewerAttending bool           `json:"viewer_attending" yaml:"viewer_attending"`
-	Origin          Origin         `json:"origin" yaml:"origin"`
-	Viewer          ViewerContext  `json:"viewer" yaml:"viewer"`
-	CreatedAt       time.Time      `json:"created_at" yaml:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at" yaml:"updated_at"`
+	// receive-only
+	Id EventID `json:"id" yaml:"id"`
+	// receive-only
+	GatheringId GatheringID `json:"gathering_id" yaml:"gathering_id"`
+	// receive-only
+	SeriesId    *EventSeriesID `json:"series_id,omitempty" yaml:"series_id,omitempty"`
+	Title       string         `json:"title" yaml:"title"`
+	Description *string        `json:"description,omitempty" yaml:"description,omitempty"`
+	IsOnline    bool           `json:"is_online" yaml:"is_online"`
+	IsInPerson  bool           `json:"is_in_person" yaml:"is_in_person"`
+	OnlineUrl   *string        `json:"online_url,omitempty" yaml:"online_url,omitempty"`
+	Location    *Location      `json:"location,omitempty" yaml:"location,omitempty"`
+	StartsAt    time.Time      `json:"starts_at" yaml:"starts_at"`
+	EndsAt      time.Time      `json:"ends_at" yaml:"ends_at"`
+	Timezone    string         `json:"timezone" yaml:"timezone"`
+	// receive-only
+	Locked bool `json:"locked" yaml:"locked"`
+	// receive-only
+	AttendeeCount uint64 `json:"attendee_count" yaml:"attendee_count"`
+	// receive-only
+	ViewerAttending bool `json:"viewer_attending" yaml:"viewer_attending"`
+	// receive-only
+	Origin Origin `json:"origin" yaml:"origin"`
+	// receive-only
+	Viewer ViewerContext `json:"viewer" yaml:"viewer"`
+	// receive-only
+	CreatedAt time.Time `json:"created_at" yaml:"created_at"`
+	// receive-only
+	UpdatedAt time.Time `json:"updated_at" yaml:"updated_at"`
 }
 
 // EventSeries represents a structured data type
 type EventSeries struct {
-	Id               EventSeriesID  `json:"id" yaml:"id"`
-	GatheringId      GatheringID    `json:"gathering_id" yaml:"gathering_id"`
-	Title            string         `json:"title" yaml:"title"`
-	Description      string         `json:"description" yaml:"description"`
-	IsOnline         bool           `json:"is_online" yaml:"is_online"`
-	IsInPerson       bool           `json:"is_in_person" yaml:"is_in_person"`
-	OnlineUrl        *string        `json:"online_url,omitempty" yaml:"online_url,omitempty"`
-	Location         *Location      `json:"location,omitempty" yaml:"location,omitempty"`
-	Recurrence       RecurrenceRule `json:"recurrence" yaml:"recurrence"`
-	StartsOn         time.Time      `json:"starts_on" yaml:"starts_on"`
-	EndsOn           *time.Time     `json:"ends_on,omitempty" yaml:"ends_on,omitempty"`
-	StartTime        string         `json:"start_time" yaml:"start_time"`
-	DurationMinutes  uint64         `json:"duration_minutes" yaml:"duration_minutes"`
-	Timezone         string         `json:"timezone" yaml:"timezone"`
-	OccurrenceCount  uint64         `json:"occurrence_count" yaml:"occurrence_count"`
-	NextOccurrenceAt *time.Time     `json:"next_occurrence_at,omitempty" yaml:"next_occurrence_at,omitempty"`
-	Origin           Origin         `json:"origin" yaml:"origin"`
-	Viewer           ViewerContext  `json:"viewer" yaml:"viewer"`
-	CreatedAt        time.Time      `json:"created_at" yaml:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at" yaml:"updated_at"`
+	// receive-only
+	Id EventSeriesID `json:"id" yaml:"id"`
+	// receive-only
+	GatheringId     GatheringID    `json:"gathering_id" yaml:"gathering_id"`
+	Title           string         `json:"title" yaml:"title"`
+	Description     string         `json:"description" yaml:"description"`
+	IsOnline        bool           `json:"is_online" yaml:"is_online"`
+	IsInPerson      bool           `json:"is_in_person" yaml:"is_in_person"`
+	OnlineUrl       *string        `json:"online_url,omitempty" yaml:"online_url,omitempty"`
+	Location        *Location      `json:"location,omitempty" yaml:"location,omitempty"`
+	Recurrence      RecurrenceRule `json:"recurrence" yaml:"recurrence"`
+	StartsOn        string         `json:"starts_on" yaml:"starts_on"`
+	EndsOn          *string        `json:"ends_on,omitempty" yaml:"ends_on,omitempty"`
+	StartTime       string         `json:"start_time" yaml:"start_time"`
+	DurationMinutes uint64         `json:"duration_minutes" yaml:"duration_minutes"`
+	Timezone        string         `json:"timezone" yaml:"timezone"`
+	// receive-only
+	OccurrenceCount uint64 `json:"occurrence_count" yaml:"occurrence_count"`
+	// receive-only
+	NextOccurrenceAt *time.Time `json:"next_occurrence_at,omitempty" yaml:"next_occurrence_at,omitempty"`
+	// receive-only
+	Origin Origin `json:"origin" yaml:"origin"`
+	// receive-only
+	Viewer ViewerContext `json:"viewer" yaml:"viewer"`
+	// receive-only
+	CreatedAt time.Time `json:"created_at" yaml:"created_at"`
+	// receive-only
+	UpdatedAt time.Time `json:"updated_at" yaml:"updated_at"`
 }
 
-// EventRole is a type alias
 type EventRole string
+
+const (
+	EventRoleOrganizer EventRole = "organizer"
+	EventRolePresenter EventRole = "presenter"
+)
 
 // EventRoleAssignment represents a structured data type
 type EventRoleAssignment struct {
-	EventId        *EventID       `json:"event_id,omitempty" yaml:"event_id,omitempty"`
-	SeriesId       *EventSeriesID `json:"series_id,omitempty" yaml:"series_id,omitempty"`
-	UserId         UserID         `json:"user_id" yaml:"user_id"`
-	Handle         string         `json:"handle" yaml:"handle"`
-	LinkkeysDomain string         `json:"linkkeys_domain" yaml:"linkkeys_domain"`
-	DisplayName    string         `json:"display_name" yaml:"display_name"`
-	Role           EventRole      `json:"role" yaml:"role"`
-	AssignedAt     time.Time      `json:"assigned_at" yaml:"assigned_at"`
+	// receive-only
+	EventId *EventID `json:"event_id,omitempty" yaml:"event_id,omitempty"`
+	// receive-only
+	SeriesId *EventSeriesID `json:"series_id,omitempty" yaml:"series_id,omitempty"`
+	// receive-only
+	UserId UserID `json:"user_id" yaml:"user_id"`
+	// receive-only
+	Handle string `json:"handle" yaml:"handle"`
+	// receive-only
+	LinkkeysDomain string `json:"linkkeys_domain" yaml:"linkkeys_domain"`
+	// receive-only
+	DisplayName string `json:"display_name" yaml:"display_name"`
+	// receive-only
+	Role EventRole `json:"role" yaml:"role"`
+	// receive-only
+	AssignedAt time.Time `json:"assigned_at" yaml:"assigned_at"`
 }
 
 // Attendee represents a structured data type
 type Attendee struct {
-	UserId         UserID    `json:"user_id" yaml:"user_id"`
-	Handle         string    `json:"handle" yaml:"handle"`
-	LinkkeysDomain string    `json:"linkkeys_domain" yaml:"linkkeys_domain"`
-	DisplayName    string    `json:"display_name" yaml:"display_name"`
-	MarkedAt       time.Time `json:"marked_at" yaml:"marked_at"`
+	// receive-only
+	UserId UserID `json:"user_id" yaml:"user_id"`
+	// receive-only
+	Handle string `json:"handle" yaml:"handle"`
+	// receive-only
+	LinkkeysDomain string `json:"linkkeys_domain" yaml:"linkkeys_domain"`
+	// receive-only
+	DisplayName string `json:"display_name" yaml:"display_name"`
+	// receive-only
+	MarkedAt time.Time `json:"marked_at" yaml:"marked_at"`
 }
 
 // CreateEventRequest represents a structured data type
@@ -574,8 +722,8 @@ type CreateEventSeriesRequest struct {
 	OnlineUrl       *string        `json:"online_url,omitempty" yaml:"online_url,omitempty"`
 	Location        *Location      `json:"location,omitempty" yaml:"location,omitempty"`
 	Recurrence      RecurrenceRule `json:"recurrence" yaml:"recurrence"`
-	StartsOn        time.Time      `json:"starts_on" yaml:"starts_on"`
-	EndsOn          *time.Time     `json:"ends_on,omitempty" yaml:"ends_on,omitempty"`
+	StartsOn        string         `json:"starts_on" yaml:"starts_on"`
+	EndsOn          *string        `json:"ends_on,omitempty" yaml:"ends_on,omitempty"`
 	StartTime       string         `json:"start_time" yaml:"start_time"`
 	DurationMinutes uint64         `json:"duration_minutes" yaml:"duration_minutes"`
 	Timezone        string         `json:"timezone" yaml:"timezone"`
@@ -591,8 +739,8 @@ type UpdateEventSeriesRequest struct {
 	OnlineUrl       *string         `json:"online_url,omitempty" yaml:"online_url,omitempty"`
 	Location        *Location       `json:"location,omitempty" yaml:"location,omitempty"`
 	Recurrence      *RecurrenceRule `json:"recurrence,omitempty" yaml:"recurrence,omitempty"`
-	StartsOn        *time.Time      `json:"starts_on,omitempty" yaml:"starts_on,omitempty"`
-	EndsOn          *time.Time      `json:"ends_on,omitempty" yaml:"ends_on,omitempty"`
+	StartsOn        *string         `json:"starts_on,omitempty" yaml:"starts_on,omitempty"`
+	EndsOn          *string         `json:"ends_on,omitempty" yaml:"ends_on,omitempty"`
 	StartTime       *string         `json:"start_time,omitempty" yaml:"start_time,omitempty"`
 	DurationMinutes *uint64         `json:"duration_minutes,omitempty" yaml:"duration_minutes,omitempty"`
 	Timezone        *string         `json:"timezone,omitempty" yaml:"timezone,omitempty"`
@@ -676,8 +824,15 @@ type EventRoleList struct {
 	Roles []EventRoleAssignment `json:"roles" yaml:"roles"`
 }
 
-// SearchKind is a type alias
 type SearchKind string
+
+const (
+	SearchKindOrganization SearchKind = "organization"
+	SearchKindGathering    SearchKind = "gathering"
+	SearchKindEvent        SearchKind = "event"
+	SearchKindSeries       SearchKind = "series"
+	SearchKindRemoteEvent  SearchKind = "remote-event"
+)
 
 // GeoCircle represents a structured data type
 type GeoCircle struct {
@@ -723,11 +878,16 @@ type SearchResults struct {
 
 // AdminUser represents a structured data type
 type AdminUser struct {
-	UserId         UserID    `json:"user_id" yaml:"user_id"`
-	Handle         string    `json:"handle" yaml:"handle"`
-	LinkkeysDomain string    `json:"linkkeys_domain" yaml:"linkkeys_domain"`
-	DisplayName    string    `json:"display_name" yaml:"display_name"`
-	GrantedAt      time.Time `json:"granted_at" yaml:"granted_at"`
+	// receive-only
+	UserId UserID `json:"user_id" yaml:"user_id"`
+	// receive-only
+	Handle string `json:"handle" yaml:"handle"`
+	// receive-only
+	LinkkeysDomain string `json:"linkkeys_domain" yaml:"linkkeys_domain"`
+	// receive-only
+	DisplayName string `json:"display_name" yaml:"display_name"`
+	// receive-only
+	GrantedAt time.Time `json:"granted_at" yaml:"granted_at"`
 }
 
 // AdminList represents a structured data type
@@ -749,11 +909,16 @@ type FindUserRequest struct {
 
 // UserRef represents a structured data type
 type UserRef struct {
-	UserId         UserID `json:"user_id" yaml:"user_id"`
-	Handle         string `json:"handle" yaml:"handle"`
+	// receive-only
+	UserId UserID `json:"user_id" yaml:"user_id"`
+	// receive-only
+	Handle string `json:"handle" yaml:"handle"`
+	// receive-only
 	LinkkeysDomain string `json:"linkkeys_domain" yaml:"linkkeys_domain"`
-	DisplayName    string `json:"display_name" yaml:"display_name"`
-	IsAdmin        bool   `json:"is_admin" yaml:"is_admin"`
+	// receive-only
+	DisplayName string `json:"display_name" yaml:"display_name"`
+	// receive-only
+	IsAdmin bool `json:"is_admin" yaml:"is_admin"`
 }
 
 // UserRefList represents a structured data type
@@ -787,34 +952,60 @@ type UpdateInstanceSettingsRequest struct {
 	OriginRateLimitPerMinute    *uint64         `json:"origin_rate_limit_per_minute,omitempty" yaml:"origin_rate_limit_per_minute,omitempty"`
 }
 
-// PeerStatus is a type alias
 type PeerStatus string
+
+const (
+	PeerStatusNone     PeerStatus = "none"
+	PeerStatusPending  PeerStatus = "pending"
+	PeerStatusApproved PeerStatus = "approved"
+	PeerStatusBlocked  PeerStatus = "blocked"
+)
 
 // Peer represents a structured data type
 type Peer struct {
-	Id                 string     `json:"id" yaml:"id"`
-	Address            string     `json:"address" yaml:"address"`
-	Handle             string     `json:"handle" yaml:"handle"`
-	Domain             string     `json:"domain" yaml:"domain"`
-	SubjectUserId      *string    `json:"subject_user_id,omitempty" yaml:"subject_user_id,omitempty"`
-	SubjectDomain      *string    `json:"subject_domain,omitempty" yaml:"subject_domain,omitempty"`
-	ApplicationId      *string    `json:"application_id,omitempty" yaml:"application_id,omitempty"`
-	InstanceId         *string    `json:"instance_id,omitempty" yaml:"instance_id,omitempty"`
-	BaseUrl            string     `json:"base_url" yaml:"base_url"`
-	InboundStatus      PeerStatus `json:"inbound_status" yaml:"inbound_status"`
-	OutboundStatus     PeerStatus `json:"outbound_status" yaml:"outbound_status"`
-	Note               string     `json:"note" yaml:"note"`
-	Suspended          bool       `json:"suspended" yaml:"suspended"`
-	SuspendedAt        *time.Time `json:"suspended_at,omitempty" yaml:"suspended_at,omitempty"`
-	FirstFailureAt     *time.Time `json:"first_failure_at,omitempty" yaml:"first_failure_at,omitempty"`
-	LastFailureAt      *time.Time `json:"last_failure_at,omitempty" yaml:"last_failure_at,omitempty"`
-	LastFailureReason  string     `json:"last_failure_reason" yaml:"last_failure_reason"`
-	LastSuccessAt      *time.Time `json:"last_success_at,omitempty" yaml:"last_success_at,omitempty"`
-	PendingDeliveries  uint64     `json:"pending_deliveries" yaml:"pending_deliveries"`
-	RateLimitPerMinute *uint64    `json:"rate_limit_per_minute,omitempty" yaml:"rate_limit_per_minute,omitempty"`
-	RateLimitedTotal   uint64     `json:"rate_limited_total" yaml:"rate_limited_total"`
-	CreatedAt          time.Time  `json:"created_at" yaml:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at" yaml:"updated_at"`
+	// receive-only
+	Id string `json:"id" yaml:"id"`
+	// receive-only
+	Address string `json:"address" yaml:"address"`
+	// receive-only
+	Handle string `json:"handle" yaml:"handle"`
+	// receive-only
+	Domain string `json:"domain" yaml:"domain"`
+	// receive-only
+	SubjectUserId *string `json:"subject_user_id,omitempty" yaml:"subject_user_id,omitempty"`
+	// receive-only
+	SubjectDomain *string `json:"subject_domain,omitempty" yaml:"subject_domain,omitempty"`
+	// receive-only
+	ApplicationId *string `json:"application_id,omitempty" yaml:"application_id,omitempty"`
+	// receive-only
+	InstanceId *string `json:"instance_id,omitempty" yaml:"instance_id,omitempty"`
+	BaseUrl    string  `json:"base_url" yaml:"base_url"`
+	// receive-only
+	InboundStatus PeerStatus `json:"inbound_status" yaml:"inbound_status"`
+	// receive-only
+	OutboundStatus PeerStatus `json:"outbound_status" yaml:"outbound_status"`
+	Note           string     `json:"note" yaml:"note"`
+	// receive-only
+	Suspended bool `json:"suspended" yaml:"suspended"`
+	// receive-only
+	SuspendedAt *time.Time `json:"suspended_at,omitempty" yaml:"suspended_at,omitempty"`
+	// receive-only
+	FirstFailureAt *time.Time `json:"first_failure_at,omitempty" yaml:"first_failure_at,omitempty"`
+	// receive-only
+	LastFailureAt *time.Time `json:"last_failure_at,omitempty" yaml:"last_failure_at,omitempty"`
+	// receive-only
+	LastFailureReason string `json:"last_failure_reason" yaml:"last_failure_reason"`
+	// receive-only
+	LastSuccessAt *time.Time `json:"last_success_at,omitempty" yaml:"last_success_at,omitempty"`
+	// receive-only
+	PendingDeliveries  uint64  `json:"pending_deliveries" yaml:"pending_deliveries"`
+	RateLimitPerMinute *uint64 `json:"rate_limit_per_minute,omitempty" yaml:"rate_limit_per_minute,omitempty"`
+	// receive-only
+	RateLimitedTotal uint64 `json:"rate_limited_total" yaml:"rate_limited_total"`
+	// receive-only
+	CreatedAt time.Time `json:"created_at" yaml:"created_at"`
+	// receive-only
+	UpdatedAt time.Time `json:"updated_at" yaml:"updated_at"`
 }
 
 // PeerList represents a structured data type
@@ -930,22 +1121,38 @@ type PeeringReceipt struct {
 
 // RemoteEvent represents a structured data type
 type RemoteEvent struct {
-	Id               string    `json:"id" yaml:"id"`
-	PeerAddress      string    `json:"peer_address" yaml:"peer_address"`
-	Origin           Origin    `json:"origin" yaml:"origin"`
-	OriginDomain     string    `json:"origin_domain" yaml:"origin_domain"`
-	RemoteId         string    `json:"remote_id" yaml:"remote_id"`
-	CanonicalUrl     string    `json:"canonical_url" yaml:"canonical_url"`
-	Title            string    `json:"title" yaml:"title"`
-	IsOnline         bool      `json:"is_online" yaml:"is_online"`
-	IsInPerson       bool      `json:"is_in_person" yaml:"is_in_person"`
-	Location         *Location `json:"location,omitempty" yaml:"location,omitempty"`
-	StartsAt         time.Time `json:"starts_at" yaml:"starts_at"`
-	EndsAt           time.Time `json:"ends_at" yaml:"ends_at"`
-	Timezone         string    `json:"timezone" yaml:"timezone"`
-	GatheringName    string    `json:"gathering_name" yaml:"gathering_name"`
-	OrganizationName string    `json:"organization_name" yaml:"organization_name"`
-	ReceivedAt       time.Time `json:"received_at" yaml:"received_at"`
+	// receive-only
+	Id string `json:"id" yaml:"id"`
+	// receive-only
+	PeerAddress string `json:"peer_address" yaml:"peer_address"`
+	// receive-only
+	Origin Origin `json:"origin" yaml:"origin"`
+	// receive-only
+	OriginDomain string `json:"origin_domain" yaml:"origin_domain"`
+	// receive-only
+	RemoteId string `json:"remote_id" yaml:"remote_id"`
+	// receive-only
+	CanonicalUrl string `json:"canonical_url" yaml:"canonical_url"`
+	// receive-only
+	Title string `json:"title" yaml:"title"`
+	// receive-only
+	IsOnline bool `json:"is_online" yaml:"is_online"`
+	// receive-only
+	IsInPerson bool `json:"is_in_person" yaml:"is_in_person"`
+	// receive-only
+	Location *Location `json:"location,omitempty" yaml:"location,omitempty"`
+	// receive-only
+	StartsAt time.Time `json:"starts_at" yaml:"starts_at"`
+	// receive-only
+	EndsAt time.Time `json:"ends_at" yaml:"ends_at"`
+	// receive-only
+	Timezone string `json:"timezone" yaml:"timezone"`
+	// receive-only
+	GatheringName string `json:"gathering_name" yaml:"gathering_name"`
+	// receive-only
+	OrganizationName string `json:"organization_name" yaml:"organization_name"`
+	// receive-only
+	ReceivedAt time.Time `json:"received_at" yaml:"received_at"`
 }
 
 // RemoteEventList represents a structured data type
@@ -964,30 +1171,50 @@ type ListRemoteEventsRequest struct {
 
 // FederationIdentity represents a structured data type
 type FederationIdentity struct {
-	Address       string `json:"address" yaml:"address"`
-	Enabled       bool   `json:"enabled" yaml:"enabled"`
-	Algorithm     string `json:"algorithm" yaml:"algorithm"`
+	// receive-only
+	Address string `json:"address" yaml:"address"`
+	// receive-only
+	Enabled bool `json:"enabled" yaml:"enabled"`
+	// receive-only
+	Algorithm string `json:"algorithm" yaml:"algorithm"`
+	// receive-only
 	SubjectUserId string `json:"subject_user_id" yaml:"subject_user_id"`
+	// receive-only
 	SubjectDomain string `json:"subject_domain" yaml:"subject_domain"`
+	// receive-only
 	ApplicationId string `json:"application_id" yaml:"application_id"`
-	InstanceId    string `json:"instance_id" yaml:"instance_id"`
+	// receive-only
+	InstanceId string `json:"instance_id" yaml:"instance_id"`
 }
 
 // OriginVolume represents a structured data type
 type OriginVolume struct {
-	PeerId                      string     `json:"peer_id" yaml:"peer_id"`
-	PeerAddress                 string     `json:"peer_address" yaml:"peer_address"`
-	OrganizationName            string     `json:"organization_name" yaml:"organization_name"`
-	Held                        uint64     `json:"held" yaml:"held"`
-	AcceptedTotal               uint64     `json:"accepted_total" yaml:"accepted_total"`
-	AcceptedThisMinute          uint64     `json:"accepted_this_minute" yaml:"accepted_this_minute"`
-	LastReceivedAt              *time.Time `json:"last_received_at,omitempty" yaml:"last_received_at,omitempty"`
-	PeerRateLimitPerMinute      uint64     `json:"peer_rate_limit_per_minute" yaml:"peer_rate_limit_per_minute"`
-	PeerRateLimitedTotal        uint64     `json:"peer_rate_limited_total" yaml:"peer_rate_limited_total"`
-	PeerSuspended               bool       `json:"peer_suspended" yaml:"peer_suspended"`
-	RateLimitPerMinute          *uint64    `json:"rate_limit_per_minute,omitempty" yaml:"rate_limit_per_minute,omitempty"`
-	EffectiveRateLimitPerMinute uint64     `json:"effective_rate_limit_per_minute" yaml:"effective_rate_limit_per_minute"`
-	RateLimitedTotal            uint64     `json:"rate_limited_total" yaml:"rate_limited_total"`
+	// receive-only
+	PeerId string `json:"peer_id" yaml:"peer_id"`
+	// receive-only
+	PeerAddress string `json:"peer_address" yaml:"peer_address"`
+	// receive-only
+	OrganizationName string `json:"organization_name" yaml:"organization_name"`
+	// receive-only
+	Held uint64 `json:"held" yaml:"held"`
+	// receive-only
+	AcceptedTotal uint64 `json:"accepted_total" yaml:"accepted_total"`
+	// receive-only
+	AcceptedThisMinute uint64 `json:"accepted_this_minute" yaml:"accepted_this_minute"`
+	// receive-only
+	LastReceivedAt *time.Time `json:"last_received_at,omitempty" yaml:"last_received_at,omitempty"`
+	// receive-only
+	PeerRateLimitPerMinute uint64 `json:"peer_rate_limit_per_minute" yaml:"peer_rate_limit_per_minute"`
+	// receive-only
+	PeerRateLimitedTotal uint64 `json:"peer_rate_limited_total" yaml:"peer_rate_limited_total"`
+	// receive-only
+	PeerSuspended bool `json:"peer_suspended" yaml:"peer_suspended"`
+	// receive-only
+	RateLimitPerMinute *uint64 `json:"rate_limit_per_minute,omitempty" yaml:"rate_limit_per_minute,omitempty"`
+	// receive-only
+	EffectiveRateLimitPerMinute uint64 `json:"effective_rate_limit_per_minute" yaml:"effective_rate_limit_per_minute"`
+	// receive-only
+	RateLimitedTotal uint64 `json:"rate_limited_total" yaml:"rate_limited_total"`
 }
 
 // SetOriginRateLimitRequest represents a structured data type
@@ -1009,33 +1236,61 @@ type ListOriginVolumeRequest struct {
 	Page   *Page   `json:"page,omitempty" yaml:"page,omitempty"`
 }
 
-// WebhookOwnerKind is a type alias
 type WebhookOwnerKind string
 
-// WebhookScope is a type alias
+const (
+	WebhookOwnerKindOrganization WebhookOwnerKind = "organization"
+	WebhookOwnerKindGathering    WebhookOwnerKind = "gathering"
+)
+
 type WebhookScope string
 
-// WebhookAction is a type alias
+const (
+	WebhookScopeAll           WebhookScope = "all"
+	WebhookScopeStructureOnly WebhookScope = "structure_only"
+)
+
 type WebhookAction string
 
-// WebhookSubject is a type alias
+const (
+	WebhookActionCreated   WebhookAction = "created"
+	WebhookActionUpdated   WebhookAction = "updated"
+	WebhookActionCancelled WebhookAction = "cancelled"
+	WebhookActionDeleted   WebhookAction = "deleted"
+)
+
 type WebhookSubject string
+
+const (
+	WebhookSubjectOrganization WebhookSubject = "organization"
+	WebhookSubjectGathering    WebhookSubject = "gathering"
+	WebhookSubjectEvent        WebhookSubject = "event"
+	WebhookSubjectSeries       WebhookSubject = "series"
+)
 
 // Webhook represents a structured data type
 type Webhook struct {
-	Id             WebhookID        `json:"id" yaml:"id"`
-	OwnerKind      WebhookOwnerKind `json:"owner_kind" yaml:"owner_kind"`
-	OwnerId        string           `json:"owner_id" yaml:"owner_id"`
-	Url            string           `json:"url" yaml:"url"`
-	Scope          WebhookScope     `json:"scope" yaml:"scope"`
-	Active         bool             `json:"active" yaml:"active"`
-	IncludeDetails bool             `json:"include_details" yaml:"include_details"`
-	Note           string           `json:"note" yaml:"note"`
-	LastStatus     *uint64          `json:"last_status,omitempty" yaml:"last_status,omitempty"`
-	LastAttemptAt  *time.Time       `json:"last_attempt_at,omitempty" yaml:"last_attempt_at,omitempty"`
-	FailureCount   uint64           `json:"failure_count" yaml:"failure_count"`
-	CreatedAt      time.Time        `json:"created_at" yaml:"created_at"`
-	UpdatedAt      time.Time        `json:"updated_at" yaml:"updated_at"`
+	// receive-only
+	Id WebhookID `json:"id" yaml:"id"`
+	// receive-only
+	OwnerKind WebhookOwnerKind `json:"owner_kind" yaml:"owner_kind"`
+	// receive-only
+	OwnerId        string       `json:"owner_id" yaml:"owner_id"`
+	Url            string       `json:"url" yaml:"url"`
+	Scope          WebhookScope `json:"scope" yaml:"scope"`
+	Active         bool         `json:"active" yaml:"active"`
+	IncludeDetails bool         `json:"include_details" yaml:"include_details"`
+	Note           string       `json:"note" yaml:"note"`
+	// receive-only
+	LastStatus *uint64 `json:"last_status,omitempty" yaml:"last_status,omitempty"`
+	// receive-only
+	LastAttemptAt *time.Time `json:"last_attempt_at,omitempty" yaml:"last_attempt_at,omitempty"`
+	// receive-only
+	FailureCount uint64 `json:"failure_count" yaml:"failure_count"`
+	// receive-only
+	CreatedAt time.Time `json:"created_at" yaml:"created_at"`
+	// receive-only
+	UpdatedAt time.Time `json:"updated_at" yaml:"updated_at"`
 }
 
 // WebhookWithSecret represents a structured data type

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -246,6 +247,11 @@ func (e *testEnv) clock() time.Time {
 	return e.now
 }
 
+// today is the clock's calendar day in UTC, as CSIL `date` text.
+func (e *testEnv) today() string {
+	return e.clock().UTC().Format("2006-01-02")
+}
+
 // advance moves the clock forward. Every service reads the clock through
 // the same function, so one call moves the whole system's idea of now.
 func (e *testEnv) advance(d time.Duration) {
@@ -270,7 +276,7 @@ func (e *testEnv) login(t *testing.T, handle string) (*http.Client, csil.UserPro
 	t.Helper()
 	client := e.newClient(t)
 	resp := e.call(t, client, "devauth", "dev-login",
-		csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: handle, Domain: "example.test"}))
+		mustEncode(csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: handle, Domain: "example.test"})))
 	requireReply(t, resp, "UserProfile", "devauth/dev-login as "+handle)
 	profile, err := csil.DecodeUserProfile(resp.Payload)
 	if err != nil {
@@ -286,7 +292,7 @@ func (e *testEnv) loginAt(t *testing.T, handle, domain string) (*http.Client, cs
 	t.Helper()
 	client := e.newClient(t)
 	resp := e.call(t, client, "devauth", "dev-login",
-		csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: handle, Domain: domain}))
+		mustEncode(csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: handle, Domain: domain})))
 	requireReply(t, resp, "UserProfile", "devauth/dev-login as "+handle+"@"+domain)
 	profile, err := csil.DecodeUserProfile(resp.Payload)
 	if err != nil {
@@ -341,9 +347,9 @@ func requireServiceError(t *testing.T, resp transport.RpcResponse, code uint64, 
 func (e *testEnv) createGathering(t *testing.T, client *http.Client, name string) csil.Gathering {
 	t.Helper()
 	resp := e.call(t, client, "gathering", "create-gathering",
-		csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
+		mustEncode(csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
 			Name: name, Blurb: "a blurb", Description: "a longer description",
-		}))
+		})))
 	requireReply(t, resp, "Gathering", "gathering/create-gathering")
 	gathering, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -356,7 +362,7 @@ func (e *testEnv) createEvent(t *testing.T, client *http.Client, gatheringID csi
 	t.Helper()
 	starts := e.clock().Add(startsIn)
 	resp := e.call(t, client, "event", "create-event",
-		csil.EncodeCreateEventRequest(csil.CreateEventRequest{
+		mustEncode(csil.EncodeCreateEventRequest(csil.CreateEventRequest{
 			GatheringId: gatheringID,
 			Title:       title,
 			Description: "what happens at " + title,
@@ -365,7 +371,7 @@ func (e *testEnv) createEvent(t *testing.T, client *http.Client, gatheringID csi
 			StartsAt:    starts,
 			EndsAt:      starts.Add(time.Hour),
 			Timezone:    "America/Denver",
-		}))
+		})))
 	requireReply(t, resp, "Event", "event/create-event")
 	event, err := csil.DecodeEvent(resp.Payload)
 	if err != nil {
@@ -394,7 +400,7 @@ func TestGatheringOwnershipAndMembership(t *testing.T) {
 
 	// Somebody else sees the same gathering with none of the powers.
 	resp := env.call(t, bob, "gathering", "get-gathering",
-		csil.EncodeGetGatheringRequest(csil.GetGatheringRequest{Id: gathering.Id}))
+		mustEncode(csil.EncodeGetGatheringRequest(csil.GetGatheringRequest{Id: gathering.Id})))
 	requireReply(t, resp, "Gathering", "gathering/get-gathering as bob")
 	asBob, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -407,7 +413,7 @@ func TestGatheringOwnershipAndMembership(t *testing.T) {
 	// Joining is open to anybody with a session, and makes them a member
 	// without making them an owner.
 	resp = env.call(t, bob, "gathering", "join-gathering",
-		csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id}))
+		mustEncode(csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id})))
 	requireReply(t, resp, "Gathering", "gathering/join-gathering")
 	joined, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -433,9 +439,9 @@ func TestOrganizationOwnershipReachesTheGathering(t *testing.T) {
 	bob, bobProfile := env.login(t, "bob")
 
 	resp := env.call(t, ada, "organization", "create-organization",
-		csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{
+		mustEncode(csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{
 			Name: "Front Range Climbers", Blurb: "we climb", Description: "a longer description",
-		}))
+		})))
 	requireReply(t, resp, "Organization", "organization/create-organization")
 	organization, err := csil.DecodeOrganization(resp.Payload)
 	if err != nil {
@@ -444,19 +450,19 @@ func TestOrganizationOwnershipReachesTheGathering(t *testing.T) {
 
 	// Bob becomes an owner of the organization — not of any gathering.
 	resp = env.call(t, ada, "organization", "set-organization-member",
-		csil.EncodeSetOrganizationMemberRequest(csil.SetOrganizationMemberRequest{
+		mustEncode(csil.EncodeSetOrganizationMemberRequest(csil.SetOrganizationMemberRequest{
 			OrganizationId: organization.Id, UserId: bobProfile.Id, Role: "owner",
-		}))
+		})))
 	requireReply(t, resp, "OrganizationMemberList", "organization/set-organization-member")
 
 	// Ada makes a gathering owned by the organization rather than by herself.
 	resp = env.call(t, ada, "gathering", "create-gathering",
-		csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
+		mustEncode(csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
 			Name:        "Quarterly Crag Day",
 			Blurb:       "a blurb",
 			Description: "a longer description",
 			Owner:       &csil.OwnerRefInput{Kind: "organization", Id: string(organization.Id)},
-		}))
+		})))
 	requireReply(t, resp, "Gathering", "gathering/create-gathering owned by an organization")
 	gathering, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -468,7 +474,7 @@ func TestOrganizationOwnershipReachesTheGathering(t *testing.T) {
 
 	// Bob has never touched the gathering, and owns it.
 	resp = env.call(t, bob, "gathering", "get-gathering",
-		csil.EncodeGetGatheringRequest(csil.GetGatheringRequest{Id: gathering.Id}))
+		mustEncode(csil.EncodeGetGatheringRequest(csil.GetGatheringRequest{Id: gathering.Id})))
 	requireReply(t, resp, "Gathering", "gathering/get-gathering as an organization owner")
 	asBob, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -486,10 +492,10 @@ func TestBlurbWordLimit(t *testing.T) {
 	ada, _ := env.login(t, "ada")
 
 	resp := env.call(t, ada, "organization", "create-organization",
-		csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{
+		mustEncode(csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{
 			Name:  "Verbose",
 			Blurb: strings.TrimSpace(strings.Repeat("word ", 301)),
-		}))
+		})))
 	svcErr := requireServiceError(t, resp, 1, "organization/create-organization with a 301-word blurb")
 	if svcErr.Field == nil || *svcErr.Field != "blurb" {
 		t.Errorf("error names field %v, want blurb", svcErr.Field)
@@ -498,10 +504,10 @@ func TestBlurbWordLimit(t *testing.T) {
 	// 300 exactly is allowed: the limit is "less than 300 words" read as a
 	// ceiling, and a rule a writer cannot hit exactly is a worse rule.
 	resp = env.call(t, ada, "organization", "create-organization",
-		csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{
+		mustEncode(csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{
 			Name:  "Just Under",
 			Blurb: strings.TrimSpace(strings.Repeat("word ", 300)),
-		}))
+		})))
 	requireReply(t, resp, "Organization", "organization/create-organization with a 300-word blurb")
 }
 
@@ -514,7 +520,7 @@ func TestDuplicateNamesGetDistinctSlugs(t *testing.T) {
 	slugs := map[string]bool{}
 	for i := 0; i < 2; i++ {
 		resp := env.call(t, ada, "organization", "create-organization",
-			csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{Name: "Board Games"}))
+			mustEncode(csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{Name: "Board Games"})))
 		requireReply(t, resp, "Organization", "organization/create-organization (duplicate name)")
 		organization, err := csil.DecodeOrganization(resp.Payload)
 		if err != nil {
@@ -536,14 +542,14 @@ func TestOnlyGatheringOwnersScheduleEvents(t *testing.T) {
 
 	gathering := env.createGathering(t, ada, "Board Games")
 	env.call(t, bob, "gathering", "join-gathering",
-		csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id}))
+		mustEncode(csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id})))
 
 	starts := env.clock().Add(24 * time.Hour)
 	resp := env.call(t, bob, "event", "create-event",
-		csil.EncodeCreateEventRequest(csil.CreateEventRequest{
+		mustEncode(csil.EncodeCreateEventRequest(csil.CreateEventRequest{
 			GatheringId: gathering.Id, Title: "Bob's Event", IsOnline: true,
 			StartsAt: starts, EndsAt: starts.Add(time.Hour), Timezone: "UTC",
-		}))
+		})))
 	requireServiceError(t, resp, 3, "event/create-event as a mere member")
 
 	env.createEvent(t, ada, gathering.Id, "Catan Night", 24*time.Hour)
@@ -560,14 +566,14 @@ func TestAttendanceNeedsGatheringMembership(t *testing.T) {
 	// A person joins a gathering, then answers its events. Answering one
 	// without joining is refused.
 	resp := env.call(t, carol, "event", "attend-event",
-		csil.EncodeAttendEventRequest(csil.AttendEventRequest{EventId: event.Id}))
+		mustEncode(csil.EncodeAttendEventRequest(csil.AttendEventRequest{EventId: event.Id})))
 	requireServiceError(t, resp, 3, "event/attend-event without joining")
 
 	env.call(t, carol, "gathering", "join-gathering",
-		csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id}))
+		mustEncode(csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id})))
 
 	resp = env.call(t, carol, "event", "attend-event",
-		csil.EncodeAttendEventRequest(csil.AttendEventRequest{EventId: event.Id}))
+		mustEncode(csil.EncodeAttendEventRequest(csil.AttendEventRequest{EventId: event.Id})))
 	requireReply(t, resp, "Event", "event/attend-event after joining")
 	attending, err := csil.DecodeEvent(resp.Payload)
 	if err != nil {
@@ -578,7 +584,7 @@ func TestAttendanceNeedsGatheringMembership(t *testing.T) {
 	}
 
 	resp = env.call(t, carol, "event", "unattend-event",
-		csil.EncodeUnattendEventRequest(csil.UnattendEventRequest{EventId: event.Id}))
+		mustEncode(csil.EncodeUnattendEventRequest(csil.UnattendEventRequest{EventId: event.Id})))
 	requireReply(t, resp, "Event", "event/unattend-event")
 	withdrawn, err := csil.DecodeEvent(resp.Payload)
 	if err != nil {
@@ -604,13 +610,13 @@ func TestStartedEventIsFrozen(t *testing.T) {
 	}
 
 	env.call(t, carol, "gathering", "join-gathering",
-		csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id}))
+		mustEncode(csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id})))
 
 	// The moment starts_at passes, everything changes.
 	env.advance(2 * time.Hour)
 
 	resp := env.call(t, ada, "event", "get-event",
-		csil.EncodeGetEventRequest(csil.GetEventRequest{Id: event.Id}))
+		mustEncode(csil.EncodeGetEventRequest(csil.GetEventRequest{Id: event.Id})))
 	requireReply(t, resp, "Event", "event/get-event after it started")
 	started, err := csil.DecodeEvent(resp.Payload)
 	if err != nil {
@@ -631,21 +637,21 @@ func TestStartedEventIsFrozen(t *testing.T) {
 
 	newTitle := "Renamed"
 	resp = env.call(t, ada, "event", "update-event",
-		csil.EncodeUpdateEventRequest(csil.UpdateEventRequest{Id: event.Id, Title: &newTitle}))
+		mustEncode(csil.EncodeUpdateEventRequest(csil.UpdateEventRequest{Id: event.Id, Title: &newTitle})))
 	requireServiceError(t, resp, 3, "event/update-event after it started")
 
 	resp = env.call(t, carol, "event", "attend-event",
-		csil.EncodeAttendEventRequest(csil.AttendEventRequest{EventId: event.Id}))
+		mustEncode(csil.EncodeAttendEventRequest(csil.AttendEventRequest{EventId: event.Id})))
 	requireServiceError(t, resp, 3, "event/attend-event after it started")
 
 	// Even the owner cannot delete it. Deleting history is an admin's power.
 	resp = env.call(t, ada, "event", "delete-event",
-		csil.EncodeDeleteEventRequest(csil.DeleteEventRequest{Id: event.Id}))
+		mustEncode(csil.EncodeDeleteEventRequest(csil.DeleteEventRequest{Id: event.Id})))
 	requireServiceError(t, resp, 3, "event/delete-event by the owner after it started")
 
 	env.makeAdmin(t, string(adaProfile.Id))
 	resp = env.call(t, ada, "event", "delete-event",
-		csil.EncodeDeleteEventRequest(csil.DeleteEventRequest{Id: event.Id}))
+		mustEncode(csil.EncodeDeleteEventRequest(csil.DeleteEventRequest{Id: event.Id})))
 	requireReply(t, resp, "Empty", "event/delete-event by an admin after it started")
 }
 
@@ -670,14 +676,14 @@ func TestEveryStoredInstantIsUTC(t *testing.T) {
 	starts := time.Date(2026, 3, 12, 19, 30, 0, 0, kolkata)
 
 	resp := env.call(t, ada, "event", "create-event",
-		csil.EncodeCreateEventRequest(csil.CreateEventRequest{
+		mustEncode(csil.EncodeCreateEventRequest(csil.CreateEventRequest{
 			GatheringId: gathering.Id,
 			Title:       "Offset Probe",
 			IsOnline:    true,
 			StartsAt:    starts,
 			EndsAt:      starts.Add(time.Hour),
 			Timezone:    "Asia/Kolkata",
-		}))
+		})))
 	requireReply(t, resp, "Event", "event/create-event with a +05:30 instant")
 	event, err := csil.DecodeEvent(resp.Payload)
 	if err != nil {
@@ -736,7 +742,7 @@ func TestOnlyAdminsDeleteOrganizations(t *testing.T) {
 	ada, adaProfile := env.login(t, "ada")
 
 	resp := env.call(t, ada, "organization", "create-organization",
-		csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{Name: "Front Range Climbers"}))
+		mustEncode(csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{Name: "Front Range Climbers"})))
 	requireReply(t, resp, "Organization", "organization/create-organization")
 	organization, err := csil.DecodeOrganization(resp.Payload)
 	if err != nil {
@@ -747,12 +753,12 @@ func TestOnlyAdminsDeleteOrganizations(t *testing.T) {
 	}
 
 	resp = env.call(t, ada, "organization", "delete-organization",
-		csil.EncodeDeleteOrganizationRequest(csil.DeleteOrganizationRequest{Id: organization.Id}))
+		mustEncode(csil.EncodeDeleteOrganizationRequest(csil.DeleteOrganizationRequest{Id: organization.Id})))
 	requireServiceError(t, resp, 3, "organization/delete-organization as the owner")
 
 	env.makeAdmin(t, string(adaProfile.Id))
 	resp = env.call(t, ada, "organization", "delete-organization",
-		csil.EncodeDeleteOrganizationRequest(csil.DeleteOrganizationRequest{Id: organization.Id}))
+		mustEncode(csil.EncodeDeleteOrganizationRequest(csil.DeleteOrganizationRequest{Id: organization.Id})))
 	requireReply(t, resp, "Empty", "organization/delete-organization as an admin")
 }
 
@@ -761,7 +767,7 @@ func TestAnOrganizationKeepsAtLeastOneOwner(t *testing.T) {
 	ada, adaProfile := env.login(t, "ada")
 
 	resp := env.call(t, ada, "organization", "create-organization",
-		csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{Name: "Solo"}))
+		mustEncode(csil.EncodeCreateOrganizationRequest(csil.CreateOrganizationRequest{Name: "Solo"})))
 	requireReply(t, resp, "Organization", "organization/create-organization")
 	organization, err := csil.DecodeOrganization(resp.Payload)
 	if err != nil {
@@ -769,13 +775,76 @@ func TestAnOrganizationKeepsAtLeastOneOwner(t *testing.T) {
 	}
 
 	resp = env.call(t, ada, "organization", "remove-organization-member",
-		csil.EncodeRemoveOrganizationMemberRequest(csil.RemoveOrganizationMemberRequest{
+		mustEncode(csil.EncodeRemoveOrganizationMemberRequest(csil.RemoveOrganizationMemberRequest{
 			OrganizationId: organization.Id, UserId: adaProfile.Id,
-		}))
+		})))
 	requireServiceError(t, resp, 1, "organization/remove-organization-member removing the last owner")
 }
 
 // ---- Series ---------------------------------------------------------------
+
+// A series' first and last days are calendar days in the series' own
+// timezone, sent as CSIL `date`. The last day counts in full: a Thursday
+// series that ends on a Thursday has an occurrence that evening. As
+// instants at midnight UTC, the last Thursday in Tokyo would end at 09:00
+// local and lose its 19:00 occurrence. A change of timezone leaves the days
+// as they are.
+func TestSeriesDaysAreCalendarDaysInTheSeriesZone(t *testing.T) {
+	env := newTestEnv(t)
+	ada, _ := env.login(t, "ada")
+	gathering := env.createGathering(t, ada, "Board Games")
+
+	thursday := csil.Weekday("thursday")
+	endsOn := "2026-01-29"
+	resp := env.call(t, ada, "event", "create-event-series",
+		mustEncode(csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
+			GatheringId: gathering.Id, Title: "Thursday Go", IsOnline: true,
+			Recurrence: csil.RecurrenceRule{Freq: "weekly", Interval: 1, Weekday: &thursday},
+			StartsOn:   "2026-01-08", EndsOn: &endsOn,
+			StartTime: "19:00", DurationMinutes: 120, Timezone: "Asia/Tokyo",
+		})))
+	requireReply(t, resp, "EventSeries", "event/create-event-series")
+	series, err := csil.DecodeEventSeries(resp.Payload)
+	if err != nil {
+		t.Fatalf("decoding EventSeries: %v", err)
+	}
+	if series.StartsOn != "2026-01-08" || series.EndsOn == nil || *series.EndsOn != endsOn {
+		t.Errorf("series days are %q to %v, want 2026-01-08 to %s", series.StartsOn, series.EndsOn, endsOn)
+	}
+
+	tokyo, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		t.Fatalf("loading Asia/Tokyo: %v", err)
+	}
+	resp = env.call(t, ada, "event", "list-events",
+		mustEncode(csil.EncodeListEventsRequest(csil.ListEventsRequest{GatheringId: &gathering.Id})))
+	requireReply(t, resp, "EventList", "event/list-events")
+	list, err := csil.DecodeEventList(resp.Payload)
+	if err != nil {
+		t.Fatalf("decoding EventList: %v", err)
+	}
+	var got []string
+	for _, e := range list.Events {
+		got = append(got, e.StartsAt.In(tokyo).Format("2006-01-02 15:04"))
+	}
+	sort.Strings(got)
+	want := []string{"2026-01-08 19:00", "2026-01-15 19:00", "2026-01-22 19:00", "2026-01-29 19:00"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("occurrences in Tokyo:\n got %v\nwant %v", got, want)
+	}
+
+	denver := "America/Denver"
+	resp = env.call(t, ada, "event", "update-event-series",
+		mustEncode(csil.EncodeUpdateEventSeriesRequest(csil.UpdateEventSeriesRequest{Id: series.Id, Timezone: &denver})))
+	requireReply(t, resp, "EventSeries", "event/update-event-series")
+	moved, err := csil.DecodeEventSeries(resp.Payload)
+	if err != nil {
+		t.Fatalf("decoding EventSeries: %v", err)
+	}
+	if moved.StartsOn != "2026-01-08" || moved.EndsOn == nil || *moved.EndsOn != endsOn {
+		t.Errorf("after a timezone change the days are %q to %v, want 2026-01-08 to %s", moved.StartsOn, moved.EndsOn, endsOn)
+	}
+}
 
 // A series produces ordinary events. This is the claim the whole model rests
 // on: after creating one rule, the gathering's event listing is full of
@@ -788,7 +857,7 @@ func TestSeriesMaterializesRealEvents(t *testing.T) {
 	weekday := csil.Weekday("thursday")
 	ordinal := int64(2)
 	resp := env.call(t, ada, "event", "create-event-series",
-		csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
+		mustEncode(csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
 			GatheringId: gathering.Id,
 			Title:       "Second Thursday Catan",
 			Description: "every second Thursday",
@@ -796,11 +865,11 @@ func TestSeriesMaterializesRealEvents(t *testing.T) {
 			Recurrence: csil.RecurrenceRule{
 				Freq: "monthly", Interval: 1, Weekday: &weekday, Ordinal: &ordinal,
 			},
-			StartsOn:        env.clock(),
+			StartsOn:        env.today(),
 			StartTime:       "19:00",
 			DurationMinutes: 120,
 			Timezone:        "America/Denver",
-		}))
+		})))
 	requireReply(t, resp, "EventSeries", "event/create-event-series")
 	series, err := csil.DecodeEventSeries(resp.Payload)
 	if err != nil {
@@ -817,7 +886,7 @@ func TestSeriesMaterializesRealEvents(t *testing.T) {
 	// Those occurrences are events, indistinguishable from any other except
 	// for carrying series_id.
 	resp = env.call(t, ada, "event", "list-events",
-		csil.EncodeListEventsRequest(csil.ListEventsRequest{GatheringId: &gathering.Id}))
+		mustEncode(csil.EncodeListEventsRequest(csil.ListEventsRequest{GatheringId: &gathering.Id})))
 	requireReply(t, resp, "EventList", "event/list-events")
 	list, err := csil.DecodeEventList(resp.Payload)
 	if err != nil {
@@ -835,9 +904,9 @@ func TestSeriesMaterializesRealEvents(t *testing.T) {
 	// Expanding further is idempotent for what already exists.
 	through := env.clock().AddDate(2, 0, 0)
 	resp = env.call(t, ada, "event", "expand-event-series",
-		csil.EncodeExpandEventSeriesRequest(csil.ExpandEventSeriesRequest{
+		mustEncode(csil.EncodeExpandEventSeriesRequest(csil.ExpandEventSeriesRequest{
 			SeriesId: series.Id, Through: &through,
-		}))
+		})))
 	requireReply(t, resp, "EventList", "event/expand-event-series")
 	expanded, err := csil.DecodeEventList(resp.Payload)
 	if err != nil {
@@ -849,9 +918,9 @@ func TestSeriesMaterializesRealEvents(t *testing.T) {
 
 	before := expanded.Total
 	resp = env.call(t, ada, "event", "expand-event-series",
-		csil.EncodeExpandEventSeriesRequest(csil.ExpandEventSeriesRequest{
+		mustEncode(csil.EncodeExpandEventSeriesRequest(csil.ExpandEventSeriesRequest{
 			SeriesId: series.Id, Through: &through,
-		}))
+		})))
 	requireReply(t, resp, "EventList", "event/expand-event-series again")
 	again, err := csil.DecodeEventList(resp.Payload)
 	if err != nil {
@@ -873,21 +942,21 @@ func TestTwoSeriesInOneGathering(t *testing.T) {
 	makeSeries := func(title string, weekday csil.Weekday, ordinal int64) {
 		t.Helper()
 		resp := env.call(t, ada, "event", "create-event-series",
-			csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
+			mustEncode(csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
 				GatheringId: gathering.Id, Title: title, IsOnline: true,
 				Recurrence: csil.RecurrenceRule{
 					Freq: "monthly", Interval: 1, Weekday: &weekday, Ordinal: &ordinal,
 				},
-				StartsOn: env.clock(), StartTime: "19:00",
+				StartsOn: env.today(), StartTime: "19:00",
 				DurationMinutes: 120, Timezone: "America/Denver",
-			}))
+			})))
 		requireReply(t, resp, "EventSeries", "event/create-event-series "+title)
 	}
 	makeSeries("Second Thursday Catan", "thursday", 2)
 	makeSeries("Fourth Wednesday Chess", "wednesday", 4)
 
 	resp := env.call(t, ada, "event", "list-events",
-		csil.EncodeListEventsRequest(csil.ListEventsRequest{GatheringId: &gathering.Id}))
+		mustEncode(csil.EncodeListEventsRequest(csil.ListEventsRequest{GatheringId: &gathering.Id})))
 	requireReply(t, resp, "EventList", "event/list-events with two series")
 	list, err := csil.DecodeEventList(resp.Payload)
 	if err != nil {
@@ -899,7 +968,7 @@ func TestTwoSeriesInOneGathering(t *testing.T) {
 
 	// The gathering counts a series once, not once per occurrence.
 	resp = env.call(t, ada, "gathering", "get-gathering",
-		csil.EncodeGetGatheringRequest(csil.GetGatheringRequest{Id: gathering.Id}))
+		mustEncode(csil.EncodeGetGatheringRequest(csil.GetGatheringRequest{Id: gathering.Id})))
 	requireReply(t, resp, "Gathering", "gathering/get-gathering")
 	fetched, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -921,7 +990,7 @@ func TestSearchByPlaceAndTime(t *testing.T) {
 		t.Helper()
 		starts := env.clock().Add(startsIn)
 		resp := env.call(t, ada, "event", "create-event",
-			csil.EncodeCreateEventRequest(csil.CreateEventRequest{
+			mustEncode(csil.EncodeCreateEventRequest(csil.CreateEventRequest{
 				GatheringId: gathering.Id, Title: title,
 				IsInPerson: true,
 				Location: &csil.Location{
@@ -929,7 +998,7 @@ func TestSearchByPlaceAndTime(t *testing.T) {
 					Latitude: &lat, Longitude: &lon,
 				},
 				StartsAt: starts, EndsAt: starts.Add(time.Hour), Timezone: "America/Denver",
-			}))
+			})))
 		requireReply(t, resp, "Event", "event/create-event "+title)
 	}
 	inPerson("Denver Session", "Denver", 39.7392, -104.9903, 24*time.Hour)
@@ -937,7 +1006,7 @@ func TestSearchByPlaceAndTime(t *testing.T) {
 
 	search := func(req csil.SearchRequest, what string) csil.SearchResults {
 		t.Helper()
-		resp := env.call(t, ada, "search", "search", csil.EncodeSearchRequest(req))
+		resp := env.call(t, ada, "search", "search", mustEncode(csil.EncodeSearchRequest(req)))
 		requireReply(t, resp, "SearchResults", "search/search "+what)
 		results, err := csil.DecodeSearchResults(resp.Payload)
 		if err != nil {
@@ -1025,14 +1094,14 @@ func TestSeriesOrganizerCanEditItsOccurrences(t *testing.T) {
 	weekday := csil.Weekday("thursday")
 	ordinal := int64(2)
 	resp := env.call(t, ada, "event", "create-event-series",
-		csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
+		mustEncode(csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
 			GatheringId: gathering.Id, Title: "Second Thursday Catan", IsOnline: true,
 			Recurrence: csil.RecurrenceRule{
 				Freq: "monthly", Interval: 1, Weekday: &weekday, Ordinal: &ordinal,
 			},
-			StartsOn: env.clock(), StartTime: "19:00",
+			StartsOn: env.today(), StartTime: "19:00",
 			DurationMinutes: 120, Timezone: "America/Denver",
-		}))
+		})))
 	requireReply(t, resp, "EventSeries", "event/create-event-series")
 	series, err := csil.DecodeEventSeries(resp.Payload)
 	if err != nil {
@@ -1040,14 +1109,14 @@ func TestSeriesOrganizerCanEditItsOccurrences(t *testing.T) {
 	}
 
 	resp = env.call(t, ada, "event", "set-event-role",
-		csil.EncodeSetEventRoleRequest(csil.SetEventRoleRequest{
+		mustEncode(csil.EncodeSetEventRoleRequest(csil.SetEventRoleRequest{
 			SeriesId: &series.Id, UserId: bobProfile.Id, Role: "organizer",
-		}))
+		})))
 	requireReply(t, resp, "EventRoleList", "event/set-event-role on the series")
 
 	// Find one occurrence and check bob may edit it.
 	resp = env.call(t, ada, "event", "list-events",
-		csil.EncodeListEventsRequest(csil.ListEventsRequest{GatheringId: &gathering.Id}))
+		mustEncode(csil.EncodeListEventsRequest(csil.ListEventsRequest{GatheringId: &gathering.Id})))
 	requireReply(t, resp, "EventList", "event/list-events")
 	list, err := csil.DecodeEventList(resp.Payload)
 	if err != nil {
@@ -1058,7 +1127,7 @@ func TestSeriesOrganizerCanEditItsOccurrences(t *testing.T) {
 	}
 
 	resp = env.call(t, bob, "event", "get-event",
-		csil.EncodeGetEventRequest(csil.GetEventRequest{Id: list.Events[0].Id}))
+		mustEncode(csil.EncodeGetEventRequest(csil.GetEventRequest{Id: list.Events[0].Id})))
 	requireReply(t, resp, "Event", "event/get-event as the series organizer")
 	occurrence, err := csil.DecodeEvent(resp.Payload)
 	if err != nil {
@@ -1070,7 +1139,7 @@ func TestSeriesOrganizerCanEditItsOccurrences(t *testing.T) {
 
 	title := "Catan Night (moved)"
 	resp = env.call(t, bob, "event", "update-event",
-		csil.EncodeUpdateEventRequest(csil.UpdateEventRequest{Id: occurrence.Id, Title: &title}))
+		mustEncode(csil.EncodeUpdateEventRequest(csil.UpdateEventRequest{Id: occurrence.Id, Title: &title})))
 	requireReply(t, resp, "Event", "event/update-event as the series organizer")
 }
 
@@ -1086,13 +1155,13 @@ func TestPresenterHasNoEditPower(t *testing.T) {
 	event := env.createEvent(t, ada, gathering.Id, "A Talk", 24*time.Hour)
 
 	resp := env.call(t, ada, "event", "set-event-role",
-		csil.EncodeSetEventRoleRequest(csil.SetEventRoleRequest{
+		mustEncode(csil.EncodeSetEventRoleRequest(csil.SetEventRoleRequest{
 			EventId: &event.Id, UserId: bobProfile.Id, Role: "presenter",
-		}))
+		})))
 	requireReply(t, resp, "EventRoleList", "event/set-event-role presenter")
 
 	resp = env.call(t, bob, "event", "get-event",
-		csil.EncodeGetEventRequest(csil.GetEventRequest{Id: event.Id}))
+		mustEncode(csil.EncodeGetEventRequest(csil.GetEventRequest{Id: event.Id})))
 	requireReply(t, resp, "Event", "event/get-event as a presenter")
 	asPresenter, err := csil.DecodeEvent(resp.Payload)
 	if err != nil {
@@ -1107,7 +1176,7 @@ func TestPresenterHasNoEditPower(t *testing.T) {
 
 	title := "Renamed by a presenter"
 	resp = env.call(t, bob, "event", "update-event",
-		csil.EncodeUpdateEventRequest(csil.UpdateEventRequest{Id: event.Id, Title: &title}))
+		mustEncode(csil.EncodeUpdateEventRequest(csil.UpdateEventRequest{Id: event.Id, Title: &title})))
 	requireServiceError(t, resp, 3, "event/update-event as a presenter")
 }
 
@@ -1121,7 +1190,7 @@ func TestAnonymousCanBrowse(t *testing.T) {
 
 	anon := env.newClient(t)
 	resp := env.call(t, anon, "gathering", "list-gatherings",
-		csil.EncodeListGatheringsRequest(csil.ListGatheringsRequest{}))
+		mustEncode(csil.EncodeListGatheringsRequest(csil.ListGatheringsRequest{})))
 	requireReply(t, resp, "GatheringList", "gathering/list-gatherings anonymously")
 	list, err := csil.DecodeGatheringList(resp.Payload)
 	if err != nil {
@@ -1136,7 +1205,7 @@ func TestAnonymousCanBrowse(t *testing.T) {
 
 	// Joining, though, needs a session.
 	resp = env.call(t, anon, "gathering", "join-gathering",
-		csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id}))
+		mustEncode(csil.EncodeJoinGatheringRequest(csil.JoinGatheringRequest{GatheringId: gathering.Id})))
 	requireServiceError(t, resp, 2, "gathering/join-gathering anonymously")
 }
 
@@ -1158,13 +1227,13 @@ func TestChangingARuleLeavesThePastAlone(t *testing.T) {
 	}
 
 	// Start the series a year before "now", so it has a real past.
-	startsOn := env.clock().AddDate(-1, 0, 0)
+	startsOn := env.clock().AddDate(-1, 0, 0).Format("2006-01-02")
 	resp := env.call(t, ada, "event", "create-event-series",
-		csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
+		mustEncode(csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
 			GatheringId: gathering.Id, Title: "Weekly Catan", IsOnline: true,
 			Recurrence: weekly(thursday), StartsOn: startsOn,
 			StartTime: "19:00", DurationMinutes: 120, Timezone: "America/Denver",
-		}))
+		})))
 	requireReply(t, resp, "EventSeries", "event/create-event-series")
 	series, err := csil.DecodeEventSeries(resp.Payload)
 	if err != nil {
@@ -1175,12 +1244,12 @@ func TestChangingARuleLeavesThePastAlone(t *testing.T) {
 		t.Helper()
 		before := env.clock()
 		resp := env.call(t, ada, "event", "list-events",
-			csil.EncodeListEventsRequest(csil.ListEventsRequest{
+			mustEncode(csil.EncodeListEventsRequest(csil.ListEventsRequest{
 				GatheringId:    &gathering.Id,
 				StartsBefore:   &before,
 				IncludeStarted: boolPtr(true),
 				Page:           &csil.Page{Limit: uint64Ptr(200)},
-			}))
+			})))
 		requireReply(t, resp, "EventList", "event/list-events "+what)
 		list, err := csil.DecodeEventList(resp.Payload)
 		if err != nil {
@@ -1197,9 +1266,9 @@ func TestChangingARuleLeavesThePastAlone(t *testing.T) {
 	// Move the rule to a different weekday.
 	rule := weekly(friday)
 	resp = env.call(t, ada, "event", "update-event-series",
-		csil.EncodeUpdateEventSeriesRequest(csil.UpdateEventSeriesRequest{
+		mustEncode(csil.EncodeUpdateEventSeriesRequest(csil.UpdateEventSeriesRequest{
 			Id: series.Id, Recurrence: &rule,
-		}))
+		})))
 	requireReply(t, resp, "EventSeries", "event/update-event-series")
 
 	pastAfter := countPast("after the change")
@@ -1221,12 +1290,12 @@ func TestExpandingASeriesReturnsAllOfIt(t *testing.T) {
 
 	thursday := csil.Weekday("thursday")
 	resp := env.call(t, ada, "event", "create-event-series",
-		csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
+		mustEncode(csil.EncodeCreateEventSeriesRequest(csil.CreateEventSeriesRequest{
 			GatheringId: gathering.Id, Title: "Weekly Catan", IsOnline: true,
 			Recurrence: csil.RecurrenceRule{Freq: "weekly", Interval: 1, Weekday: &thursday},
-			StartsOn:   env.clock(), StartTime: "19:00",
+			StartsOn:   env.today(), StartTime: "19:00",
 			DurationMinutes: 120, Timezone: "America/Denver",
-		}))
+		})))
 	requireReply(t, resp, "EventSeries", "event/create-event-series")
 	series, err := csil.DecodeEventSeries(resp.Payload)
 	if err != nil {
@@ -1236,9 +1305,9 @@ func TestExpandingASeriesReturnsAllOfIt(t *testing.T) {
 	// Two years of a weekly rule is comfortably more than one page.
 	through := env.clock().AddDate(2, 0, 0)
 	resp = env.call(t, ada, "event", "expand-event-series",
-		csil.EncodeExpandEventSeriesRequest(csil.ExpandEventSeriesRequest{
+		mustEncode(csil.EncodeExpandEventSeriesRequest(csil.ExpandEventSeriesRequest{
 			SeriesId: series.Id, Through: &through,
-		}))
+		})))
 	requireReply(t, resp, "EventList", "event/expand-event-series")
 	expanded, err := csil.DecodeEventList(resp.Payload)
 	if err != nil {
@@ -1247,7 +1316,7 @@ func TestExpandingASeriesReturnsAllOfIt(t *testing.T) {
 
 	// What the series actually has, read independently of the op under test.
 	resp = env.call(t, ada, "event", "get-event-series",
-		csil.EncodeGetEventSeriesRequest(csil.GetEventSeriesRequest{Id: series.Id}))
+		mustEncode(csil.EncodeGetEventSeriesRequest(csil.GetEventSeriesRequest{Id: series.Id})))
 	requireReply(t, resp, "EventSeries", "event/get-event-series")
 	reread, err := csil.DecodeEventSeries(resp.Payload)
 	if err != nil {

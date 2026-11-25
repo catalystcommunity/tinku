@@ -17,7 +17,7 @@
 //     different port of the same host — and same-origin would silently drop
 //     the cookie there, which reads as "logged out" on every call.
 import type { AsyncServiceTransport } from "~/gen/client.async.gen";
-import { fromServiceErrorCbor } from "~/gen/codec.gen";
+import { fromServiceErrorTypeCbor } from "~/gen/codec.gen";
 import { Status, statusName } from "~/transport/csil/conventions";
 import { RpcRequest, RpcResponse } from "~/transport/csil/rpc";
 import { apiBaseUrl } from "./apiBase";
@@ -43,54 +43,67 @@ export function createHttpTransport(options: HttpTransportOptions = {}): AsyncSe
   const endpoint = options.endpoint ?? `${apiBaseUrl()}${RPC_PATH}`;
   const doFetch = options.fetchImpl ?? fetch;
 
+  /** One round trip: the reply envelope at transport status 0, or a throw. */
+  async function exchange(service: string, op: string, payload: Uint8Array): Promise<RpcResponse> {
+    const envelope = new RpcRequest(serviceToWire(service), methodToOp(op), payload).encode();
+
+    let res: Response;
+    try {
+      res = await doFetch(endpoint, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/cbor", Accept: "application/cbor" },
+        // lib.dom's BodyInit wants Uint8Array<ArrayBuffer>; the codec
+        // returns Uint8Array<ArrayBufferLike>. Same bytes on every
+        // runtime that matters, so this is a type-only cast.
+        body: envelope as unknown as BodyInit,
+      });
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      throw new TinkuTransportError(`network error calling ${service}/${op}: ${detail}`);
+    }
+
+    const body = new Uint8Array(await res.arrayBuffer());
+
+    let response: RpcResponse;
+    try {
+      response = RpcResponse.decode(body);
+    } catch {
+      throw new TinkuTransportError(
+        res.ok
+          ? `undecodable response envelope for ${service}/${op}`
+          : `${service}/${op}: ${res.status} ${res.statusText}`,
+        res.ok ? undefined : res.status,
+      );
+    }
+
+    if (response.status !== Status.Ok) {
+      throw new TinkuTransportError(
+        response.error ?? `transport status ${statusName(response.status)} calling ${service}/${op}`,
+        response.status,
+      );
+    }
+
+    // A declared error arm rides at status 0 like any other reply — the
+    // variant name is what tells them apart. It is thrown here, as the
+    // app's one ServiceError type, for both paths below. The generated
+    // client's own ServiceErrorRefusal is therefore never thrown in the app.
+    if (response.variant === "ServiceError") {
+      throw new TinkuServiceError(fromServiceErrorTypeCbor(response.payload));
+    }
+    return response;
+  }
+
   return {
+    // An op with no declared error arm (logout, list-greetings).
     async call(service: string, op: string, payload: Uint8Array): Promise<Uint8Array> {
-      const envelope = new RpcRequest(serviceToWire(service), methodToOp(op), payload).encode();
-
-      let res: Response;
-      try {
-        res = await doFetch(endpoint, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/cbor", Accept: "application/cbor" },
-          // lib.dom's BodyInit wants Uint8Array<ArrayBuffer>; the codec
-          // returns Uint8Array<ArrayBufferLike>. Same bytes on every
-          // runtime that matters, so this is a type-only cast.
-          body: envelope as unknown as BodyInit,
-        });
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
-        throw new TinkuTransportError(`network error calling ${service}/${op}: ${detail}`);
-      }
-
-      const body = new Uint8Array(await res.arrayBuffer());
-
-      let response: RpcResponse;
-      try {
-        response = RpcResponse.decode(body);
-      } catch {
-        throw new TinkuTransportError(
-          res.ok
-            ? `undecodable response envelope for ${service}/${op}`
-            : `${service}/${op}: ${res.status} ${res.statusText}`,
-          res.ok ? undefined : res.status,
-        );
-      }
-
-      if (response.status !== Status.Ok) {
-        throw new TinkuTransportError(
-          response.error ?? `transport status ${statusName(response.status)} calling ${service}/${op}`,
-          response.status,
-        );
-      }
-
-      // A declared error arm rides at status 0 like any other reply — the
-      // variant name is what tells them apart.
-      if (response.variant === "ServiceError") {
-        throw new TinkuServiceError(fromServiceErrorCbor(response.payload));
-      }
-
-      return response.payload;
+      return (await exchange(service, op, payload)).payload;
+    },
+    // An op with a declared error arm. The generated client checks that the
+    // variant is a reply arm of this op, and refuses any other.
+    async callReply(service: string, op: string, payload: Uint8Array) {
+      const response = await exchange(service, op, payload);
+      return { variant: response.variant, payload: response.payload };
     },
   };
 }

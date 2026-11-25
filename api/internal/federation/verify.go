@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 
 	regularrp "github.com/catalystcommunity/linkkeys/sdks/regular-rp/go"
+	api "github.com/catalystcommunity/linkkeys/sdks/regular-rp/go/generated"
 )
 
 // PeerKeyResolver resolves and verifies another instance's linkkeys
@@ -54,7 +55,7 @@ var _ Verifier = (*ApplicationKeyVerifier)(nil)
 // SCHEME on the wire, not the bare primitive — see
 // regularrp.KeyForUse's own algorithm parameter, which this must match
 // exactly for a lookup to succeed.
-const applicationKeyCryptoAlgorithm = "ed25519"
+const applicationKeyCryptoAlgorithm = api.KeyAlgorithmEd25519
 
 // Verify implements Verifier. It fails closed — returning the single
 // ErrUntrusted for every reason, per sign.go's rule not to tell a caller

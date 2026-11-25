@@ -83,7 +83,7 @@ func usableKeys(kr *federation.LocalKeyring) regularrp.VerifiedApplicationKeySet
 		}
 		set.Keys = append(set.Keys, regularrp.VerifiedApplicationKey{
 			Attestation: api.ApplicationKeyAttestation{
-				KeyId: k.KeyID, KeyUsage: regularrp.KeyUsageSign, Algorithm: "ed25519",
+				KeyId: k.KeyID, KeyUsage: regularrp.KeyUsageSign, Algorithm: api.KeyAlgorithmEd25519,
 				PublicKey: append([]byte{}, k.PublicKey[:]...),
 			},
 			Status: regularrp.KeyStatus{Kind: regularrp.KeyStatusUsable},
@@ -96,7 +96,7 @@ func revokedKeys(kr *federation.LocalKeyring, keyID string) regularrp.VerifiedAp
 	set := usableKeys(kr)
 	for i := range set.Keys {
 		if set.Keys[i].Attestation.KeyId == keyID {
-			set.Keys[i].Status = regularrp.KeyStatus{Kind: regularrp.KeyStatusRevoked, RevokedAt: "2020-01-01T00:00:00Z"}
+			set.Keys[i].Status = regularrp.KeyStatus{Kind: regularrp.KeyStatusRevoked, RevokedAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)}
 		}
 	}
 	set.RevokedKeyIDs[keyID] = true
@@ -164,19 +164,19 @@ func (e *applicationKeyEnv) approvedPeer(t *testing.T, address string, identity 
 // specific refusal.
 func deliverAs(t *testing.T, e *applicationKeyEnv, senderAddress string, signer *federation.LocalKeyring, batch csil.EventBatch) transport.RpcResponse {
 	t.Helper()
-	body := csil.EncodeEventBatch(batch)
+	body := mustEncode(csil.EncodeEventBatch(batch))
 	signature, keyID, err := signer.Sign(context.Background(), body)
 	if err != nil {
 		t.Fatalf("signing: %v", err)
 	}
 	return e.call(t, e.newClient(t), "federation", "deliver-events",
-		csil.EncodeSignedDelivery(csil.SignedDelivery{
+		mustEncode(csil.EncodeSignedDelivery(csil.SignedDelivery{
 			SenderAddress: senderAddress,
 			Algorithm:     federation.ApplicationKeyAlgorithm,
 			KeyId:         keyID,
 			Signature:     signature,
 			Body:          body,
-		}))
+		})))
 }
 
 func testBatch(originDomain, batchID string, sentAt time.Time, events ...csil.FederatedEvent) csil.EventBatch {
@@ -423,15 +423,15 @@ func TestApplicationKeyReplayedBatchIsRefused(t *testing.T) {
 	env.approvedPeer(t, "tinku@publisher.test", instance)
 	env.resolver.set(instance, usableKeys(kr))
 
-	body := csil.EncodeEventBatch(testBatch("publisher.test", store.NewID(), env.clock(), testEvent("event-1", env.clock())))
+	body := mustEncode(csil.EncodeEventBatch(testBatch("publisher.test", store.NewID(), env.clock(), testEvent("event-1", env.clock()))))
 	signature, keyID, err := kr.Sign(context.Background(), body)
 	if err != nil {
 		t.Fatalf("signing: %v", err)
 	}
-	envelope := csil.EncodeSignedDelivery(csil.SignedDelivery{
+	envelope := mustEncode(csil.EncodeSignedDelivery(csil.SignedDelivery{
 		SenderAddress: "tinku@publisher.test", Algorithm: federation.ApplicationKeyAlgorithm,
 		KeyId: keyID, Signature: signature, Body: body,
-	})
+	}))
 
 	first := env.call(t, env.newClient(t), "federation", "deliver-events", envelope)
 	requireReply(t, first, "DeliveryReceipt", "the first delivery")
@@ -450,18 +450,18 @@ func TestApplicationKeyReplayedBatchIsRefused(t *testing.T) {
 // it as a SignedPeeringRequest, claiming identity for the sender.
 func peeringRequestAs(t *testing.T, e *applicationKeyEnv, senderAddress string, signer *federation.LocalKeyring, identity regularrp.InstanceRef, baseURL string) transport.RpcResponse {
 	t.Helper()
-	body := csil.EncodePeeringBody(csil.PeeringBody{BaseUrl: baseURL, RequestedAt: e.clock()})
+	body := mustEncode(csil.EncodePeeringBody(csil.PeeringBody{BaseUrl: baseURL, RequestedAt: e.clock()}))
 	signature, keyID, err := signer.SignWithContext(context.Background(), federation.PeeringSignatureTag, body)
 	if err != nil {
 		t.Fatalf("signing the peering request: %v", err)
 	}
 	return e.call(t, e.newClient(t), "federation", "request-peering",
-		csil.EncodeSignedPeeringRequest(csil.SignedPeeringRequest{
+		mustEncode(csil.EncodeSignedPeeringRequest(csil.SignedPeeringRequest{
 			SenderAddress: senderAddress, Algorithm: federation.ApplicationKeyAlgorithm, KeyId: keyID,
 			SubjectUserId: identity.SubjectUserID, SubjectDomain: identity.SubjectDomain,
 			ApplicationId: identity.ApplicationID, InstanceId: identity.InstanceID,
 			Signature: signature, Body: body,
-		}))
+		})))
 }
 
 // TestPeeringRequestCapturesIdentityOnFirstContact: an unknown sender's
@@ -538,9 +538,9 @@ func TestApprovingInboundRequiresAnIdentity(t *testing.T) {
 	admin, profile := env.login(t, "ada")
 	env.makeAdmin(t, string(profile.Id))
 
-	resp := env.call(t, admin, "federation", "add-peer", csil.EncodeAddPeerRequest(csil.AddPeerRequest{
+	resp := env.call(t, admin, "federation", "add-peer", mustEncode(csil.EncodeAddPeerRequest(csil.AddPeerRequest{
 		Address: "tinku@nopeer.test", BaseUrl: "https://nopeer.test",
-	}))
+	})))
 	requireReply(t, resp, "Peer", "add-peer")
 	peer, err := csil.DecodePeer(resp.Payload)
 	if err != nil {
@@ -548,16 +548,16 @@ func TestApprovingInboundRequiresAnIdentity(t *testing.T) {
 	}
 
 	approved := csil.PeerStatus(store.PeerStatusApproved)
-	resp = env.call(t, admin, "federation", "set-peer-status", csil.EncodeSetPeerStatusRequest(csil.SetPeerStatusRequest{
+	resp = env.call(t, admin, "federation", "set-peer-status", mustEncode(csil.EncodeSetPeerStatusRequest(csil.SetPeerStatusRequest{
 		PeerId: peer.Id, InboundStatus: &approved,
-	}))
+	})))
 	requireServiceError(t, resp, 1, "approving inbound with no identity")
 
 	userID, domain, appID, instanceID := "u1", "nopeer.test", "tinku", "i1"
-	resp = env.call(t, admin, "federation", "set-peer-status", csil.EncodeSetPeerStatusRequest(csil.SetPeerStatusRequest{
+	resp = env.call(t, admin, "federation", "set-peer-status", mustEncode(csil.EncodeSetPeerStatusRequest(csil.SetPeerStatusRequest{
 		PeerId: peer.Id, InboundStatus: &approved,
 		SubjectUserId: &userID, SubjectDomain: &domain, ApplicationId: &appID, InstanceId: &instanceID,
-	}))
+	})))
 	requireReply(t, resp, "Peer", "approving inbound with an identity supplied")
 	updated, err := csil.DecodePeer(resp.Payload)
 	if err != nil {

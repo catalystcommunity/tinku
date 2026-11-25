@@ -10,6 +10,9 @@
 ;; only one of those has a usable id-generating function. Timestamps use the
 ;; CSIL core `timestamp` type (CBOR tag 0, RFC3339 UTC), so generated code
 ;; gets a real time.Time / Date instead of a string the caller must parse.
+;; A calendar day uses the core `date` type (CBOR tag 1004, RFC 8943,
+;; "YYYY-MM-DD"). Never send a day as an instant at midnight: midnight UTC
+;; is the day before west of Greenwich.
 
 ;;; A user's id (ULID).
 UserID = text

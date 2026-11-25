@@ -5,7 +5,7 @@ go 1.26.4
 replace github.com/catalystcommunity/tinku/coredb => ../coredb
 
 require (
-	github.com/catalystcommunity/linkkeys/sdks/regular-rp/go v0.0.0-20261111162043-3227a58c78a7
+	github.com/catalystcommunity/linkkeys/sdks/regular-rp/go v0.0.0-20261125192355-e7cfb3d61d89
 	github.com/catalystcommunity/tinku/coredb v0.0.0-00010101000000-000000000000
 	github.com/oklog/ulid/v2 v2.1.2
 	github.com/prometheus/client_golang v1.24.1
@@ -15,7 +15,7 @@ require (
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/catalystcommunity/csilgen/transports/go v0.0.0-20260713013116-a661c8727022 // indirect
+	github.com/catalystcommunity/csilgen/transports/go v0.0.0-20260926220402-baec1dad191c // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect

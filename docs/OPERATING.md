@@ -70,7 +70,7 @@ node that starts as `localhost` keeps `localhost` in every address it made.
 | `TINKU_LINKKEYS_PKI_API_KEY` | `--linkkeys-pki-api-key` | The relying-party API key. |
 | `TINKU_APP_CALLBACK_URL` | `--app-callback-url` | The absolute URL of `GET /auth/callback`. |
 | `TINKU_LINKKEYS_DOMAIN` | `--linkkeys-domain` | The relying-party identity. It is the audience on an assertion. |
-| `TINKU_LINKKEYS_APPLICATION_ID` | `--linkkeys-application-id` | The application that sign-in names. The default is `TINKU_FEDERATION_APPLICATION_ID` (`tinku`). |
+| `TINKU_LINKKEYS_APPLICATION_ID` | `--linkkeys-application-id` | The application ID of the relying-party API-key account. Login refuses an assertion for a different application. The default is `TINKU_FEDERATION_APPLICATION_ID` (`tinku`). |
 | `TINKU_POST_LOGIN_REDIRECT_URL` | `--post-login-redirect-url` | Where the callback sends the browser. |
 
 Login works only when the first six are set. Without them,
@@ -82,9 +82,11 @@ to the fingerprints. `TINKU_LINKKEYS_PKI_URL` and
 they pointed at do not exist on a linkkeys relying party. The API writes a
 warning if `TINKU_LINKKEYS_PKI_URL` is set.
 
-Linkkeys v0.16.7 keeps consent for each (person, relying-party domain,
-application). Every sign-request names the application and sends tinku's
-claim request: `handle` is required and `display_name` is optional. The
+Linkkeys keeps consent for each (person, relying-party domain,
+application). From linkkeys v0.16.11 the relying party takes the
+application from the API-key account, not from the request. Every
+sign-request sends tinku's claim request: `handle` is required and
+`display_name` is optional. The
 shared relying parties have no claim configuration, so a request that
 sends no claims gets no claims. Thus:
 
@@ -92,7 +94,14 @@ sends no claims gets no claims. Thus:
 - A change to the application ID makes each person consent again.
 - The consent screen shows the display name of the API-key account. Give it
   a name that people know.
-- The person's identity domain must run linkkeys v0.16.7 or later.
+- The API-key account must be an application account. Its application ID
+  must be `TINKU_LINKKEYS_APPLICATION_ID`. To set it, use
+  `linkkeys user create NAME "Display" --application-id tinku`, or
+  `Admin/set-application-id` for an account that exists. Linkkeys v0.16.11
+  gave each API-key-only account the application ID that is its username.
+  Do a check of that ID after the upgrade.
+- The relying party and the person's identity domain must run linkkeys
+  v0.16.11 or later.
 
 ### Development login
 
@@ -170,6 +179,20 @@ Materialization is safe to repeat. A partial unique index on
 
 To see how far a series goes, read `materialized_through` on the
 `event_series` row.
+
+### Series days: the change to CSIL `date`
+
+`starts_on` and `ends_on` are CSIL `date` values (CBOR tag 1004,
+`"YYYY-MM-DD"`). Before this change they were `timestamp` values (tag 0).
+This is a wire change:
+
+- Upgrade the API and the web client together. An old client sends tag 0,
+  and the API refuses it.
+- Regenerate each external client from the schema (`clients/go`,
+  `clients/typescript`, or your own).
+- Migration `000011_series_dates` converts the stored values. On
+  PostgreSQL it reads each value in the series' own timezone, so the day is
+  exact. On SQLite the day is correct for zones from UTC-11 to UTC+12.
 
 ## Federation
 
@@ -554,9 +577,12 @@ Every timestamp column holds UTC, on both backends. A `timezone` column
 holds an IANA name. It is used to display an instant, and to interpret what
 somebody typed. It is never an offset put into a stored time.
 
-The one column that is not an instant is `event_series.start_time`. It holds
-a local clock time such as `19:00`, and it is read together with
-`event_series.timezone`. The pair is the recurrence rule, not a time. The
+Three columns are not instants. `event_series.start_time` holds a local
+clock time such as `19:00`. `event_series.starts_on` and
+`event_series.ends_on` hold calendar days: a `date` column in PostgreSQL,
+and `YYYY-MM-DD` text in SQLite. The series reads all three in
+`event_series.timezone`. Together they are the recurrence rule, not a time.
+`ends_on` includes all of its day. The
 rule makes UTC instants in the `events` table, and those obey the same rule
 as all other times. This is what keeps a 19:00 meeting at 19:00 local when
 daylight saving moves.

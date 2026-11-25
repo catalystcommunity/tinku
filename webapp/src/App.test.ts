@@ -15,7 +15,6 @@ import {
   toGatheringCbor,
   toGatheringListCbor,
   toOrganizationListCbor,
-  toServiceErrorCbor,
 } from "~/gen/codec.gen";
 import type { Event, Gathering, ViewerContext } from "~/gen/types.gen";
 import { TinkuServiceError } from "~/lib/errors";
@@ -116,35 +115,44 @@ const started: Event = {
   locked: true,
 };
 
+/** A typed reply: the CSIL type name of the arm, and its payload. */
+const reply = (variant: string, payload: Uint8Array) => ({ variant, payload });
+
 function fakeTransport(): AsyncServiceTransport {
+  const answer = (service: string, op: string) => {
+    switch (`${service}/${op}`) {
+      case "AuthService/whoami":
+        // Nobody is logged in. The transport signals a declared error arm
+        // the way the real one does — by throwing the same type, so
+        // session.ts's "unauthenticated is expected" branch is the one
+        // that runs.
+        throw new TinkuServiceError({ code: 2, message: "no active session" });
+      case "GatheringService/list-gatherings":
+        return reply("GatheringList", toGatheringListCbor({ gatherings: [gathering], total: 1 }));
+      case "GatheringService/get-gathering":
+        return reply("Gathering", toGatheringCbor(gathering));
+      case "EventService/list-events":
+        return reply("EventList", toEventListCbor({ events: [upcoming, started], total: 2 }));
+      case "EventService/list-event-series":
+        return reply("EventSeriesList", toEventSeriesListCbor({ series: [], total: 0 }));
+      case "EventService/get-event":
+        return reply("Event", toEventCbor(started));
+      case "EventService/list-attendees":
+        return reply("AttendeeList", toAttendeeListCbor({ eventId: started.id, attendees: [], total: 0 }));
+      case "EventService/list-event-roles":
+        return reply("EventRoleList", toEventRoleListCbor({ roles: [] }));
+      case "OrganizationService/list-organizations":
+        return reply("OrganizationList", toOrganizationListCbor({ organizations: [], total: 0 }));
+      default:
+        throw new TinkuServiceError({ code: 1, message: `unexpected call ${service}/${op}` });
+    }
+  };
   return {
     async call(service: string, op: string): Promise<Uint8Array> {
-      switch (`${service}/${op}`) {
-        case "AuthService/whoami":
-          // Nobody is logged in. The transport signals a declared error arm
-          // the way the real one does — by throwing the same type, so
-          // session.ts's "unauthenticated is expected" branch is the one
-          // that runs.
-          throw new TinkuServiceError({ code: 2, message: "no active session" });
-        case "GatheringService/list-gatherings":
-          return toGatheringListCbor({ gatherings: [gathering], total: 1 });
-        case "GatheringService/get-gathering":
-          return toGatheringCbor(gathering);
-        case "EventService/list-events":
-          return toEventListCbor({ events: [upcoming, started], total: 2 });
-        case "EventService/list-event-series":
-          return toEventSeriesListCbor({ series: [], total: 0 });
-        case "EventService/get-event":
-          return toEventCbor(started);
-        case "EventService/list-attendees":
-          return toAttendeeListCbor({ eventId: started.id, attendees: [], total: 0 });
-        case "EventService/list-event-roles":
-          return toEventRoleListCbor({ roles: [] });
-        case "OrganizationService/list-organizations":
-          return toOrganizationListCbor({ organizations: [], total: 0 });
-        default:
-          return toServiceErrorCbor({ code: 1, message: `unexpected call ${service}/${op}` });
-      }
+      return answer(service, op).payload;
+    },
+    async callReply(service: string, op: string) {
+      return answer(service, op);
     },
   };
 }

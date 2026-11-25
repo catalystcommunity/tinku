@@ -24,7 +24,7 @@ func denver(t *testing.T) *time.Location {
 func seriesFor(r store.Recurrence, startTime string) *store.EventSeries {
 	return &store.EventSeries{
 		Recurrence:      r,
-		StartsOn:        time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		StartsOn:        store.NewDate(2026, time.January, 1),
 		StartTime:       startTime,
 		DurationMinutes: 90,
 		Timezone:        "America/Denver",
@@ -293,7 +293,7 @@ func TestEndsOnClosesTheSeries(t *testing.T) {
 		Weekday:  weekdayPtr("thursday"),
 		Ordinal:  int64Ptr(2),
 	}, "19:00")
-	endsOn := time.Date(2026, 3, 31, 23, 59, 0, 0, time.UTC)
+	endsOn := store.NewDate(2026, time.March, 31)
 	series.EndsOn = &endsOn
 
 	times, err := occurrenceTimes(series,

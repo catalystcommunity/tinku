@@ -32,6 +32,12 @@ err() {
     echo "${RED}$*${NC}" >&2
 }
 
+# CSILGEN_VERSION is the csilgen release that made the checked-in generated
+# code. `gen` refuses another version: generated code from two releases in
+# one tree does not agree on the wire. Change this, then run `gen`, when you
+# move to a new release.
+CSILGEN_VERSION="0.3.3"
+
 # LOCAL_DB_URI is the SQLite database `serve-local` and `migrate` use when
 # nothing else is set. It needs no server, so a first run is one command.
 LOCAL_DB_URI="sqlite:${SCRIPT_DIR}/local.db"
@@ -101,6 +107,13 @@ cmd_gen() {
     if ! command -v csilgen >/dev/null 2>&1; then
         err "csilgen is not on PATH (looked in \$PATH, ~/.local/bin, ~/.cargo/bin)"
         err "install it from the catalystcommunity/csilgen repo: ./tools.sh install-all there"
+        exit 1
+    fi
+    local have
+    have="$(csilgen --version | awk '{print $2}')"
+    if [ "$have" != "$CSILGEN_VERSION" ]; then
+        err "csilgen $have is on PATH ($(command -v csilgen)); this repository needs $CSILGEN_VERSION"
+        err "install it from a csilgen checkout: ./tools.sh install-all csilgen/v$CSILGEN_VERSION"
         exit 1
     fi
 

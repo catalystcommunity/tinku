@@ -112,8 +112,6 @@ func (s *EventService) CreateEventSeries(ctx context.Context, req csil.CreateEve
 		IsInPerson:      req.IsInPerson,
 		Location:        fromLocation(req.Location),
 		Recurrence:      fromRecurrence(req.Recurrence),
-		StartsOn:        req.StartsOn.UTC(),
-		EndsOn:          utcOrNil(req.EndsOn),
 		StartTime:       req.StartTime,
 		DurationMinutes: int64(req.DurationMinutes),
 		Timezone:        req.Timezone,
@@ -121,12 +119,22 @@ func (s *EventService) CreateEventSeries(ctx context.Context, req csil.CreateEve
 	if req.OnlineUrl != nil {
 		in.OnlineURL = strings.TrimSpace(*req.OnlineUrl)
 	}
+	if in.StartsOn, err = parseDateField("starts_on", req.StartsOn); err != nil {
+		return csil.EventSeries{}, err
+	}
+	if req.EndsOn != nil {
+		endsOn, err := parseDateField("ends_on", *req.EndsOn)
+		if err != nil {
+			return csil.EventSeries{}, err
+		}
+		in.EndsOn = &endsOn
+	}
 	if err := validateSeries(&in); err != nil {
 		return csil.EventSeries{}, err
 	}
 	// Nothing is materialized yet; ensureHorizon below does that and
 	// records how far it got.
-	in.MaterializedThrough = in.StartsOn
+	in.MaterializedThrough = seriesBegins(&in)
 
 	series, err := s.Store.CreateEventSeries(ctx, in)
 	if err != nil {
@@ -197,10 +205,16 @@ func (s *EventService) UpdateEventSeries(ctx context.Context, req csil.UpdateEve
 		in.Recurrence = fromRecurrence(*req.Recurrence)
 	}
 	if req.StartsOn != nil {
-		in.StartsOn = req.StartsOn.UTC()
+		if in.StartsOn, err = parseDateField("starts_on", *req.StartsOn); err != nil {
+			return csil.EventSeries{}, err
+		}
 	}
 	if req.EndsOn != nil {
-		in.EndsOn = utcOrNil(req.EndsOn)
+		endsOn, err := parseDateField("ends_on", *req.EndsOn)
+		if err != nil {
+			return csil.EventSeries{}, err
+		}
+		in.EndsOn = &endsOn
 	}
 	if req.StartTime != nil {
 		in.StartTime = *req.StartTime
@@ -221,7 +235,7 @@ func (s *EventService) UpdateEventSeries(ctx context.Context, req csil.UpdateEve
 	// moving "every Thursday" to "every Friday" would add a Friday to every
 	// week the series has already run.
 	now := s.now()
-	in.MaterializedThrough = maxTime(in.StartsOn, now)
+	in.MaterializedThrough = maxTime(seriesBegins(&in), now)
 
 	if _, err := s.Store.UpdateEventSeries(ctx, series.ID, in); err != nil {
 		return csil.EventSeries{}, err
@@ -436,12 +450,24 @@ func validateSeries(in *store.EventSeriesInput) error {
 	return nil
 }
 
-func utcOrNil(t *time.Time) *time.Time {
-	if t == nil {
-		return nil
+// parseDateField reads a CSIL `date`. The generated decoder already checks
+// the form; this is the check for a caller that builds the struct in Go.
+func parseDateField(field, text string) (store.Date, error) {
+	d, err := store.ParseDate(text)
+	if err != nil {
+		return store.Date{}, Invalid(field, "a date looks like 2026-02-11")
 	}
-	utc := t.UTC()
-	return &utc
+	return d, nil
+}
+
+// seriesBegins is the instant the series' first day begins, in its own
+// timezone. Call it after validateSeries, which checks the timezone.
+func seriesBegins(in *store.EventSeriesInput) time.Time {
+	loc, err := time.LoadLocation(in.Timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+	return in.StartsOn.Midnight(loc).UTC()
 }
 
 // ---- Roles on events and series -------------------------------------------

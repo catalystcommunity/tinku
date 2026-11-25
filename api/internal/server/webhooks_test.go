@@ -23,7 +23,7 @@ func (e *testEnv) createWebhook(t *testing.T, client *http.Client, kind csil.Web
 
 func (e *testEnv) createWebhookWith(t *testing.T, client *http.Client, req csil.CreateWebhookRequest) csil.WebhookWithSecret {
 	t.Helper()
-	resp := e.call(t, client, "webhook", "create-webhook", csil.EncodeCreateWebhookRequest(req))
+	resp := e.call(t, client, "webhook", "create-webhook", mustEncode(csil.EncodeCreateWebhookRequest(req)))
 	requireReply(t, resp, "WebhookWithSecret", "webhook/create-webhook")
 	created, err := csil.DecodeWebhookWithSecret(resp.Payload)
 	if err != nil {
@@ -79,16 +79,16 @@ func TestOnlyAnOwnerManagesWebhooks(t *testing.T) {
 	gathering := env.createGathering(t, ada, "Thursday Bouldering")
 
 	resp := env.call(t, eve, "webhook", "create-webhook",
-		csil.EncodeCreateWebhookRequest(csil.CreateWebhookRequest{
+		mustEncode(csil.EncodeCreateWebhookRequest(csil.CreateWebhookRequest{
 			OwnerKind: "gathering", OwnerId: string(gathering.Id),
 			Url: "https://example.test/hook", Scope: "all",
-		}))
+		})))
 	requireServiceError(t, resp, 3, "a bystander adding a webhook")
 
 	resp = env.call(t, eve, "webhook", "list-webhooks",
-		csil.EncodeListWebhooksRequest(csil.ListWebhooksRequest{
+		mustEncode(csil.EncodeListWebhooksRequest(csil.ListWebhooksRequest{
 			OwnerKind: "gathering", OwnerId: string(gathering.Id),
-		}))
+		})))
 	requireServiceError(t, resp, 3, "a bystander reading webhooks")
 
 	created := env.createWebhook(t, ada, "gathering", string(gathering.Id), "https://example.test/hook", "all")
@@ -98,9 +98,9 @@ func TestOnlyAnOwnerManagesWebhooks(t *testing.T) {
 
 	// The secret is returned once and never again.
 	resp = env.call(t, ada, "webhook", "list-webhooks",
-		csil.EncodeListWebhooksRequest(csil.ListWebhooksRequest{
+		mustEncode(csil.EncodeListWebhooksRequest(csil.ListWebhooksRequest{
 			OwnerKind: "gathering", OwnerId: string(gathering.Id),
-		}))
+		})))
 	requireReply(t, resp, "WebhookList", "webhook/list-webhooks")
 	list, err := csil.DecodeWebhookList(resp.Payload)
 	if err != nil {
@@ -127,10 +127,10 @@ func TestFiveWebhooksPerLevel(t *testing.T) {
 	}
 
 	resp := env.call(t, ada, "webhook", "create-webhook",
-		csil.EncodeCreateWebhookRequest(csil.CreateWebhookRequest{
+		mustEncode(csil.EncodeCreateWebhookRequest(csil.CreateWebhookRequest{
 			OwnerKind: "gathering", OwnerId: string(gathering.Id),
 			Url: "https://example.test/hook/six", Scope: "all",
-		}))
+		})))
 	requireServiceError(t, resp, 1, "a sixth webhook")
 }
 
@@ -144,9 +144,9 @@ func TestAWebhookHearsWhatIsUnderIt(t *testing.T) {
 	organization := env.createOrganization(t, ada, "Front Range Climbers")
 	owner := csil.OwnerRefInput{Kind: "organization", Id: string(organization.Id)}
 	resp := env.call(t, ada, "gathering", "create-gathering",
-		csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
+		mustEncode(csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
 			Name: "Thursday Bouldering", Owner: &owner,
-		}))
+		})))
 	requireReply(t, resp, "Gathering", "gathering/create-gathering")
 	gathering, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -196,9 +196,9 @@ func TestStructureOnlyDropsEvents(t *testing.T) {
 	env.createWebhook(t, ada, "organization", string(organization.Id), "https://example.test/org", "structure_only")
 
 	resp := env.call(t, ada, "gathering", "create-gathering",
-		csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
+		mustEncode(csil.EncodeCreateGatheringRequest(csil.CreateGatheringRequest{
 			Name: "Thursday Bouldering", Owner: &owner,
-		}))
+		})))
 	requireReply(t, resp, "Gathering", "gathering/create-gathering")
 	gathering, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -237,7 +237,7 @@ func TestASwitchedOffWebhookIsNotDelivered(t *testing.T) {
 
 	off := false
 	resp := env.call(t, ada, "webhook", "update-webhook",
-		csil.EncodeUpdateWebhookRequest(csil.UpdateWebhookRequest{Id: created.Webhook.Id, Active: &off}))
+		mustEncode(csil.EncodeUpdateWebhookRequest(csil.UpdateWebhookRequest{Id: created.Webhook.Id, Active: &off})))
 	requireReply(t, resp, "Webhook", "webhook/update-webhook")
 
 	if got := env.queued(t); len(got) != 0 {
@@ -255,17 +255,17 @@ func TestAWebhookUrlIsCheckedForScheme(t *testing.T) {
 	// This env is dev, where http is allowed so a local receiver can be
 	// tried at all. Anything that is not http(s) is refused everywhere.
 	resp := env.call(t, ada, "webhook", "create-webhook",
-		csil.EncodeCreateWebhookRequest(csil.CreateWebhookRequest{
+		mustEncode(csil.EncodeCreateWebhookRequest(csil.CreateWebhookRequest{
 			OwnerKind: "gathering", OwnerId: string(gathering.Id),
 			Url: "ftp://example.test/hook", Scope: "all",
-		}))
+		})))
 	requireServiceError(t, resp, 1, "a webhook URL that is not http(s)")
 
 	resp = env.call(t, ada, "webhook", "create-webhook",
-		csil.EncodeCreateWebhookRequest(csil.CreateWebhookRequest{
+		mustEncode(csil.EncodeCreateWebhookRequest(csil.CreateWebhookRequest{
 			OwnerKind: "gathering", OwnerId: string(gathering.Id),
 			Url: "not a url at all", Scope: "all",
-		}))
+		})))
 	requireServiceError(t, resp, 1, "a webhook URL that is not a URL")
 }
 
@@ -349,7 +349,7 @@ func TestSwitchingDetailsOnLater(t *testing.T) {
 
 	on := true
 	resp := env.call(t, ada, "webhook", "update-webhook",
-		csil.EncodeUpdateWebhookRequest(csil.UpdateWebhookRequest{Id: created.Webhook.Id, IncludeDetails: &on}))
+		mustEncode(csil.EncodeUpdateWebhookRequest(csil.UpdateWebhookRequest{Id: created.Webhook.Id, IncludeDetails: &on})))
 	requireReply(t, resp, "Webhook", "webhook/update-webhook")
 	updated, err := csil.DecodeWebhook(resp.Payload)
 	if err != nil {

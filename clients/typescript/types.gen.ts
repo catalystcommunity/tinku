@@ -2,6 +2,19 @@
 // Source: <csil spec>
 // Target: typescript-typesonly
 
+export function isCalendarDate(value: unknown): value is string {
+  if (typeof value !== "string" || value.length !== 10 || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1];
+}
+
+export interface ServiceError {
+  code: number;
+  message: string;
+}
+
 /**
  * A user's id (ULID).
  */
@@ -127,6 +140,11 @@ export interface Page {
   offset?: number;
 }
 
+export const PublishSetting = {
+  UNSET: "unset",
+  IN: "in",
+  OUT: "out",
+} as const;
 /**
  * Whether a thing's events are published to the directories this instance
  * peers with.
@@ -137,6 +155,11 @@ export interface Page {
  */
 export type PublishSetting = "unset" | "in" | "out";
 
+export const PublishSource = {
+  INSTANCE: "instance",
+  ORGANIZATION: "organization",
+  GATHERING: "gathering",
+} as const;
 /**
  * Where an effective publish decision came from, so a screen can say
  * "your organization decided this" instead of showing a control that
@@ -199,7 +222,7 @@ export interface Origin {
 /**
  * The declared error type for every op that can fail.
  */
-export interface ServiceError {
+export interface ServiceErrorType {
   /**
    * Application error code. Branch on this, not on `message`.
    */
@@ -219,6 +242,10 @@ export interface ServiceError {
   resourceType?: string;
 }
 
+export const UserKind = {
+  HUMAN: "human",
+  SYSTEM: "system",
+} as const;
 /**
  * Who a `users` row represents. `human` is a linkkeys-authenticated
  * person; `system` is a non-interactive actor.
@@ -322,6 +349,10 @@ export interface GetGreetingRequest {
   id: GreetingID;
 }
 
+export const OrganizationRole = {
+  OWNER: "owner",
+  MEMBER: "member",
+} as const;
 /**
  * A member's standing in an organization. Owners can edit it, manage its
  * membership, and act as the organization in every place an organization
@@ -477,6 +508,10 @@ export interface RemoveOrganizationMemberRequest {
   userId: UserID;
 }
 
+export const OwnerKind = {
+  USER: "user",
+  ORGANIZATION: "organization",
+} as const;
 /**
  * What an owner reference points at.
  */
@@ -684,6 +719,12 @@ export interface RemoveGatheringOwnerRequest {
   owner: OwnerRefInput;
 }
 
+export const GatheringOfferStatus = {
+  PENDING: "pending",
+  ACCEPTED: "accepted",
+  DECLINED: "declined",
+  WITHDRAWN: "withdrawn",
+} as const;
 /**
  * Where an offer stands. An offer is a two-sided move: a gathering's owner
  * hands it to an organization, and an owner of that organization accepts.
@@ -784,12 +825,27 @@ export interface AdoptGatheringRequest {
   organizationId: OrganizationID;
 }
 
+export const Weekday = {
+  MONDAY: "monday",
+  TUESDAY: "tuesday",
+  WEDNESDAY: "wednesday",
+  THURSDAY: "thursday",
+  FRIDAY: "friday",
+  SATURDAY: "saturday",
+  SUNDAY: "sunday",
+} as const;
 /**
  * A day of the week, spelled in English regardless of the caller's locale
  * — this is a wire value, not display text. The UI translates it.
  */
 export type Weekday = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 
+export const RecurrenceFreq = {
+  WEEKLY: "weekly",
+  MONTHLY: "monthly",
+  QUARTERLY: "quarterly",
+  YEARLY: "yearly",
+} as const;
 /**
  * The period a recurrence rule repeats over.
  */
@@ -951,16 +1007,16 @@ export interface EventSeries {
   location?: Location;
   recurrence: RecurrenceRule;
   /**
-   * First date the rule may produce an occurrence on, as a UTC instant
-   * at midnight of the local date.
+   * First calendar day the rule may produce an occurrence on, in
+   * `timezone`. A day, not an instant: it is part of the rule.
    */
-  startsOn: Date;
+  startsOn: string;
   /**
-   * Last date the rule may produce an occurrence on. Absent means the
-   * series is open-ended, and the api keeps a bounded horizon
-   * materialized rather than an infinite one.
+   * Last calendar day the rule may produce an occurrence on, in
+   * `timezone`, inclusive. Absent means the series is open-ended, and the
+   * api keeps a bounded horizon materialized rather than an infinite one.
    */
-  endsOn?: Date;
+  endsOn?: string;
   /**
    * Local clock time each occurrence begins, "HH:MM" on a 24-hour clock,
    * interpreted in `timezone`.
@@ -996,6 +1052,10 @@ export interface EventSeries {
   updatedAt: Date;
 }
 
+export const EventRole = {
+  ORGANIZER: "organizer",
+  PRESENTER: "presenter",
+} as const;
 /**
  * A role held on one event or on one series. Ownership is not here: owners
  * are a property of the GATHERING and reach every event under it.
@@ -1127,8 +1187,8 @@ export interface CreateEventSeriesRequest {
   onlineUrl?: string;
   location?: Location;
   recurrence: RecurrenceRule;
-  startsOn: Date;
-  endsOn?: Date;
+  startsOn: string;
+  endsOn?: string;
   startTime: string;
   durationMinutes: number;
   timezone: string;
@@ -1147,8 +1207,8 @@ export interface UpdateEventSeriesRequest {
   onlineUrl?: string;
   location?: Location;
   recurrence?: RecurrenceRule;
-  startsOn?: Date;
-  endsOn?: Date;
+  startsOn?: string;
+  endsOn?: string;
   startTime?: string;
   durationMinutes?: number;
   timezone?: string;
@@ -1248,6 +1308,13 @@ export interface EventRoleList {
   roles: EventRoleAssignment[];
 }
 
+export const SearchKind = {
+  ORGANIZATION: "organization",
+  GATHERING: "gathering",
+  EVENT: "event",
+  SERIES: "series",
+  REMOTE_EVENT: "remote-event",
+} as const;
 /**
  * What kind of thing a search should return. An empty `kinds` list means
  * every kind.
@@ -1466,6 +1533,12 @@ export interface UpdateInstanceSettingsRequest {
   originRateLimitPerMinute?: number;
 }
 
+export const PeerStatus = {
+  NONE: "none",
+  PENDING: "pending",
+  APPROVED: "approved",
+  BLOCKED: "blocked",
+} as const;
 /**
  * A peer's standing in one direction.
  * 
@@ -1953,6 +2026,10 @@ export interface ListOriginVolumeRequest {
   page?: Page;
 }
 
+export const WebhookOwnerKind = {
+  ORGANIZATION: "organization",
+  GATHERING: "gathering",
+} as const;
 /**
  * What a webhook hangs off. An event or a series never carries one of its
  * own: a webhook is set where a person holds ownership, and the things
@@ -1960,6 +2037,10 @@ export interface ListOriginVolumeRequest {
  */
 export type WebhookOwnerKind = "organization" | "gathering";
 
+export const WebhookScope = {
+  ALL: "all",
+  STRUCTURE_ONLY: "structure_only",
+} as const;
 /**
  * How much of what happens underneath is reported.
  * 
@@ -1971,6 +2052,12 @@ export type WebhookOwnerKind = "organization" | "gathering";
  */
 export type WebhookScope = "all" | "structure_only";
 
+export const WebhookAction = {
+  CREATED: "created",
+  UPDATED: "updated",
+  CANCELLED: "cancelled",
+  DELETED: "deleted",
+} as const;
 /**
  * What happened. A cancellation is not a deletion: a cancelled event still
  * exists and still shows, which a receiver has to be able to tell apart
@@ -1978,6 +2065,12 @@ export type WebhookScope = "all" | "structure_only";
  */
 export type WebhookAction = "created" | "updated" | "cancelled" | "deleted";
 
+export const WebhookSubject = {
+  ORGANIZATION: "organization",
+  GATHERING: "gathering",
+  EVENT: "event",
+  SERIES: "series",
+} as const;
 /**
  * What it happened to.
  */
@@ -2236,6 +2329,10 @@ export function validateEventSeries(value: EventSeries): string[] {
   if (value.onlineUrl !== undefined) {
     if (value.onlineUrl.length < 0 || value.onlineUrl.length > 2000) errors.push("onlineUrl: length must be between 0 and 2000");
   }
+  if (!isCalendarDate(value.startsOn)) errors.push("startsOn: expected YYYY-MM-DD");
+  if (value.endsOn !== undefined) {
+    if (!isCalendarDate(value.endsOn)) errors.push("endsOn: expected YYYY-MM-DD");
+  }
   if (value.startTime.length < 5 || value.startTime.length > 5) errors.push("startTime: length must be between 5 and 5");
   if (!eventSeriesStartTimeRe.test(value.startTime)) errors.push("startTime: must match the required pattern");
   if (value.timezone.length < 1 || value.timezone.length > 64) errors.push("timezone: length must be between 1 and 64");
@@ -2278,6 +2375,10 @@ export function validateCreateEventSeriesRequest(value: CreateEventSeriesRequest
   if (value.onlineUrl !== undefined) {
     if (value.onlineUrl.length < 0 || value.onlineUrl.length > 2000) errors.push("onlineUrl: length must be between 0 and 2000");
   }
+  if (!isCalendarDate(value.startsOn)) errors.push("startsOn: expected YYYY-MM-DD");
+  if (value.endsOn !== undefined) {
+    if (!isCalendarDate(value.endsOn)) errors.push("endsOn: expected YYYY-MM-DD");
+  }
   if (value.startTime.length < 5 || value.startTime.length > 5) errors.push("startTime: length must be between 5 and 5");
   if (!createEventSeriesRequestStartTimeRe.test(value.startTime)) errors.push("startTime: must match the required pattern");
   if (value.timezone.length < 1 || value.timezone.length > 64) errors.push("timezone: length must be between 1 and 64");
@@ -2295,6 +2396,12 @@ export function validateUpdateEventSeriesRequest(value: UpdateEventSeriesRequest
   }
   if (value.onlineUrl !== undefined) {
     if (value.onlineUrl.length < 0 || value.onlineUrl.length > 2000) errors.push("onlineUrl: length must be between 0 and 2000");
+  }
+  if (value.startsOn !== undefined) {
+    if (!isCalendarDate(value.startsOn)) errors.push("startsOn: expected YYYY-MM-DD");
+  }
+  if (value.endsOn !== undefined) {
+    if (!isCalendarDate(value.endsOn)) errors.push("endsOn: expected YYYY-MM-DD");
   }
   if (value.startTime !== undefined) {
     if (value.startTime.length < 5 || value.startTime.length > 5) errors.push("startTime: length must be between 5 and 5");

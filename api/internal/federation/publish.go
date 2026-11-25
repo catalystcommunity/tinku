@@ -108,7 +108,7 @@ func (p *Publisher) envelope(ctx context.Context, ev FederatedEventInput, delete
 		}
 	}
 
-	body := csil.EncodeEventBatch(csil.EventBatch{
+	body, err := csil.EncodeEventBatch(csil.EventBatch{
 		OriginDomain: p.OriginDomain,
 		// A value never repeated, so a receiver can refuse this envelope
 		// the second time it arrives. Minted here rather than at send time
@@ -118,6 +118,9 @@ func (p *Publisher) envelope(ctx context.Context, ev FederatedEventInput, delete
 		SentAt:  p.now(),
 		Events:  []csil.FederatedEvent{federated},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("encoding the event batch: %w", err)
+	}
 	signature, keyID, err := p.Signer.Sign(ctx, body)
 	if err != nil {
 		return nil, fmt.Errorf("signing the delivery: %w", err)
@@ -128,7 +131,7 @@ func (p *Publisher) envelope(ctx context.Context, ev FederatedEventInput, delete
 		KeyId:         keyID,
 		Signature:     signature,
 		Body:          body,
-	}), nil
+	})
 }
 
 // canonicalURL is where a reader goes for everything a delivery leaves out.

@@ -4,11 +4,12 @@
 // vendored codec, so they pin the actual bytes rather than a mock's idea of
 // them.
 import { describe, expect, it } from "vitest";
-import { toServiceErrorCbor, toGreetingListCbor } from "~/gen/codec.gen";
+import { toServiceErrorTypeCbor, toGreetingListCbor } from "~/gen/codec.gen";
 import { Status } from "~/transport/csil/conventions";
 import { RpcRequest, RpcResponse } from "~/transport/csil/rpc";
 import { TinkuServiceError, TinkuTransportError } from "./errors";
 import { createHttpTransport } from "./httpTransport";
+import { createApi } from "./api";
 
 /** A fetch stand-in that answers with one encoded envelope and records the request. */
 function respondWith(response: RpcResponse, seen: { request?: RpcRequest } = {}) {
@@ -44,13 +45,42 @@ describe("createHttpTransport", () => {
     // A declared error arm is a SUCCESSFUL transport outcome — status 0 —
     // distinguished only by its variant name. Getting this wrong is the
     // classic CSIL-RPC client bug.
-    const reply = RpcResponse.ok("ServiceError", toServiceErrorCbor({ code: 2, message: "no active session" }));
+    const reply = RpcResponse.ok("ServiceError", toServiceErrorTypeCbor({ code: 2, message: "no active session" }));
 
     const { fetchImpl } = respondWith(reply);
     const call = createHttpTransport({ fetchImpl }).call("AuthService", "whoami", new Uint8Array());
 
     await expect(call).rejects.toBeInstanceOf(TinkuServiceError);
     await expect(call).rejects.toMatchObject({ code: 2, message: "no active session" });
+  });
+
+  it("gives the variant with the payload for an op with an error arm", async () => {
+    const reply = RpcResponse.ok("GreetingList", toGreetingListCbor({ greetings: [] }));
+
+    const { fetchImpl } = respondWith(reply);
+    const out = await createHttpTransport({ fetchImpl }).callReply("GreetingService", "list-greetings", new Uint8Array());
+    expect(out.variant).toBe("GreetingList");
+    expect(out.payload).toEqual(reply.payload);
+  });
+
+  it("throws the app's ServiceError on the error-arm path too", async () => {
+    const reply = RpcResponse.ok("ServiceError", toServiceErrorTypeCbor({ code: 4, message: "no such greeting" }));
+
+    const { fetchImpl } = respondWith(reply);
+    const call = createHttpTransport({ fetchImpl }).callReply("GreetingService", "get-greeting", new Uint8Array());
+
+    await expect(call).rejects.toBeInstanceOf(TinkuServiceError);
+    await expect(call).rejects.toMatchObject({ code: 4 });
+  });
+
+  it("lets the generated client refuse a reply arm the op does not declare", async () => {
+    // whoami replies UserProfile or ServiceError. A server that names any
+    // other arm is out of contract, and the payload is not decoded as one.
+    const reply = RpcResponse.ok("GreetingList", toGreetingListCbor({ greetings: [] }));
+
+    const { fetchImpl } = respondWith(reply);
+    const api = createApi(createHttpTransport({ fetchImpl }));
+    await expect(api.auth.whoami({})).rejects.toThrow(/invalid RPC reply variant GreetingList/);
   });
 
   it("throws a transport error for a non-zero transport status", async () => {
