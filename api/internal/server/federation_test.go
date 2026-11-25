@@ -213,7 +213,7 @@ func TestDeletingAnEventReachesTheDirectory(t *testing.T) {
 
 	pair.Publisher.makeAdmin(t, string(adaProfile.Id))
 	resp := pair.Publisher.call(t, ada, "event", "delete-event",
-		csil.EncodeDeleteEventRequest(csil.DeleteEventRequest{Id: event.Id}))
+		mustEncode(csil.EncodeDeleteEventRequest(csil.DeleteEventRequest{Id: event.Id})))
 	requireReply(t, resp, "Empty", "event/delete-event")
 
 	if _, _, err := pair.Sender.RunOnce(context.Background()); err != nil {
@@ -237,7 +237,7 @@ func TestEditsBeforeDeliveryCoalesce(t *testing.T) {
 	for _, title := range []string{"Catan Night (moved)", "Catan Night (final)"} {
 		renamed := title
 		resp := pair.Publisher.call(t, ada, "event", "update-event",
-			csil.EncodeUpdateEventRequest(csil.UpdateEventRequest{Id: event.Id, Title: &renamed}))
+			mustEncode(csil.EncodeUpdateEventRequest(csil.UpdateEventRequest{Id: event.Id, Title: &renamed})))
 		requireReply(t, resp, "Event", "event/update-event")
 	}
 
@@ -337,7 +337,7 @@ func TestATamperedDeliveryIsRefused(t *testing.T) {
 	pair := newFederatedPair(t)
 	pair.peerUp(t)
 
-	body := csil.EncodeEventBatch(csil.EventBatch{
+	body := mustEncode(csil.EncodeEventBatch(csil.EventBatch{
 		OriginDomain: "publisher.test",
 		BatchId:      store.NewID(),
 		SentAt:       pair.Publisher.clock(),
@@ -346,15 +346,15 @@ func TestATamperedDeliveryIsRefused(t *testing.T) {
 			Title: "Forged", IsOnline: true, StartsAt: pair.Publisher.clock().Add(time.Hour),
 			EndsAt: pair.Publisher.clock().Add(2 * time.Hour), Timezone: "UTC",
 		}},
-	})
+	}))
 
 	resp := pair.Directory.call(t, pair.Directory.newClient(t), "federation", "deliver-events",
-		csil.EncodeSignedDelivery(csil.SignedDelivery{
+		mustEncode(csil.EncodeSignedDelivery(csil.SignedDelivery{
 			SenderAddress: "tinku@publisher.test",
 			Algorithm:     federation.DevAlgorithm,
 			Signature:     "not-the-right-signature",
 			Body:          body,
-		}))
+		})))
 	requireServiceError(t, resp, 3, "federation/deliver-events with a bad signature")
 
 	if held := pair.remoteEvents(t); len(held) != 0 {
@@ -367,7 +367,7 @@ func TestABatchCannotClaimAnotherOrigin(t *testing.T) {
 	pair := newFederatedPair(t)
 	pair.peerUp(t)
 
-	body := csil.EncodeEventBatch(csil.EventBatch{
+	body := mustEncode(csil.EncodeEventBatch(csil.EventBatch{
 		// Correctly signed by tinku@publisher.test, but claiming to carry
 		// somebody else's events.
 		OriginDomain: "someone-else.test",
@@ -378,20 +378,20 @@ func TestABatchCannotClaimAnotherOrigin(t *testing.T) {
 			Title: "Impersonated", IsOnline: true, StartsAt: pair.Publisher.clock().Add(time.Hour),
 			EndsAt: pair.Publisher.clock().Add(2 * time.Hour), Timezone: "UTC",
 		}},
-	})
+	}))
 	signature, keyID, err := pair.PublisherSigner.Sign(context.Background(), body)
 	if err != nil {
 		t.Fatalf("signing: %v", err)
 	}
 
 	resp := pair.Directory.call(t, pair.Directory.newClient(t), "federation", "deliver-events",
-		csil.EncodeSignedDelivery(csil.SignedDelivery{
+		mustEncode(csil.EncodeSignedDelivery(csil.SignedDelivery{
 			SenderAddress: pair.PublisherSigner.Address(),
 			Algorithm:     pair.PublisherSigner.Algorithm(),
 			KeyId:         keyID,
 			Signature:     signature,
 			Body:          body,
-		}))
+		})))
 	requireServiceError(t, resp, 3, "federation/deliver-events claiming another origin")
 
 	if held := pair.remoteEvents(t); len(held) != 0 {
@@ -454,9 +454,9 @@ func TestAGatheringCanOptOut(t *testing.T) {
 
 	out := csil.PublishSetting("out")
 	resp := pair.Publisher.call(t, ada, "gathering", "update-gathering",
-		csil.EncodeUpdateGatheringRequest(csil.UpdateGatheringRequest{
+		mustEncode(csil.EncodeUpdateGatheringRequest(csil.UpdateGatheringRequest{
 			Id: gathering.Id, PublishEvents: &out,
-		}))
+		})))
 	requireReply(t, resp, "Gathering", "gathering/update-gathering opting out")
 	updated, err := csil.DecodeGathering(resp.Payload)
 	if err != nil {
@@ -494,9 +494,9 @@ func TestAGatheringCannotOverrideWhenTheInstanceForbidsIt(t *testing.T) {
 
 	out := csil.PublishSetting("out")
 	resp := env.call(t, ada, "gathering", "update-gathering",
-		csil.EncodeUpdateGatheringRequest(csil.UpdateGatheringRequest{
+		mustEncode(csil.EncodeUpdateGatheringRequest(csil.UpdateGatheringRequest{
 			Id: gathering.Id, PublishEvents: &out,
-		}))
+		})))
 	// Refused, not silently dropped. A caller that sets a value the
 	// instance will not honour deserves to be told.
 	requireServiceError(t, resp, 3, "gathering/update-gathering when overrides are barred")
@@ -525,7 +525,7 @@ func TestATombstoneTravelsEvenAfterOptingOut(t *testing.T) {
 	})
 	pair.Publisher.makeAdmin(t, string(adaProfile.Id))
 	resp := pair.Publisher.call(t, ada, "event", "delete-event",
-		csil.EncodeDeleteEventRequest(csil.DeleteEventRequest{Id: event.Id}))
+		mustEncode(csil.EncodeDeleteEventRequest(csil.DeleteEventRequest{Id: event.Id})))
 	requireReply(t, resp, "Empty", "event/delete-event after opting out")
 
 	if _, _, err := pair.Sender.RunOnce(context.Background()); err != nil {
@@ -639,24 +639,24 @@ func (p *federatedPair) deliverBatchAs(t *testing.T, batchID string, events []cs
 // test can check a refusal.
 func (p *federatedPair) rawDeliverBatch(t *testing.T, batchID string, events []csil.FederatedEvent) transport.RpcResponse {
 	t.Helper()
-	body := csil.EncodeEventBatch(csil.EventBatch{
+	body := mustEncode(csil.EncodeEventBatch(csil.EventBatch{
 		OriginDomain: "publisher.test",
 		BatchId:      batchID,
 		SentAt:       p.Publisher.clock(),
 		Events:       events,
-	})
+	}))
 	signature, keyID, err := p.PublisherSigner.Sign(context.Background(), body)
 	if err != nil {
 		t.Fatalf("signing the batch: %v", err)
 	}
 	return p.Directory.call(t, p.Directory.newClient(t), "federation", "deliver-events",
-		csil.EncodeSignedDelivery(csil.SignedDelivery{
+		mustEncode(csil.EncodeSignedDelivery(csil.SignedDelivery{
 			SenderAddress: p.PublisherSigner.Address(),
 			Algorithm:     p.PublisherSigner.Algorithm(),
 			KeyId:         keyID,
 			Signature:     signature,
 			Body:          body,
-		}))
+		})))
 }
 
 // The per-organization view: which origin inside a peer is responsible for
@@ -698,7 +698,7 @@ func TestOriginVolumeNamesTheNoisyOrganization(t *testing.T) {
 	admin, _ = pair.Directory.login(t, "root")
 
 	resp := pair.Directory.call(t, admin, "federation", "list-origin-volume",
-		csil.EncodeListOriginVolumeRequest(csil.ListOriginVolumeRequest{}))
+		mustEncode(csil.EncodeListOriginVolumeRequest(csil.ListOriginVolumeRequest{})))
 	requireReply(t, resp, "OriginVolumeList", "federation/list-origin-volume")
 	list, err := csil.DecodeOriginVolumeList(resp.Payload)
 	if err != nil {
@@ -745,12 +745,12 @@ func TestOriginVolumeNeedsAnAdministrator(t *testing.T) {
 
 	ada, _ := env.login(t, "ada")
 	resp := env.call(t, ada, "federation", "list-origin-volume",
-		csil.EncodeListOriginVolumeRequest(csil.ListOriginVolumeRequest{}))
+		mustEncode(csil.EncodeListOriginVolumeRequest(csil.ListOriginVolumeRequest{})))
 	requireServiceError(t, resp, 3, "federation/list-origin-volume as a non-admin")
 
 	anon := env.newClient(t)
 	resp = env.call(t, anon, "federation", "list-origin-volume",
-		csil.EncodeListOriginVolumeRequest(csil.ListOriginVolumeRequest{}))
+		mustEncode(csil.EncodeListOriginVolumeRequest(csil.ListOriginVolumeRequest{})))
 	requireServiceError(t, resp, 2, "federation/list-origin-volume anonymously")
 }
 
@@ -840,9 +840,9 @@ func TestAnOriginCanBeGivenItsOwnAllowance(t *testing.T) {
 	}
 	one := uint64(1)
 	resp := pair.Directory.call(t, admin, "federation", "set-origin-rate-limit",
-		csil.EncodeSetOriginRateLimitRequest(csil.SetOriginRateLimitRequest{
+		mustEncode(csil.EncodeSetOriginRateLimitRequest(csil.SetOriginRateLimitRequest{
 			PeerId: peer.ID, OrganizationName: "Loud Chess Club", RateLimitPerMinute: &one,
-		}))
+		})))
 	requireReply(t, resp, "OriginVolume", "federation/set-origin-rate-limit")
 	origin, err := csil.DecodeOriginVolume(resp.Payload)
 	if err != nil {
@@ -897,7 +897,7 @@ func (p *federatedPair) directoryAdmin(t *testing.T) *http.Client {
 func (p *federatedPair) originVolume(t *testing.T, admin *http.Client) []csil.OriginVolume {
 	t.Helper()
 	resp := p.Directory.call(t, admin, "federation", "list-origin-volume",
-		csil.EncodeListOriginVolumeRequest(csil.ListOriginVolumeRequest{}))
+		mustEncode(csil.EncodeListOriginVolumeRequest(csil.ListOriginVolumeRequest{})))
 	requireReply(t, resp, "OriginVolumeList", "federation/list-origin-volume")
 	list, err := csil.DecodeOriginVolumeList(resp.Payload)
 	if err != nil {
@@ -936,7 +936,7 @@ func TestOriginTellsLocalFromForeign(t *testing.T) {
 	}})
 
 	resp := pair.Directory.call(t, pair.Directory.newClient(t), "federation", "list-remote-events",
-		csil.EncodeListRemoteEventsRequest(csil.ListRemoteEventsRequest{}))
+		mustEncode(csil.EncodeListRemoteEventsRequest(csil.ListRemoteEventsRequest{})))
 	requireReply(t, resp, "RemoteEventList", "federation/list-remote-events")
 	list, err := csil.DecodeRemoteEventList(resp.Payload)
 	if err != nil {

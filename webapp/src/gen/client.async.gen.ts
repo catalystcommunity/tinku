@@ -3,89 +3,110 @@
 // Target: typescript-client
 
 import type { AddGatheringOwnerRequest, AddPeerRequest, AdminList, AdoptGatheringRequest, AttendEventRequest, AttendeeList, BeginLoginRequest, BeginLoginResponse, CreateEventRequest, CreateEventSeriesRequest, CreateGatheringRequest, CreateGreetingRequest, CreateOrganizationRequest, CreateWebhookRequest, DeleteEventRequest, DeleteEventSeriesRequest, DeleteGatheringRequest, DeleteOrganizationRequest, DeleteWebhookRequest, DeliveryReceipt, DevLoginRequest, Empty, Event, EventList, EventRoleList, EventSeries, EventSeriesList, ExpandEventSeriesRequest, FederationIdentity, FindUserRequest, Gathering, GatheringList, GatheringMemberList, GatheringOffer, GatheringOfferList, GetEventRequest, GetEventSeriesRequest, GetGatheringRequest, GetGreetingRequest, GetOrganizationRequest, Greeting, GreetingList, InstanceSettings, JoinGatheringRequest, LeaveGatheringRequest, ListAttendeesRequest, ListEventRolesRequest, ListEventSeriesRequest, ListEventsRequest, ListGatheringMembersRequest, ListGatheringOffersRequest, ListGatheringsRequest, ListOrganizationMembersRequest, ListOrganizationsRequest, ListOriginVolumeRequest, ListPeersRequest, ListRemoteEventsRequest, ListWebhooksRequest, OfferGatheringRequest, Organization, OrganizationList, OrganizationMemberList, OriginVolume, OriginVolumeList, Peer, PeerList, PeeringReceipt, RemoteEventList, RemoveEventRoleRequest, RemoveGatheringOwnerRequest, RemoveOrganizationMemberRequest, RemovePeerRequest, RespondToGatheringOfferRequest, ResumePeerRequest, SearchRequest, SearchResults, SearchUsersRequest, SetAdminRequest, SetEventRoleRequest, SetOrganizationMemberRequest, SetOriginRateLimitRequest, SetPeerRateLimitRequest, SetPeerStatusRequest, SignedDelivery, SignedPeeringRequest, UnattendEventRequest, UpdateEventRequest, UpdateEventSeriesRequest, UpdateGatheringRequest, UpdateInstanceSettingsRequest, UpdateOrganizationRequest, UpdateWebhookRequest, UserProfile, UserRef, UserRefList, Webhook, WebhookList, WebhookWithSecret, WithdrawGatheringOfferRequest } from "./types.gen.ts";
-import { fromAdminListCbor, fromAttendeeListCbor, fromBeginLoginResponseCbor, fromDeliveryReceiptCbor, fromEmptyCbor, fromEventCbor, fromEventListCbor, fromEventRoleListCbor, fromEventSeriesCbor, fromEventSeriesListCbor, fromFederationIdentityCbor, fromGatheringCbor, fromGatheringListCbor, fromGatheringMemberListCbor, fromGatheringOfferCbor, fromGatheringOfferListCbor, fromGreetingCbor, fromGreetingListCbor, fromInstanceSettingsCbor, fromOrganizationCbor, fromOrganizationListCbor, fromOrganizationMemberListCbor, fromOriginVolumeCbor, fromOriginVolumeListCbor, fromPeerCbor, fromPeerListCbor, fromPeeringReceiptCbor, fromRemoteEventListCbor, fromSearchResultsCbor, fromUserProfileCbor, fromUserRefCbor, fromUserRefListCbor, fromWebhookCbor, fromWebhookListCbor, fromWebhookWithSecretCbor, toAddGatheringOwnerRequestCbor, toAddPeerRequestCbor, toAdoptGatheringRequestCbor, toAttendEventRequestCbor, toBeginLoginRequestCbor, toCreateEventRequestCbor, toCreateEventSeriesRequestCbor, toCreateGatheringRequestCbor, toCreateGreetingRequestCbor, toCreateOrganizationRequestCbor, toCreateWebhookRequestCbor, toDeleteEventRequestCbor, toDeleteEventSeriesRequestCbor, toDeleteGatheringRequestCbor, toDeleteOrganizationRequestCbor, toDeleteWebhookRequestCbor, toDevLoginRequestCbor, toEmptyCbor, toExpandEventSeriesRequestCbor, toFindUserRequestCbor, toGetEventRequestCbor, toGetEventSeriesRequestCbor, toGetGatheringRequestCbor, toGetGreetingRequestCbor, toGetOrganizationRequestCbor, toJoinGatheringRequestCbor, toLeaveGatheringRequestCbor, toListAttendeesRequestCbor, toListEventRolesRequestCbor, toListEventSeriesRequestCbor, toListEventsRequestCbor, toListGatheringMembersRequestCbor, toListGatheringOffersRequestCbor, toListGatheringsRequestCbor, toListOrganizationMembersRequestCbor, toListOrganizationsRequestCbor, toListOriginVolumeRequestCbor, toListPeersRequestCbor, toListRemoteEventsRequestCbor, toListWebhooksRequestCbor, toOfferGatheringRequestCbor, toRemoveEventRoleRequestCbor, toRemoveGatheringOwnerRequestCbor, toRemoveOrganizationMemberRequestCbor, toRemovePeerRequestCbor, toRespondToGatheringOfferRequestCbor, toResumePeerRequestCbor, toSearchRequestCbor, toSearchUsersRequestCbor, toSetAdminRequestCbor, toSetEventRoleRequestCbor, toSetOrganizationMemberRequestCbor, toSetOriginRateLimitRequestCbor, toSetPeerRateLimitRequestCbor, toSetPeerStatusRequestCbor, toSignedDeliveryCbor, toSignedPeeringRequestCbor, toUnattendEventRequestCbor, toUpdateEventRequestCbor, toUpdateEventSeriesRequestCbor, toUpdateGatheringRequestCbor, toUpdateInstanceSettingsRequestCbor, toUpdateOrganizationRequestCbor, toUpdateWebhookRequestCbor, toWithdrawGatheringOfferRequestCbor } from "./codec.gen.ts";
+import { fromAdminListCbor, fromAttendeeListCbor, fromBeginLoginResponseCbor, fromDeliveryReceiptCbor, fromEmptyCbor, fromEventCbor, fromEventListCbor, fromEventRoleListCbor, fromEventSeriesCbor, fromEventSeriesListCbor, fromFederationIdentityCbor, fromGatheringCbor, fromGatheringListCbor, fromGatheringMemberListCbor, fromGatheringOfferCbor, fromGatheringOfferListCbor, fromGreetingCbor, fromGreetingListCbor, fromInstanceSettingsCbor, fromOrganizationCbor, fromOrganizationListCbor, fromOrganizationMemberListCbor, fromOriginVolumeCbor, fromOriginVolumeListCbor, fromPeerCbor, fromPeerListCbor, fromPeeringReceiptCbor, fromRemoteEventListCbor, fromSearchResultsCbor, fromUserProfileCbor, fromUserRefCbor, fromUserRefListCbor, fromWebhookCbor, fromWebhookListCbor, fromWebhookWithSecretCbor, resolveRpcReply, toAddGatheringOwnerRequestCbor, toAddPeerRequestCbor, toAdoptGatheringRequestCbor, toAttendEventRequestCbor, toBeginLoginRequestCbor, toCreateEventRequestCbor, toCreateEventSeriesRequestCbor, toCreateGatheringRequestCbor, toCreateGreetingRequestCbor, toCreateOrganizationRequestCbor, toCreateWebhookRequestCbor, toDeleteEventRequestCbor, toDeleteEventSeriesRequestCbor, toDeleteGatheringRequestCbor, toDeleteOrganizationRequestCbor, toDeleteWebhookRequestCbor, toDevLoginRequestCbor, toEmptyCbor, toExpandEventSeriesRequestCbor, toFindUserRequestCbor, toGetEventRequestCbor, toGetEventSeriesRequestCbor, toGetGatheringRequestCbor, toGetGreetingRequestCbor, toGetOrganizationRequestCbor, toJoinGatheringRequestCbor, toLeaveGatheringRequestCbor, toListAttendeesRequestCbor, toListEventRolesRequestCbor, toListEventSeriesRequestCbor, toListEventsRequestCbor, toListGatheringMembersRequestCbor, toListGatheringOffersRequestCbor, toListGatheringsRequestCbor, toListOrganizationMembersRequestCbor, toListOrganizationsRequestCbor, toListOriginVolumeRequestCbor, toListPeersRequestCbor, toListRemoteEventsRequestCbor, toListWebhooksRequestCbor, toOfferGatheringRequestCbor, toRemoveEventRoleRequestCbor, toRemoveGatheringOwnerRequestCbor, toRemoveOrganizationMemberRequestCbor, toRemovePeerRequestCbor, toRespondToGatheringOfferRequestCbor, toResumePeerRequestCbor, toSearchRequestCbor, toSearchUsersRequestCbor, toSetAdminRequestCbor, toSetEventRoleRequestCbor, toSetOrganizationMemberRequestCbor, toSetOriginRateLimitRequestCbor, toSetPeerRateLimitRequestCbor, toSetPeerStatusRequestCbor, toSignedDeliveryCbor, toSignedPeeringRequestCbor, toUnattendEventRequestCbor, toUpdateEventRequestCbor, toUpdateEventSeriesRequestCbor, toUpdateGatheringRequestCbor, toUpdateInstanceSettingsRequestCbor, toUpdateOrganizationRequestCbor, toUpdateWebhookRequestCbor, toWithdrawGatheringOfferRequestCbor } from "./codec.gen.ts";
 
 export interface AsyncServiceTransport {
   call(service: string, op: string, req: Uint8Array): Promise<Uint8Array>;
+  /**
+   * Perform an operation that declares more than one reply arm. Return the
+   * CSIL-RPC response `variant` (the CSIL name of the arm) with its payload
+   * bytes; the client decodes the arm that the variant names.
+   */
+  callReply(service: string, op: string, req: Uint8Array): Promise<{ readonly variant?: string | null; readonly payload: Uint8Array }>;
 }
 
 export class AdminAsyncClient {
-  constructor(private readonly t: AsyncServiceTransport) {}
+  private readonly t: AsyncServiceTransport;
+
+  constructor(t: AsyncServiceTransport) {
+    this.t = t;
+  }
 
   /**
    * Everybody holding the admin role. Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listAdmins(req: Empty): Promise<AdminList> {
-    const csilResp = await this.t.call("AdminService", "list-admins", toEmptyCbor(req));
+    const csilReply = await this.t.callReply("AdminService", "list-admins", toEmptyCbor(req));
+    const csilResp = resolveRpcReply("AdminService", "list-admins", csilReply.variant, csilReply.payload);
     return fromAdminListCbor(csilResp);
   }
 
   /**
    * Grant or revoke the role. Admins only. The last admin cannot be
    * revoked.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async setAdmin(req: SetAdminRequest): Promise<AdminList> {
-    const csilResp = await this.t.call("AdminService", "set-admin", toSetAdminRequestCbor(req));
+    const csilReply = await this.t.callReply("AdminService", "set-admin", toSetAdminRequestCbor(req));
+    const csilResp = resolveRpcReply("AdminService", "set-admin", csilReply.variant, csilReply.payload);
     return fromAdminListCbor(csilResp);
   }
 
   /**
    * Resolve one federated address to a user. Requires a session.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async findUser(req: FindUserRequest): Promise<UserRef> {
-    const csilResp = await this.t.call("AdminService", "find-user", toFindUserRequestCbor(req));
+    const csilReply = await this.t.callReply("AdminService", "find-user", toFindUserRequestCbor(req));
+    const csilResp = resolveRpcReply("AdminService", "find-user", csilReply.variant, csilReply.payload);
     return fromUserRefCbor(csilResp);
   }
 
   /**
    * Complete a handle prefix. Requires a session.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async searchUsers(req: SearchUsersRequest): Promise<UserRefList> {
-    const csilResp = await this.t.call("AdminService", "search-users", toSearchUsersRequestCbor(req));
+    const csilReply = await this.t.callReply("AdminService", "search-users", toSearchUsersRequestCbor(req));
+    const csilResp = resolveRpcReply("AdminService", "search-users", csilReply.variant, csilReply.payload);
     return fromUserRefListCbor(csilResp);
   }
 
   /**
    * The settings an administrator can change while the service runs.
    * Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async getInstanceSettings(req: Empty): Promise<InstanceSettings> {
-    const csilResp = await this.t.call("AdminService", "get-instance-settings", toEmptyCbor(req));
+    const csilReply = await this.t.callReply("AdminService", "get-instance-settings", toEmptyCbor(req));
+    const csilResp = resolveRpcReply("AdminService", "get-instance-settings", csilReply.variant, csilReply.payload);
     return fromInstanceSettingsCbor(csilResp);
   }
 
   /**
    * Change them. An absent field is left alone. Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async updateInstanceSettings(req: UpdateInstanceSettingsRequest): Promise<InstanceSettings> {
-    const csilResp = await this.t.call("AdminService", "update-instance-settings", toUpdateInstanceSettingsRequestCbor(req));
+    const csilReply = await this.t.callReply("AdminService", "update-instance-settings", toUpdateInstanceSettingsRequestCbor(req));
+    const csilResp = resolveRpcReply("AdminService", "update-instance-settings", csilReply.variant, csilReply.payload);
     return fromInstanceSettingsCbor(csilResp);
   }
 }
 
 export class AuthAsyncClient {
-  constructor(private readonly t: AsyncServiceTransport) {}
+  private readonly t: AsyncServiceTransport;
+
+  constructor(t: AsyncServiceTransport) {
+    this.t = t;
+  }
 
   /**
    * Start a login. The api signs a self-verifying nonce and returns the
    * identity-provider URL for the browser to open.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async beginLogin(req: BeginLoginRequest): Promise<BeginLoginResponse> {
-    const csilResp = await this.t.call("AuthService", "begin-login", toBeginLoginRequestCbor(req));
+    const csilReply = await this.t.callReply("AuthService", "begin-login", toBeginLoginRequestCbor(req));
+    const csilResp = resolveRpcReply("AuthService", "begin-login", csilReply.variant, csilReply.payload);
     return fromBeginLoginResponseCbor(csilResp);
   }
 
@@ -102,50 +123,62 @@ export class AuthAsyncClient {
 
   /**
    * The caller's own profile, derived from the session cookie.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async whoami(req: Empty): Promise<UserProfile> {
-    const csilResp = await this.t.call("AuthService", "whoami", toEmptyCbor(req));
+    const csilReply = await this.t.callReply("AuthService", "whoami", toEmptyCbor(req));
+    const csilResp = resolveRpcReply("AuthService", "whoami", csilReply.variant, csilReply.payload);
     return fromUserProfileCbor(csilResp);
   }
 }
 
 export class DevAuthAsyncClient {
-  constructor(private readonly t: AsyncServiceTransport) {}
+  private readonly t: AsyncServiceTransport;
+
+  constructor(t: AsyncServiceTransport) {
+    this.t = t;
+  }
 
   /**
    * Mint a session for `handle@domain`, creating the user on first use.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async devLogin(req: DevLoginRequest): Promise<UserProfile> {
-    const csilResp = await this.t.call("DevAuthService", "dev-login", toDevLoginRequestCbor(req));
+    const csilReply = await this.t.callReply("DevAuthService", "dev-login", toDevLoginRequestCbor(req));
+    const csilResp = resolveRpcReply("DevAuthService", "dev-login", csilReply.variant, csilReply.payload);
     return fromUserProfileCbor(csilResp);
   }
 }
 
 export class EventAsyncClient {
-  constructor(private readonly t: AsyncServiceTransport) {}
+  private readonly t: AsyncServiceTransport;
+
+  constructor(t: AsyncServiceTransport) {
+    this.t = t;
+  }
 
   /**
    * Events matching a time window. Anonymous callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listEvents(req: ListEventsRequest): Promise<EventList> {
-    const csilResp = await this.t.call("EventService", "list-events", toListEventsRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "list-events", toListEventsRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "list-events", csilReply.variant, csilReply.payload);
     return fromEventListCbor(csilResp);
   }
 
   /**
    * One event by id. Anonymous callers are allowed. `description` is
    * absent once the event has started.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async getEvent(req: GetEventRequest): Promise<Event> {
-    const csilResp = await this.t.call("EventService", "get-event", toGetEventRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "get-event", toGetEventRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "get-event", csilReply.variant, csilReply.payload);
     return fromEventCbor(csilResp);
   }
 
@@ -153,452 +186,506 @@ export class EventAsyncClient {
    * Schedule a single event. Gathering owners only — organizer is a
    * role held on an event that already exists, so it cannot be what
    * authorizes making one.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async createEvent(req: CreateEventRequest): Promise<Event> {
-    const csilResp = await this.t.call("EventService", "create-event", toCreateEventRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "create-event", toCreateEventRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "create-event", csilReply.variant, csilReply.payload);
     return fromEventCbor(csilResp);
   }
 
   /**
    * Change an event. Refused once it has started.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async updateEvent(req: UpdateEventRequest): Promise<Event> {
-    const csilResp = await this.t.call("EventService", "update-event", toUpdateEventRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "update-event", toUpdateEventRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "update-event", csilReply.variant, csilReply.payload);
     return fromEventCbor(csilResp);
   }
 
   /**
    * Destroy an event. Owners and organizers before it starts; admins
    * only afterwards.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async deleteEvent(req: DeleteEventRequest): Promise<Empty> {
-    const csilResp = await this.t.call("EventService", "delete-event", toDeleteEventRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "delete-event", toDeleteEventRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "delete-event", csilReply.variant, csilReply.payload);
     return fromEmptyCbor(csilResp);
   }
 
   /**
    * Mark the caller attending. Needs gathering membership; refused once
    * the event has started.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async attendEvent(req: AttendEventRequest): Promise<Event> {
-    const csilResp = await this.t.call("EventService", "attend-event", toAttendEventRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "attend-event", toAttendEventRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "attend-event", csilReply.variant, csilReply.payload);
     return fromEventCbor(csilResp);
   }
 
   /**
    * Withdraw the caller's attendance. Refused once the event has started.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async unattendEvent(req: UnattendEventRequest): Promise<Event> {
-    const csilResp = await this.t.call("EventService", "unattend-event", toUnattendEventRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "unattend-event", toUnattendEventRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "unattend-event", csilReply.variant, csilReply.payload);
     return fromEventCbor(csilResp);
   }
 
   /**
    * Who is attending. Anonymous callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listAttendees(req: ListAttendeesRequest): Promise<AttendeeList> {
-    const csilResp = await this.t.call("EventService", "list-attendees", toListAttendeesRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "list-attendees", toListAttendeesRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "list-attendees", csilReply.variant, csilReply.payload);
     return fromAttendeeListCbor(csilResp);
   }
 
   /**
    * Every series under a gathering. Anonymous callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listEventSeries(req: ListEventSeriesRequest): Promise<EventSeriesList> {
-    const csilResp = await this.t.call("EventService", "list-event-series", toListEventSeriesRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "list-event-series", toListEventSeriesRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "list-event-series", csilReply.variant, csilReply.payload);
     return fromEventSeriesListCbor(csilResp);
   }
 
   /**
    * One series by id. Anonymous callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async getEventSeries(req: GetEventSeriesRequest): Promise<EventSeries> {
-    const csilResp = await this.t.call("EventService", "get-event-series", toGetEventSeriesRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "get-event-series", toGetEventSeriesRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "get-event-series", csilReply.variant, csilReply.payload);
     return fromEventSeriesCbor(csilResp);
   }
 
   /**
    * Schedule a recurring set. Gathering owners only, for the same
    * reason create-event is.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async createEventSeries(req: CreateEventSeriesRequest): Promise<EventSeries> {
-    const csilResp = await this.t.call("EventService", "create-event-series", toCreateEventSeriesRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "create-event-series", toCreateEventSeriesRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "create-event-series", csilReply.variant, csilReply.payload);
     return fromEventSeriesCbor(csilResp);
   }
 
   /**
    * Change a series, rewriting the occurrences that have not started.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async updateEventSeries(req: UpdateEventSeriesRequest): Promise<EventSeries> {
-    const csilResp = await this.t.call("EventService", "update-event-series", toUpdateEventSeriesRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "update-event-series", toUpdateEventSeriesRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "update-event-series", csilReply.variant, csilReply.payload);
     return fromEventSeriesCbor(csilResp);
   }
 
   /**
    * Destroy a series and its occurrences that have not started.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async deleteEventSeries(req: DeleteEventSeriesRequest): Promise<Empty> {
-    const csilResp = await this.t.call("EventService", "delete-event-series", toDeleteEventSeriesRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "delete-event-series", toDeleteEventSeriesRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "delete-event-series", csilReply.variant, csilReply.payload);
     return fromEmptyCbor(csilResp);
   }
 
   /**
    * Materialize further occurrences and return them all. Idempotent.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async expandEventSeries(req: ExpandEventSeriesRequest): Promise<EventList> {
-    const csilResp = await this.t.call("EventService", "expand-event-series", toExpandEventSeriesRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "expand-event-series", toExpandEventSeriesRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "expand-event-series", csilReply.variant, csilReply.payload);
     return fromEventListCbor(csilResp);
   }
 
   /**
    * Give somebody organizer or presenter on an event or a series.
    * Gathering owners only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async setEventRole(req: SetEventRoleRequest): Promise<EventRoleList> {
-    const csilResp = await this.t.call("EventService", "set-event-role", toSetEventRoleRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "set-event-role", toSetEventRoleRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "set-event-role", csilReply.variant, csilReply.payload);
     return fromEventRoleListCbor(csilResp);
   }
 
   /**
    * Take a role away. Gathering owners only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async removeEventRole(req: RemoveEventRoleRequest): Promise<EventRoleList> {
-    const csilResp = await this.t.call("EventService", "remove-event-role", toRemoveEventRoleRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "remove-event-role", toRemoveEventRoleRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "remove-event-role", csilReply.variant, csilReply.payload);
     return fromEventRoleListCbor(csilResp);
   }
 
   /**
    * Who holds roles on an event or a series. Anonymous callers allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listEventRoles(req: ListEventRolesRequest): Promise<EventRoleList> {
-    const csilResp = await this.t.call("EventService", "list-event-roles", toListEventRolesRequestCbor(req));
+    const csilReply = await this.t.callReply("EventService", "list-event-roles", toListEventRolesRequestCbor(req));
+    const csilResp = resolveRpcReply("EventService", "list-event-roles", csilReply.variant, csilReply.payload);
     return fromEventRoleListCbor(csilResp);
   }
 }
 
 export class FederationAsyncClient {
-  constructor(private readonly t: AsyncServiceTransport) {}
+  private readonly t: AsyncServiceTransport;
+
+  constructor(t: AsyncServiceTransport) {
+    this.t = t;
+  }
 
   /**
    * What this instance is, as a peer would address it. Anonymous callers
    * are allowed: an address is a name, not a secret.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async federationIdentity(req: Empty): Promise<FederationIdentity> {
-    const csilResp = await this.t.call("FederationService", "federation-identity", toEmptyCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "federation-identity", toEmptyCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "federation-identity", csilReply.variant, csilReply.payload);
     return fromFederationIdentityCbor(csilResp);
   }
 
   /**
    * Every peer and its standing in both directions. Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listPeers(req: ListPeersRequest): Promise<PeerList> {
-    const csilResp = await this.t.call("FederationService", "list-peers", toListPeersRequestCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "list-peers", toListPeersRequestCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "list-peers", csilReply.variant, csilReply.payload);
     return fromPeerListCbor(csilResp);
   }
 
   /**
    * Register a directory to publish to, and ask it to accept us.
    * Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async addPeer(req: AddPeerRequest): Promise<Peer> {
-    const csilResp = await this.t.call("FederationService", "add-peer", toAddPeerRequestCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "add-peer", toAddPeerRequestCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "add-peer", csilReply.variant, csilReply.payload);
     return fromPeerCbor(csilResp);
   }
 
   /**
    * Answer a peer's request, or change our mind. Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async setPeerStatus(req: SetPeerStatusRequest): Promise<Peer> {
-    const csilResp = await this.t.call("FederationService", "set-peer-status", toSetPeerStatusRequestCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "set-peer-status", toSetPeerStatusRequestCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "set-peer-status", csilReply.variant, csilReply.payload);
     return fromPeerCbor(csilResp);
   }
 
   /**
    * Restart delivery to a suspended peer. Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async resumePeer(req: ResumePeerRequest): Promise<Peer> {
-    const csilResp = await this.t.call("FederationService", "resume-peer", toResumePeerRequestCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "resume-peer", toResumePeerRequestCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "resume-peer", csilReply.variant, csilReply.payload);
     return fromPeerCbor(csilResp);
   }
 
   /**
    * Forget a peer and everything it sent. Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async removePeer(req: RemovePeerRequest): Promise<Empty> {
-    const csilResp = await this.t.call("FederationService", "remove-peer", toRemovePeerRequestCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "remove-peer", toRemovePeerRequestCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "remove-peer", csilReply.variant, csilReply.payload);
     return fromEmptyCbor(csilResp);
   }
 
   /**
    * Accept a signed batch from a peer. Called by an instance, not a
    * person. Refused unless the peer's inbound status is approved.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async deliverEvents(req: SignedDelivery): Promise<DeliveryReceipt> {
-    const csilResp = await this.t.call("FederationService", "deliver-events", toSignedDeliveryCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "deliver-events", toSignedDeliveryCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "deliver-events", csilReply.variant, csilReply.payload);
     return fromDeliveryReceiptCbor(csilResp);
   }
 
   /**
    * Ask to be accepted as a peer. Called by an instance, not a person.
    * Recorded as pending; an administrator here decides.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async requestPeering(req: SignedPeeringRequest): Promise<PeeringReceipt> {
-    const csilResp = await this.t.call("FederationService", "request-peering", toSignedPeeringRequestCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "request-peering", toSignedPeeringRequestCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "request-peering", csilReply.variant, csilReply.payload);
     return fromPeeringReceiptCbor(csilResp);
   }
 
   /**
    * What peers have sent. Anonymous callers are allowed — a directory
    * exists to be read.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listRemoteEvents(req: ListRemoteEventsRequest): Promise<RemoteEventList> {
-    const csilResp = await this.t.call("FederationService", "list-remote-events", toListRemoteEventsRequestCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "list-remote-events", toListRemoteEventsRequestCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "list-remote-events", csilReply.variant, csilReply.payload);
     return fromRemoteEventListCbor(csilResp);
   }
 
   /**
    * Give one peer its own events-per-minute allowance, or restore the
    * instance-wide one. Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async setPeerRateLimit(req: SetPeerRateLimitRequest): Promise<Peer> {
-    const csilResp = await this.t.call("FederationService", "set-peer-rate-limit", toSetPeerRateLimitRequestCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "set-peer-rate-limit", toSetPeerRateLimitRequestCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "set-peer-rate-limit", csilReply.variant, csilReply.payload);
     return fromPeerCbor(csilResp);
   }
 
   /**
    * How much each originating organization is sending, busiest first.
    * Admins only — it is operational detail, not a public listing.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listOriginVolume(req: ListOriginVolumeRequest): Promise<OriginVolumeList> {
-    const csilResp = await this.t.call("FederationService", "list-origin-volume", toListOriginVolumeRequestCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "list-origin-volume", toListOriginVolumeRequestCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "list-origin-volume", csilReply.variant, csilReply.payload);
     return fromOriginVolumeListCbor(csilResp);
   }
 
   /**
    * Give one originating organization its own events-per-minute
    * allowance, or restore the instance-wide one. Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async setOriginRateLimit(req: SetOriginRateLimitRequest): Promise<OriginVolume> {
-    const csilResp = await this.t.call("FederationService", "set-origin-rate-limit", toSetOriginRateLimitRequestCbor(req));
+    const csilReply = await this.t.callReply("FederationService", "set-origin-rate-limit", toSetOriginRateLimitRequestCbor(req));
+    const csilResp = resolveRpcReply("FederationService", "set-origin-rate-limit", csilReply.variant, csilReply.payload);
     return fromOriginVolumeCbor(csilResp);
   }
 }
 
 export class GatheringAsyncClient {
-  constructor(private readonly t: AsyncServiceTransport) {}
+  private readonly t: AsyncServiceTransport;
+
+  constructor(t: AsyncServiceTransport) {
+    this.t = t;
+  }
 
   /**
    * Every gathering, or only the caller's with `mine`. Anonymous
    * callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listGatherings(req: ListGatheringsRequest): Promise<GatheringList> {
-    const csilResp = await this.t.call("GatheringService", "list-gatherings", toListGatheringsRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "list-gatherings", toListGatheringsRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "list-gatherings", csilReply.variant, csilReply.payload);
     return fromGatheringListCbor(csilResp);
   }
 
   /**
    * One gathering by id. Anonymous callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async getGathering(req: GetGatheringRequest): Promise<Gathering> {
-    const csilResp = await this.t.call("GatheringService", "get-gathering", toGetGatheringRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "get-gathering", toGetGatheringRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "get-gathering", csilReply.variant, csilReply.payload);
     return fromGatheringCbor(csilResp);
   }
 
   /**
    * Start a gathering, owned by the caller or by an organization the
    * caller owns.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async createGathering(req: CreateGatheringRequest): Promise<Gathering> {
-    const csilResp = await this.t.call("GatheringService", "create-gathering", toCreateGatheringRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "create-gathering", toCreateGatheringRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "create-gathering", csilReply.variant, csilReply.payload);
     return fromGatheringCbor(csilResp);
   }
 
   /**
    * Change a gathering's own fields. Owners only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async updateGathering(req: UpdateGatheringRequest): Promise<Gathering> {
-    const csilResp = await this.t.call("GatheringService", "update-gathering", toUpdateGatheringRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "update-gathering", toUpdateGatheringRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "update-gathering", csilReply.variant, csilReply.payload);
     return fromGatheringCbor(csilResp);
   }
 
   /**
    * Destroy a gathering and every event under it. Owners or an admin.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async deleteGathering(req: DeleteGatheringRequest): Promise<Empty> {
-    const csilResp = await this.t.call("GatheringService", "delete-gathering", toDeleteGatheringRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "delete-gathering", toDeleteGatheringRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "delete-gathering", csilReply.variant, csilReply.payload);
     return fromEmptyCbor(csilResp);
   }
 
   /**
    * A gathering's roster. Anonymous callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listGatheringMembers(req: ListGatheringMembersRequest): Promise<GatheringMemberList> {
-    const csilResp = await this.t.call("GatheringService", "list-gathering-members", toListGatheringMembersRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "list-gathering-members", toListGatheringMembersRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "list-gathering-members", csilReply.variant, csilReply.payload);
     return fromGatheringMemberListCbor(csilResp);
   }
 
   /**
    * Join. Any authenticated caller. Idempotent.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async joinGathering(req: JoinGatheringRequest): Promise<Gathering> {
-    const csilResp = await this.t.call("GatheringService", "join-gathering", toJoinGatheringRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "join-gathering", toJoinGatheringRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "join-gathering", csilReply.variant, csilReply.payload);
     return fromGatheringCbor(csilResp);
   }
 
   /**
    * Leave. Idempotent.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async leaveGathering(req: LeaveGatheringRequest): Promise<Gathering> {
-    const csilResp = await this.t.call("GatheringService", "leave-gathering", toLeaveGatheringRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "leave-gathering", toLeaveGatheringRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "leave-gathering", csilReply.variant, csilReply.payload);
     return fromGatheringCbor(csilResp);
   }
 
   /**
    * Add an individual or an organization as an owner. Existing owners
    * only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async addGatheringOwner(req: AddGatheringOwnerRequest): Promise<Gathering> {
-    const csilResp = await this.t.call("GatheringService", "add-gathering-owner", toAddGatheringOwnerRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "add-gathering-owner", toAddGatheringOwnerRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "add-gathering-owner", csilReply.variant, csilReply.payload);
     return fromGatheringCbor(csilResp);
   }
 
   /**
    * Drop an owner. The last owner cannot be dropped.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async removeGatheringOwner(req: RemoveGatheringOwnerRequest): Promise<Gathering> {
-    const csilResp = await this.t.call("GatheringService", "remove-gathering-owner", toRemoveGatheringOwnerRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "remove-gathering-owner", toRemoveGatheringOwnerRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "remove-gathering-owner", csilReply.variant, csilReply.payload);
     return fromGatheringCbor(csilResp);
   }
 
   /**
    * Offer this gathering to an organization. Gathering owners only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async offerGathering(req: OfferGatheringRequest): Promise<GatheringOffer> {
-    const csilResp = await this.t.call("GatheringService", "offer-gathering", toOfferGatheringRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "offer-gathering", toOfferGatheringRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "offer-gathering", csilReply.variant, csilReply.payload);
     return fromGatheringOfferCbor(csilResp);
   }
 
   /**
    * Offers the caller can see: made for a gathering they own, or made to
    * an organization they own.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listGatheringOffers(req: ListGatheringOffersRequest): Promise<GatheringOfferList> {
-    const csilResp = await this.t.call("GatheringService", "list-gathering-offers", toListGatheringOffersRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "list-gathering-offers", toListGatheringOffersRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "list-gathering-offers", csilReply.variant, csilReply.payload);
     return fromGatheringOfferListCbor(csilResp);
   }
 
   /**
    * Accept or decline an offer. An owner of the receiving organization
    * only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async respondToGatheringOffer(req: RespondToGatheringOfferRequest): Promise<GatheringOffer> {
-    const csilResp = await this.t.call("GatheringService", "respond-to-gathering-offer", toRespondToGatheringOfferRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "respond-to-gathering-offer", toRespondToGatheringOfferRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "respond-to-gathering-offer", csilReply.variant, csilReply.payload);
     return fromGatheringOfferCbor(csilResp);
   }
 
   /**
    * Take back a pending offer. The offering side only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async withdrawGatheringOffer(req: WithdrawGatheringOfferRequest): Promise<Empty> {
-    const csilResp = await this.t.call("GatheringService", "withdraw-gathering-offer", toWithdrawGatheringOfferRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "withdraw-gathering-offer", toWithdrawGatheringOfferRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "withdraw-gathering-offer", csilReply.variant, csilReply.payload);
     return fromEmptyCbor(csilResp);
   }
 
   /**
    * Put a loose gathering under an organization. Administrators only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async adoptGathering(req: AdoptGatheringRequest): Promise<Gathering> {
-    const csilResp = await this.t.call("GatheringService", "adopt-gathering", toAdoptGatheringRequestCbor(req));
+    const csilReply = await this.t.callReply("GatheringService", "adopt-gathering", toAdoptGatheringRequestCbor(req));
+    const csilResp = resolveRpcReply("GatheringService", "adopt-gathering", csilReply.variant, csilReply.payload);
     return fromGatheringCbor(csilResp);
   }
 }
 
 export class GreetingAsyncClient {
-  constructor(private readonly t: AsyncServiceTransport) {}
+  private readonly t: AsyncServiceTransport;
+
+  constructor(t: AsyncServiceTransport) {
+    this.t = t;
+  }
 
   /**
    * Every greeting, newest first. Anonymous callers are allowed.
@@ -612,164 +699,191 @@ export class GreetingAsyncClient {
 
   /**
    * One greeting by id. Anonymous callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async getGreeting(req: GetGreetingRequest): Promise<Greeting> {
-    const csilResp = await this.t.call("GreetingService", "get-greeting", toGetGreetingRequestCbor(req));
+    const csilReply = await this.t.callReply("GreetingService", "get-greeting", toGetGreetingRequestCbor(req));
+    const csilResp = resolveRpcReply("GreetingService", "get-greeting", csilReply.variant, csilReply.payload);
     return fromGreetingCbor(csilResp);
   }
 
   /**
    * Leave a greeting. Requires a session.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async createGreeting(req: CreateGreetingRequest): Promise<Greeting> {
-    const csilResp = await this.t.call("GreetingService", "create-greeting", toCreateGreetingRequestCbor(req));
+    const csilReply = await this.t.callReply("GreetingService", "create-greeting", toCreateGreetingRequestCbor(req));
+    const csilResp = resolveRpcReply("GreetingService", "create-greeting", csilReply.variant, csilReply.payload);
     return fromGreetingCbor(csilResp);
   }
 }
 
 export class OrganizationAsyncClient {
-  constructor(private readonly t: AsyncServiceTransport) {}
+  private readonly t: AsyncServiceTransport;
+
+  constructor(t: AsyncServiceTransport) {
+    this.t = t;
+  }
 
   /**
    * Every organization, newest first, or only the caller's with `mine`.
    * Anonymous callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listOrganizations(req: ListOrganizationsRequest): Promise<OrganizationList> {
-    const csilResp = await this.t.call("OrganizationService", "list-organizations", toListOrganizationsRequestCbor(req));
+    const csilReply = await this.t.callReply("OrganizationService", "list-organizations", toListOrganizationsRequestCbor(req));
+    const csilResp = resolveRpcReply("OrganizationService", "list-organizations", csilReply.variant, csilReply.payload);
     return fromOrganizationListCbor(csilResp);
   }
 
   /**
    * One organization by id. Anonymous callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async getOrganization(req: GetOrganizationRequest): Promise<Organization> {
-    const csilResp = await this.t.call("OrganizationService", "get-organization", toGetOrganizationRequestCbor(req));
+    const csilReply = await this.t.callReply("OrganizationService", "get-organization", toGetOrganizationRequestCbor(req));
+    const csilResp = resolveRpcReply("OrganizationService", "get-organization", csilReply.variant, csilReply.payload);
     return fromOrganizationCbor(csilResp);
   }
 
   /**
    * Start an organization. The caller becomes its first owner.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async createOrganization(req: CreateOrganizationRequest): Promise<Organization> {
-    const csilResp = await this.t.call("OrganizationService", "create-organization", toCreateOrganizationRequestCbor(req));
+    const csilReply = await this.t.callReply("OrganizationService", "create-organization", toCreateOrganizationRequestCbor(req));
+    const csilResp = resolveRpcReply("OrganizationService", "create-organization", csilReply.variant, csilReply.payload);
     return fromOrganizationCbor(csilResp);
   }
 
   /**
    * Change an organization's own fields. Owners only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async updateOrganization(req: UpdateOrganizationRequest): Promise<Organization> {
-    const csilResp = await this.t.call("OrganizationService", "update-organization", toUpdateOrganizationRequestCbor(req));
+    const csilReply = await this.t.callReply("OrganizationService", "update-organization", toUpdateOrganizationRequestCbor(req));
+    const csilResp = resolveRpcReply("OrganizationService", "update-organization", csilReply.variant, csilReply.payload);
     return fromOrganizationCbor(csilResp);
   }
 
   /**
    * Destroy an organization. Admins only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async deleteOrganization(req: DeleteOrganizationRequest): Promise<Empty> {
-    const csilResp = await this.t.call("OrganizationService", "delete-organization", toDeleteOrganizationRequestCbor(req));
+    const csilReply = await this.t.callReply("OrganizationService", "delete-organization", toDeleteOrganizationRequestCbor(req));
+    const csilResp = resolveRpcReply("OrganizationService", "delete-organization", csilReply.variant, csilReply.payload);
     return fromEmptyCbor(csilResp);
   }
 
   /**
    * An organization's roster. Anonymous callers are allowed.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listOrganizationMembers(req: ListOrganizationMembersRequest): Promise<OrganizationMemberList> {
-    const csilResp = await this.t.call("OrganizationService", "list-organization-members", toListOrganizationMembersRequestCbor(req));
+    const csilReply = await this.t.callReply("OrganizationService", "list-organization-members", toListOrganizationMembersRequestCbor(req));
+    const csilResp = resolveRpcReply("OrganizationService", "list-organization-members", csilReply.variant, csilReply.payload);
     return fromOrganizationMemberListCbor(csilResp);
   }
 
   /**
    * Add somebody, or change their standing. Owners only.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async setOrganizationMember(req: SetOrganizationMemberRequest): Promise<OrganizationMemberList> {
-    const csilResp = await this.t.call("OrganizationService", "set-organization-member", toSetOrganizationMemberRequestCbor(req));
+    const csilReply = await this.t.callReply("OrganizationService", "set-organization-member", toSetOrganizationMemberRequestCbor(req));
+    const csilResp = resolveRpcReply("OrganizationService", "set-organization-member", csilReply.variant, csilReply.payload);
     return fromOrganizationMemberListCbor(csilResp);
   }
 
   /**
    * Take somebody off the roster. Owners, or the person themselves.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async removeOrganizationMember(req: RemoveOrganizationMemberRequest): Promise<OrganizationMemberList> {
-    const csilResp = await this.t.call("OrganizationService", "remove-organization-member", toRemoveOrganizationMemberRequestCbor(req));
+    const csilReply = await this.t.callReply("OrganizationService", "remove-organization-member", toRemoveOrganizationMemberRequestCbor(req));
+    const csilResp = resolveRpcReply("OrganizationService", "remove-organization-member", csilReply.variant, csilReply.payload);
     return fromOrganizationMemberListCbor(csilResp);
   }
 }
 
 export class SearchAsyncClient {
-  constructor(private readonly t: AsyncServiceTransport) {}
+  private readonly t: AsyncServiceTransport;
+
+  constructor(t: AsyncServiceTransport) {
+    this.t = t;
+  }
 
   /**
    * Search organizations, gatherings, events and series at once.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async search(req: SearchRequest): Promise<SearchResults> {
-    const csilResp = await this.t.call("SearchService", "search", toSearchRequestCbor(req));
+    const csilReply = await this.t.callReply("SearchService", "search", toSearchRequestCbor(req));
+    const csilResp = resolveRpcReply("SearchService", "search", csilReply.variant, csilReply.payload);
     return fromSearchResultsCbor(csilResp);
   }
 }
 
 export class WebhookAsyncClient {
-  constructor(private readonly t: AsyncServiceTransport) {}
+  private readonly t: AsyncServiceTransport;
+
+  constructor(t: AsyncServiceTransport) {
+    this.t = t;
+  }
 
   /**
    * The webhooks on one organization or gathering, with the limit.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async listWebhooks(req: ListWebhooksRequest): Promise<WebhookList> {
-    const csilResp = await this.t.call("WebhookService", "list-webhooks", toListWebhooksRequestCbor(req));
+    const csilReply = await this.t.callReply("WebhookService", "list-webhooks", toListWebhooksRequestCbor(req));
+    const csilResp = resolveRpcReply("WebhookService", "list-webhooks", csilReply.variant, csilReply.payload);
     return fromWebhookListCbor(csilResp);
   }
 
   /**
    * Add one. Returns the signing secret, once and only here.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async createWebhook(req: CreateWebhookRequest): Promise<WebhookWithSecret> {
-    const csilResp = await this.t.call("WebhookService", "create-webhook", toCreateWebhookRequestCbor(req));
+    const csilReply = await this.t.callReply("WebhookService", "create-webhook", toCreateWebhookRequestCbor(req));
+    const csilResp = resolveRpcReply("WebhookService", "create-webhook", csilReply.variant, csilReply.payload);
     return fromWebhookWithSecretCbor(csilResp);
   }
 
   /**
    * Change the URL, the scope, the note, or whether it is switched on.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async updateWebhook(req: UpdateWebhookRequest): Promise<Webhook> {
-    const csilResp = await this.t.call("WebhookService", "update-webhook", toUpdateWebhookRequestCbor(req));
+    const csilReply = await this.t.callReply("WebhookService", "update-webhook", toUpdateWebhookRequestCbor(req));
+    const csilResp = resolveRpcReply("WebhookService", "update-webhook", csilReply.variant, csilReply.payload);
     return fromWebhookCbor(csilResp);
   }
 
   /**
    * Remove one.
-   * @throws {ServiceError} when the API returns an error response
+   * @throws {ServiceErrorTypeRefusal} for the declared application error
    * @throws transport errors (network, timeout) raised by the transport
    */
   async deleteWebhook(req: DeleteWebhookRequest): Promise<Empty> {
-    const csilResp = await this.t.call("WebhookService", "delete-webhook", toDeleteWebhookRequestCbor(req));
+    const csilReply = await this.t.callReply("WebhookService", "delete-webhook", toDeleteWebhookRequestCbor(req));
+    const csilResp = resolveRpcReply("WebhookService", "delete-webhook", csilReply.variant, csilReply.payload);
     return fromEmptyCbor(csilResp);
   }
 }

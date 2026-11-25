@@ -68,7 +68,7 @@ func TestGreetingRoundTrip(t *testing.T) {
 	ts, client := newTestServer(t)
 
 	login := call(t, client, ts.URL, "devauth", "dev-login",
-		csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: "ada", Domain: "example.test"}))
+		mustEncode(csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: "ada", Domain: "example.test"})))
 	requireReply(t, login, "UserProfile", "devauth/dev-login")
 
 	profile, err := csil.DecodeUserProfile(login.Payload)
@@ -80,7 +80,7 @@ func TestGreetingRoundTrip(t *testing.T) {
 	}
 
 	created := call(t, client, ts.URL, "greeting", "create-greeting",
-		csil.EncodeCreateGreetingRequest(csil.CreateGreetingRequest{Message: "hello, world"}))
+		mustEncode(csil.EncodeCreateGreetingRequest(csil.CreateGreetingRequest{Message: "hello, world"})))
 	requireReply(t, created, "Greeting", "greeting/create-greeting")
 
 	greeting, err := csil.DecodeGreeting(created.Payload)
@@ -94,7 +94,7 @@ func TestGreetingRoundTrip(t *testing.T) {
 		t.Errorf("greeting author = %v, want ada", greeting.AuthorHandle)
 	}
 
-	listed := call(t, client, ts.URL, "greeting", "list-greetings", csil.EncodeEmpty(csil.Empty{}))
+	listed := call(t, client, ts.URL, "greeting", "list-greetings", mustEncode(csil.EncodeEmpty(csil.Empty{})))
 	requireReply(t, listed, "GreetingList", "greeting/list-greetings")
 
 	list, err := csil.DecodeGreetingList(listed.Payload)
@@ -113,11 +113,11 @@ func TestAnonymousCanReadButNotWrite(t *testing.T) {
 	ts, _ := newTestServer(t)
 	anonymous := &http.Client{} // no cookie jar, so no session
 
-	listed := call(t, anonymous, ts.URL, "greeting", "list-greetings", csil.EncodeEmpty(csil.Empty{}))
+	listed := call(t, anonymous, ts.URL, "greeting", "list-greetings", mustEncode(csil.EncodeEmpty(csil.Empty{})))
 	requireReply(t, listed, "GreetingList", "greeting/list-greetings")
 
 	refused := call(t, anonymous, ts.URL, "greeting", "create-greeting",
-		csil.EncodeCreateGreetingRequest(csil.CreateGreetingRequest{Message: "hello"}))
+		mustEncode(csil.EncodeCreateGreetingRequest(csil.CreateGreetingRequest{Message: "hello"})))
 	requireReply(t, refused, "ServiceError", "greeting/create-greeting")
 
 	serviceErr, err := csil.DecodeServiceError(refused.Payload)
@@ -135,14 +135,14 @@ func TestLogoutEndsTheSession(t *testing.T) {
 	ts, client := newTestServer(t)
 
 	call(t, client, ts.URL, "devauth", "dev-login",
-		csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: "grace", Domain: "example.test"}))
+		mustEncode(csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: "grace", Domain: "example.test"})))
 
-	whoami := call(t, client, ts.URL, "auth", "whoami", csil.EncodeEmpty(csil.Empty{}))
+	whoami := call(t, client, ts.URL, "auth", "whoami", mustEncode(csil.EncodeEmpty(csil.Empty{})))
 	requireReply(t, whoami, "UserProfile", "auth/whoami before logout")
 
-	call(t, client, ts.URL, "auth", "logout", csil.EncodeEmpty(csil.Empty{}))
+	call(t, client, ts.URL, "auth", "logout", mustEncode(csil.EncodeEmpty(csil.Empty{})))
 
-	after := call(t, client, ts.URL, "auth", "whoami", csil.EncodeEmpty(csil.Empty{}))
+	after := call(t, client, ts.URL, "auth", "whoami", mustEncode(csil.EncodeEmpty(csil.Empty{})))
 	requireReply(t, after, "ServiceError", "auth/whoami after logout")
 }
 
@@ -152,7 +152,7 @@ func TestLogoutEndsTheSession(t *testing.T) {
 func TestUnknownOpIsATransportStatus(t *testing.T) {
 	ts, client := newTestServer(t)
 
-	resp := call(t, client, ts.URL, "greeting", "no-such-op", csil.EncodeEmpty(csil.Empty{}))
+	resp := call(t, client, ts.URL, "greeting", "no-such-op", mustEncode(csil.EncodeEmpty(csil.Empty{})))
 	if resp.Status.Code() != transport.StatusUnknownServiceOrOp.Code() {
 		t.Errorf("status = %d (%s), want %d (unknown-service-or-op)",
 			resp.Status.Code(), resp.Status.Name(), transport.StatusUnknownServiceOrOp.Code())
@@ -197,7 +197,7 @@ func TestDevAuthAbsentInProd(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	resp := call(t, &http.Client{}, ts.URL, "devauth", "dev-login",
-		csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: "mallory", Domain: "example.test"}))
+		mustEncode(csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: "mallory", Domain: "example.test"})))
 	if resp.Status.Code() != transport.StatusUnknownServiceOrOp.Code() {
 		t.Errorf("dev-login on a prod server answered status %d (%s), want unknown-service-or-op",
 			resp.Status.Code(), resp.Status.Name())
@@ -274,7 +274,7 @@ func TestTheSessionCookieCrossesPorts(t *testing.T) {
 	client := env.newClient(t)
 
 	resp := env.call(t, client, "devauth", "dev-login",
-		csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: "ada", Domain: "example.test"}))
+		mustEncode(csil.EncodeDevLoginRequest(csil.DevLoginRequest{Handle: "ada", Domain: "example.test"})))
 	requireReply(t, resp, "UserProfile", "devauth/dev-login")
 
 	jar := client.Jar
@@ -289,4 +289,14 @@ func TestTheSessionCookieCrossesPorts(t *testing.T) {
 	if len(cookies) == 0 {
 		t.Fatal("no session cookie was set")
 	}
+}
+
+// mustEncode unwraps a generated csil.Encode<T> result. csilgen 0.3.0
+// encoders return an error (an unset enum, a date out of range); a test
+// payload that cannot be encoded is a broken test, so it panics.
+func mustEncode(b []byte, err error) []byte {
+	if err != nil {
+		panic("encoding a test payload: " + err.Error())
+	}
+	return b
 }

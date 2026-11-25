@@ -23,7 +23,9 @@ import (
 
 // fakeRP is a linkkeys RP server at the generated-client transport seam.
 // The real linkkeys.Client encodes every request with the generated codec,
-// so this test sees the bytes that a real RP server would see.
+// so this test sees the bytes that a real RP server would see. The Rp ops
+// declare an RpError arm, so the client calls CallReply and the fake names
+// the variant with the generated reply encoders.
 type fakeRP struct {
 	mu          sync.Mutex
 	signed      []lk.RpSignRequest
@@ -31,54 +33,72 @@ type fakeRP struct {
 	domain      string
 	audience    string
 	userID      string
+	application string // the assertion's application ID; empty means "tinku"
 	claims      map[string]string
 	nonceToSign string
 }
 
-func (f *fakeRP) Call(_ context.Context, service, op string, req []byte) ([]byte, error) {
+func (f *fakeRP) Call(_ context.Context, service, op string, _ []byte) ([]byte, error) {
+	return nil, fmt.Errorf("unexpected Call %s/%s: the Rp ops use CallReply", service, op)
+}
+
+func (f *fakeRP) CallReply(_ context.Context, service, op string, req []byte) (lk.WireReply, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if service != "Rp" {
-		return nil, fmt.Errorf("unexpected service %s", service)
+		return lk.WireReply{}, fmt.Errorf("unexpected service %s", service)
+	}
+	reply := func(variant string, payload []byte, err error) (lk.WireReply, error) {
+		if err != nil {
+			return lk.WireReply{}, err
+		}
+		return lk.WireReply{Variant: &variant, Payload: payload}, nil
 	}
 	switch op {
 	case "sign-request":
 		in, err := lk.DecodeRpSignRequest(req)
 		if err != nil {
-			return nil, err
+			return lk.WireReply{}, err
 		}
 		f.signed = append(f.signed, in)
 		f.nonceToSign = in.Nonce
-		return lk.EncodeRpSignResponse(lk.RpSignResponse{SignedRequest: "signed-by-rp"}), nil
+		return reply(lk.EncodeRpSignRequestReply(lk.RpSignResponse{SignedRequest: "signed-by-rp"}, nil))
 	case "decrypt-token":
-		return lk.EncodeRpDecryptResponse(lk.RpDecryptResponse{SignedAssertion: "signed-assertion"}), nil
+		return reply(lk.EncodeRpDecryptTokenReply(lk.RpDecryptResponse{SignedAssertion: "signed-assertion"}, nil))
 	case "verify-assertion":
-		now := time.Now().UTC()
-		return lk.EncodeRpVerifyResponse(lk.RpVerifyResponse{
+		now := time.Now().UTC().Truncate(time.Second)
+		application := f.application
+		if application == "" {
+			application = "tinku"
+		}
+		return reply(lk.EncodeRpVerifyAssertionReply(lk.RpVerifyResponse{
 			Verified: true,
 			Assertion: lk.IdentityAssertion{
 				UserId:           f.userID,
 				Domain:           f.domain,
 				Audience:         f.audience,
 				Nonce:            f.nonceToSign,
-				IssuedAt:         now.Format(time.RFC3339),
-				ExpiresAt:        now.Add(5 * time.Minute).Format(time.RFC3339),
+				IssuedAt:         now,
+				ExpiresAt:        now.Add(5 * time.Minute),
 				AuthorizedClaims: []string{"handle"},
+				Application: lk.ApplicationRef{
+					SubjectUserId: "rp-account", SubjectDomain: "rp.test", ApplicationId: application,
+				},
 			},
-		}), nil
+		}, nil))
 	case "userinfo-fetch":
 		in, err := lk.DecodeRpUserInfoRequest(req)
 		if err != nil {
-			return nil, err
+			return lk.WireReply{}, err
 		}
 		f.userinfo = append(f.userinfo, in)
 		info := lk.UserInfo{UserId: f.userID, Domain: f.domain, DisplayName: "Ada L."}
 		for claimType, value := range f.claims {
 			info.Claims = append(info.Claims, lk.Claim{ClaimId: "c-" + claimType, UserId: f.userID, ClaimType: claimType, ClaimValue: []byte(value)})
 		}
-		return lk.EncodeUserInfo(info), nil
+		return reply(lk.EncodeRpUserinfoFetchReply(info, nil))
 	}
-	return nil, fmt.Errorf("unexpected op %s", op)
+	return lk.WireReply{}, fmt.Errorf("unexpected op %s", op)
 }
 
 func newLoginServer(t *testing.T, rp *fakeRP) *httptest.Server {
@@ -125,7 +145,7 @@ func loginClient(t *testing.T) *http.Client {
 func beginLogin(t *testing.T, client *http.Client, ts *httptest.Server) string {
 	t.Helper()
 	resp := call(t, client, ts.URL, "auth", "begin-login",
-		csil.EncodeBeginLoginRequest(csil.BeginLoginRequest{Domain: "idp.test"}))
+		mustEncode(csil.EncodeBeginLoginRequest(csil.BeginLoginRequest{Domain: "idp.test"})))
 	requireReply(t, resp, "BeginLoginResponse", "auth/begin-login")
 	out, err := csil.DecodeBeginLoginResponse(resp.Payload)
 	if err != nil {
@@ -134,11 +154,12 @@ func beginLogin(t *testing.T, client *http.Client, ts *httptest.Server) string {
 	return out.RedirectUrl
 }
 
-// TestLoginSendsTheApplicationAndItsClaimRequest pins the v0.16.7 contract.
-// Standing consent is per (user, RP domain, application), so sign-request
-// names tinku's application. The shared RP servers have no claims config,
-// so tinku sends its own claim request, with handle required.
-func TestLoginSendsTheApplicationAndItsClaimRequest(t *testing.T) {
+// TestLoginSendsItsClaimRequest pins the sign-request contract. From
+// linkkeys v0.16.11 the RP takes the application from the API-key account,
+// so the request names no application. The shared RP servers have no
+// claims config, so tinku sends its own claim request, with handle
+// required.
+func TestLoginSendsItsClaimRequest(t *testing.T) {
 	rp := &fakeRP{domain: "idp.test", audience: "tinku.test", userID: "6f1c-opaque-id",
 		claims: map[string]string{"handle": "Ada", "display_name": "Ada Lovelace"}}
 	ts := newLoginServer(t, rp)
@@ -154,9 +175,6 @@ func TestLoginSendsTheApplicationAndItsClaimRequest(t *testing.T) {
 		t.Fatalf("sign-request calls = %d, want 1", len(rp.signed))
 	}
 	got := rp.signed[0]
-	if got.ApplicationId == nil || *got.ApplicationId != "tinku" {
-		t.Errorf("application_id = %v, want tinku", got.ApplicationId)
-	}
 	if got.CallbackUrl != "https://tinku.test/auth/callback" {
 		t.Errorf("callback_url = %q", got.CallbackUrl)
 	}
@@ -183,7 +201,7 @@ func TestLoginSendsTheApplicationAndItsClaimRequest(t *testing.T) {
 		t.Errorf("userinfo-fetch = %+v, want api_base https://idp.test and domain idp.test", rp.userinfo)
 	}
 
-	who := call(t, client, ts.URL, "auth", "whoami", csil.EncodeEmpty(csil.Empty{}))
+	who := call(t, client, ts.URL, "auth", "whoami", mustEncode(csil.EncodeEmpty(csil.Empty{})))
 	requireReply(t, who, "UserProfile", "auth/whoami after login")
 	profile, err := csil.DecodeUserProfile(who.Payload)
 	if err != nil {
@@ -230,6 +248,29 @@ func TestLoginFromAnotherDomainIsRefused(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("callback status = %d, want 403", res.StatusCode)
+	}
+}
+
+// TestLoginForAnotherApplicationIsRefused: the assertion names the RP
+// account's application. An assertion for any other application means the
+// RP account is not tinku's, and tinku refuses it.
+func TestLoginForAnotherApplicationIsRefused(t *testing.T) {
+	rp := &fakeRP{domain: "idp.test", audience: "tinku.test", userID: "u1", application: "someone-else",
+		claims: map[string]string{"handle": "ada"}}
+	ts := newLoginServer(t, rp)
+	client := loginClient(t)
+	beginLogin(t, client, ts)
+
+	res, err := client.Get(ts.URL + "/auth/callback?encrypted_token=sealed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode == http.StatusFound {
+		t.Fatal("callback logged in with an assertion for another application")
+	}
+	if len(rp.userinfo) != 0 {
+		t.Errorf("userinfo-fetch ran %d times for a refused assertion", len(rp.userinfo))
 	}
 }
 

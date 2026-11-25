@@ -62,11 +62,6 @@ func seriesInsertValues(id string, in store.EventSeriesInput) []any {
 		w := string(*in.Recurrence.Weekday)
 		weekday = &w
 	}
-	var endsOn *time.Time
-	if in.EndsOn != nil {
-		t := in.EndsOn.UTC()
-		endsOn = &t
-	}
 	return []any{
 		id, in.GatheringID, in.Title, in.Description, in.SearchText,
 		in.IsOnline, in.IsInPerson, in.OnlineURL,
@@ -74,7 +69,7 @@ func seriesInsertValues(id string, in store.EventSeriesInput) []any {
 		in.Location.PostalCode, in.Location.Country, in.Location.Latitude, in.Location.Longitude,
 		string(in.Recurrence.Freq), in.Recurrence.Interval, weekday,
 		in.Recurrence.Ordinal, in.Recurrence.DayOfMonth,
-		in.StartsOn.UTC(), endsOn, in.StartTime, in.DurationMinutes, in.Timezone,
+		in.StartsOn, in.EndsOn, in.StartTime, in.DurationMinutes, in.Timezone,
 		in.MaterializedThrough.UTC(),
 	}
 }
@@ -100,11 +95,6 @@ func (s *Store) UpdateEventSeries(ctx context.Context, id string, in store.Event
 		w := string(*in.Recurrence.Weekday)
 		weekday = &w
 	}
-	var endsOn *time.Time
-	if in.EndsOn != nil {
-		t := in.EndsOn.UTC()
-		endsOn = &t
-	}
 	res, err := s.db.ExecContext(ctx, `
 UPDATE event_series SET title = $1, description = $2, search_text = $3,
                         is_online = $4, is_in_person = $5, online_url = $6,
@@ -121,7 +111,7 @@ WHERE id = $26`,
 		in.Location.PostalCode, in.Location.Country, in.Location.Latitude, in.Location.Longitude,
 		string(in.Recurrence.Freq), in.Recurrence.Interval, weekday,
 		in.Recurrence.Ordinal, in.Recurrence.DayOfMonth,
-		in.StartsOn.UTC(), endsOn, in.StartTime, in.DurationMinutes, in.Timezone,
+		in.StartsOn, in.EndsOn, in.StartTime, in.DurationMinutes, in.Timezone,
 		in.MaterializedThrough.UTC(), id)
 	if err != nil {
 		return nil, fmt.Errorf("updating event series: %w", err)

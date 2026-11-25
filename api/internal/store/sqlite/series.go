@@ -28,14 +28,14 @@ FROM event_series es`
 
 func scanSeries(row rowScanner) (*store.EventSeries, error) {
 	var s store.EventSeries
-	var freq, startsOn, materialized, createdAt, updatedAt string
-	var weekday, endsOn, nextOccurrence *string
+	var freq, materialized, createdAt, updatedAt string
+	var weekday, nextOccurrence *string
 	err := row.Scan(&s.ID, &s.GatheringID, &s.Title, &s.Description,
 		&s.IsOnline, &s.IsInPerson, &s.OnlineURL,
 		&s.Location.Name, &s.Location.Address, &s.Location.Locality, &s.Location.Region,
 		&s.Location.PostalCode, &s.Location.Country, &s.Location.Latitude, &s.Location.Longitude,
 		&freq, &s.Recurrence.Interval, &weekday, &s.Recurrence.Ordinal, &s.Recurrence.DayOfMonth,
-		&startsOn, &endsOn, &s.StartTime, &s.DurationMinutes, &s.Timezone,
+		&s.StartsOn, &s.EndsOn, &s.StartTime, &s.DurationMinutes, &s.Timezone,
 		&materialized, &createdAt, &updatedAt,
 		&s.OccurrenceCount, &nextOccurrence)
 	if err != nil {
@@ -49,16 +49,13 @@ func scanSeries(row rowScanner) (*store.EventSeries, error) {
 	for _, conv := range []struct {
 		raw string
 		dst *time.Time
-	}{{startsOn, &s.StartsOn}, {materialized, &s.MaterializedThrough},
+	}{{materialized, &s.MaterializedThrough},
 		{createdAt, &s.CreatedAt}, {updatedAt, &s.UpdatedAt}} {
 		t, err := parseTime(conv.raw)
 		if err != nil {
 			return nil, err
 		}
 		*conv.dst = t
-	}
-	if s.EndsOn, err = parseOptionalTime(endsOn); err != nil {
-		return nil, err
 	}
 	if s.NextOccurrenceAt, err = parseOptionalTime(nextOccurrence); err != nil {
 		return nil, err
@@ -80,11 +77,6 @@ func seriesValues(in store.EventSeriesInput) []any {
 		w := string(*in.Recurrence.Weekday)
 		weekday = &w
 	}
-	var endsOn *string
-	if in.EndsOn != nil {
-		t := formatTime(*in.EndsOn)
-		endsOn = &t
-	}
 	return []any{
 		in.GatheringID, in.Title, in.Description, in.SearchText,
 		in.IsOnline, in.IsInPerson, in.OnlineURL,
@@ -92,7 +84,7 @@ func seriesValues(in store.EventSeriesInput) []any {
 		in.Location.PostalCode, in.Location.Country, in.Location.Latitude, in.Location.Longitude,
 		string(in.Recurrence.Freq), in.Recurrence.Interval, weekday,
 		in.Recurrence.Ordinal, in.Recurrence.DayOfMonth,
-		formatTime(in.StartsOn), endsOn, in.StartTime, in.DurationMinutes, in.Timezone,
+		in.StartsOn, in.EndsOn, in.StartTime, in.DurationMinutes, in.Timezone,
 		formatTime(in.MaterializedThrough),
 	}
 }

@@ -285,8 +285,8 @@ type EventSeries struct {
 	OnlineURL           string
 	Location            Location
 	Recurrence          Recurrence
-	StartsOn            time.Time
-	EndsOn              *time.Time
+	StartsOn            Date
+	EndsOn              *Date
 	StartTime           string
 	DurationMinutes     int64
 	Timezone            string
@@ -428,8 +428,8 @@ type EventSeriesInput struct {
 	OnlineURL           string
 	Location            Location
 	Recurrence          Recurrence
-	StartsOn            time.Time
-	EndsOn              *time.Time
+	StartsOn            Date
+	EndsOn              *Date
 	StartTime           string
 	DurationMinutes     int64
 	Timezone            string

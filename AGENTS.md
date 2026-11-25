@@ -20,7 +20,26 @@ Never edit these directories. `./tools.sh gen` writes over them:
 `api/internal/transport/` and `webapp/src/transport/csil/` are vendored
 copies of the csilgen reference transport. Do not edit them either. Copy
 them again from `catalystcommunity/csilgen/transports/` so that the
-conformance vectors continue to pass.
+conformance vectors continue to pass. Run `gofmt -w` on the Go copy: the
+upstream `cbor.go` is not gofmt-clean, and CI runs `gofmt -l`.
+
+### The csilgen version
+
+`CSILGEN_VERSION` in `tools.sh` is the release that made the checked-in
+code (0.3.3). `./tools.sh gen` refuses any other `csilgen`. To move to a new
+release, change the line, run `./tools.sh gen`, and fix the code in the
+same change. Do not mix the output of two releases.
+
+From 0.3.0, a generated Go encoder returns `([]byte, error)`. It refuses an
+unset enum (`""`), an impossible `date`, and a time outside the years
+0001-9999. Handle the error. Tests use `mustEncode(csil.EncodeX(v))`.
+
+From 0.3.1, the TypeScript generator names the schema's `ServiceError`
+`ServiceErrorType` (with `toServiceErrorTypeCbor` and
+`fromServiceErrorTypeCbor`), because the generated code declares its own
+`ServiceError`. Use `ServiceErrorType` for the schema type. The wire variant
+is still `"ServiceError"`. Do not rename the rule in the schema: that
+changes the variant on the wire.
 
 ### Wire ids
 
@@ -65,12 +84,20 @@ the store handed back, because a round trip through the store would pass
 even if the bytes on disk were wrong.
 
 One thing is not an instant and must not be flattened into one:
-`event_series.start_time` with `event_series.timezone`. Together they are
-the RULE — "the second Thursday at 19:00 in America/Denver" — and a rule is
-entry, not a time. It cannot be held as UTC without becoming wrong: that
-same rule is 01:00 UTC in September and 02:00 UTC in November. The
-occurrences the rule PRODUCES are stored as UTC instants like everything
-else. See `TestLocalClockSurvivesDaylightSaving`.
+`event_series.start_time`, `starts_on` and `ends_on` with
+`event_series.timezone`. Together they are the RULE — "the second Thursday
+at 19:00 in America/Denver" — and a rule is entry, not a time. It cannot be
+held as UTC without becoming wrong: that same rule is 01:00 UTC in September
+and 02:00 UTC in November. The occurrences the rule PRODUCES are stored as
+UTC instants like everything else. See `TestLocalClockSurvivesDaylightSaving`.
+
+`starts_on` and `ends_on` are calendar days: CSIL `date` on the wire (CBOR
+tag 1004, `"YYYY-MM-DD"`), `store.Date` in Go, a `date` column in
+PostgreSQL and `YYYY-MM-DD` text in SQLite. Never send or store a day as an
+instant at midnight. Midnight UTC is the previous day west of Greenwich,
+and a stored instant moves to a different day when the timezone changes.
+`ends_on` includes all of its day. See
+`TestSeriesDaysAreCalendarDaysInTheSeriesZone`.
 
 **Only administrators delete an organization, or an event that started.** Every
 other deletion belongs to an owner. Do not add a second way around this.
@@ -89,8 +116,11 @@ re-derive this in a service.
 1. Declare the type and the operation in `csil/`.
 2. Run `./tools.sh gen`.
 3. Add a row to `buildRoutes` in `api/internal/server/dispatch.go`. Use
-   `routeFallible` when the operation declares a `/ ServiceError` arm, and
-   `routeInfallible` when it does not.
+   `routeFallible` with the generated `csil.Encode<Service><Op>Reply` when
+   the operation declares a `/ ServiceError` arm. The reply encoder names
+   the variant from the schema. Use `routeInfallible` with `csil.Encode<T>`
+   and the variant name when the operation has no error arm. The TypeScript
+   client refuses a variant that the operation does not declare.
 4. Implement the method in `api/internal/csilservices/`. Ask `perms.go`
    for the permission. Do not write a new rule in the operation.
 5. Add every string the client shows to `webapp/src/i18n/en-US.ts`.
@@ -134,10 +164,18 @@ them, because only one of the two dialects can.
 CSIL-RPC on pinned TLS, through the regular-rp Go SDK (pinned by commit; the
 SDK module has no tag of its own). There are no `/v1alpha/*.json` routes.
 
-- Every `sign-request` names the application (`LinkkeysAppID`, default the
-  federation application ID `tinku`) and sends `linkkeys.ClaimRequest`.
-  Linkkeys 0.16.7+ keeps consent for each application, so a change to the
-  ID makes every person consent again.
+- Every `sign-request` sends `linkkeys.ClaimRequest`. It does not name the
+  application: from linkkeys 0.16.11 the RP takes the application from the
+  API-key account, which must be an application account.
+  `VerifyAssertion` refuses an assertion whose application is not
+  `LinkkeysAppID` (default the federation application ID `tinku`). Linkkeys
+  keeps consent for each application, so a change to the ID makes every
+  person consent again.
+- The SDK types are typed: times are `time.Time`, closed vocabularies are
+  enums (`api.KeyAlgorithmEd25519`, `api.ClaimValueTypeText`). Linkkeys signs
+  a time as whole seconds; send `federation.wholeSeconds(t)` in a signed
+  request. A fake `api.Transport` needs `Call` and `CallReply`: the `Rp` ops
+  use `CallReply` and name the variant with `api.Encode<Op>Reply`.
 - `handle` is a REQUIRED claim. Silent consent asks again only for a new
   required claim, so a claim tinku depends on must be required.
   `CompleteLogin` reads the claims from `userinfo-fetch` and refuses a login

@@ -251,8 +251,8 @@ func toEventSeries(s *store.EventSeries, viewer csil.ViewerContext, instanceDoma
 		IsInPerson:       s.IsInPerson,
 		Location:         toLocation(s.Location),
 		Recurrence:       toRecurrence(s.Recurrence),
-		StartsOn:         s.StartsOn,
-		EndsOn:           s.EndsOn,
+		StartsOn:         s.StartsOn.String(),
+		EndsOn:           dateTextOrNil(s.EndsOn),
 		StartTime:        s.StartTime,
 		DurationMinutes:  uint64(s.DurationMinutes),
 		Timezone:         s.Timezone,
@@ -345,4 +345,13 @@ func toGatheringOffer(o *store.GatheringOffer, viewer csil.ViewerContext) csil.G
 		ResolvedAt: o.ResolvedAt,
 		Viewer:     viewer,
 	}
+}
+
+// dateTextOrNil is the wire text of an optional calendar date.
+func dateTextOrNil(d *store.Date) *string {
+	if d == nil {
+		return nil
+	}
+	text := d.String()
+	return &text
 }

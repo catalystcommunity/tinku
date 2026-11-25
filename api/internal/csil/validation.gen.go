@@ -10,6 +10,9 @@ import (
 
 // ValidateBeginLoginRequest validates the BeginLoginRequest struct
 func (v *BeginLoginRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("BeginLoginRequest is nil")
+	}
 	if len(v.Domain) < 1 {
 		return fmt.Errorf("field 'Domain' must have at least 1 elements")
 	}
@@ -21,6 +24,9 @@ func (v *BeginLoginRequest) Validate() error {
 
 // ValidateDevLoginRequest validates the DevLoginRequest struct
 func (v *DevLoginRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("DevLoginRequest is nil")
+	}
 	if len(v.Handle) < 1 {
 		return fmt.Errorf("field 'Handle' must have at least 1 elements")
 	}
@@ -42,6 +48,9 @@ func (v *DevLoginRequest) Validate() error {
 
 // ValidateGreeting validates the Greeting struct
 func (v *Greeting) Validate() error {
+	if v == nil {
+		return fmt.Errorf("Greeting is nil")
+	}
 	if len(v.Message) < 1 {
 		return fmt.Errorf("field 'Message' must have at least 1 elements")
 	}
@@ -53,6 +62,9 @@ func (v *Greeting) Validate() error {
 
 // ValidateCreateGreetingRequest validates the CreateGreetingRequest struct
 func (v *CreateGreetingRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("CreateGreetingRequest is nil")
+	}
 	if len(v.Message) < 1 {
 		return fmt.Errorf("field 'Message' must have at least 1 elements")
 	}
@@ -64,6 +76,9 @@ func (v *CreateGreetingRequest) Validate() error {
 
 // ValidateOrganization validates the Organization struct
 func (v *Organization) Validate() error {
+	if v == nil {
+		return fmt.Errorf("Organization is nil")
+	}
 	if len(v.Name) < 1 {
 		return fmt.Errorf("field 'Name' must have at least 1 elements")
 	}
@@ -87,6 +102,9 @@ func (v *Organization) Validate() error {
 
 // ValidateCreateOrganizationRequest validates the CreateOrganizationRequest struct
 func (v *CreateOrganizationRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("CreateOrganizationRequest is nil")
+	}
 	if len(v.Name) < 1 {
 		return fmt.Errorf("field 'Name' must have at least 1 elements")
 	}
@@ -110,6 +128,9 @@ func (v *CreateOrganizationRequest) Validate() error {
 
 // ValidateUpdateOrganizationRequest validates the UpdateOrganizationRequest struct
 func (v *UpdateOrganizationRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("UpdateOrganizationRequest is nil")
+	}
 	if v.Name != nil {
 		if len((*v.Name)) < 1 {
 			return fmt.Errorf("field 'Name' must have at least 1 elements")
@@ -145,6 +166,9 @@ func (v *UpdateOrganizationRequest) Validate() error {
 
 // ValidateListOrganizationsRequest validates the ListOrganizationsRequest struct
 func (v *ListOrganizationsRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("ListOrganizationsRequest is nil")
+	}
 	if v.Query != nil {
 		if len((*v.Query)) < 0 {
 			return fmt.Errorf("field 'Query' must have at least 0 elements")
@@ -160,6 +184,9 @@ func (v *ListOrganizationsRequest) Validate() error {
 
 // ValidateGathering validates the Gathering struct
 func (v *Gathering) Validate() error {
+	if v == nil {
+		return fmt.Errorf("Gathering is nil")
+	}
 	if len(v.Name) < 1 {
 		return fmt.Errorf("field 'Name' must have at least 1 elements")
 	}
@@ -183,6 +210,9 @@ func (v *Gathering) Validate() error {
 
 // ValidateCreateGatheringRequest validates the CreateGatheringRequest struct
 func (v *CreateGatheringRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("CreateGatheringRequest is nil")
+	}
 	if len(v.Name) < 1 {
 		return fmt.Errorf("field 'Name' must have at least 1 elements")
 	}
@@ -206,6 +236,9 @@ func (v *CreateGatheringRequest) Validate() error {
 
 // ValidateUpdateGatheringRequest validates the UpdateGatheringRequest struct
 func (v *UpdateGatheringRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("UpdateGatheringRequest is nil")
+	}
 	if v.Name != nil {
 		if len((*v.Name)) < 1 {
 			return fmt.Errorf("field 'Name' must have at least 1 elements")
@@ -241,6 +274,9 @@ func (v *UpdateGatheringRequest) Validate() error {
 
 // ValidateGatheringOffer validates the GatheringOffer struct
 func (v *GatheringOffer) Validate() error {
+	if v == nil {
+		return fmt.Errorf("GatheringOffer is nil")
+	}
 	if len(v.Note) < 0 {
 		return fmt.Errorf("field 'Note' must have at least 0 elements")
 	}
@@ -252,6 +288,9 @@ func (v *GatheringOffer) Validate() error {
 
 // ValidateOfferGatheringRequest validates the OfferGatheringRequest struct
 func (v *OfferGatheringRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("OfferGatheringRequest is nil")
+	}
 	if len(v.Note) < 0 {
 		return fmt.Errorf("field 'Note' must have at least 0 elements")
 	}
@@ -263,6 +302,9 @@ func (v *OfferGatheringRequest) Validate() error {
 
 // ValidateLocation validates the Location struct
 func (v *Location) Validate() error {
+	if v == nil {
+		return fmt.Errorf("Location is nil")
+	}
 	if len(v.Name) < 0 {
 		return fmt.Errorf("field 'Name' must have at least 0 elements")
 	}
@@ -304,6 +346,9 @@ func (v *Location) Validate() error {
 
 // ValidateEvent validates the Event struct
 func (v *Event) Validate() error {
+	if v == nil {
+		return fmt.Errorf("Event is nil")
+	}
 	if len(v.Title) < 1 {
 		return fmt.Errorf("field 'Title' must have at least 1 elements")
 	}
@@ -341,6 +386,9 @@ func (v *Event) Validate() error {
 
 // ValidateEventSeries validates the EventSeries struct
 func (v *EventSeries) Validate() error {
+	if v == nil {
+		return fmt.Errorf("EventSeries is nil")
+	}
 	if len(v.Title) < 1 {
 		return fmt.Errorf("field 'Title' must have at least 1 elements")
 	}
@@ -384,6 +432,9 @@ func (v *EventSeries) Validate() error {
 
 // ValidateCreateEventRequest validates the CreateEventRequest struct
 func (v *CreateEventRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("CreateEventRequest is nil")
+	}
 	if len(v.Title) < 1 {
 		return fmt.Errorf("field 'Title' must have at least 1 elements")
 	}
@@ -417,6 +468,9 @@ func (v *CreateEventRequest) Validate() error {
 
 // ValidateUpdateEventRequest validates the UpdateEventRequest struct
 func (v *UpdateEventRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("UpdateEventRequest is nil")
+	}
 	if v.Title != nil {
 		if len((*v.Title)) < 1 {
 			return fmt.Errorf("field 'Title' must have at least 1 elements")
@@ -462,6 +516,9 @@ func (v *UpdateEventRequest) Validate() error {
 
 // ValidateCreateEventSeriesRequest validates the CreateEventSeriesRequest struct
 func (v *CreateEventSeriesRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("CreateEventSeriesRequest is nil")
+	}
 	if len(v.Title) < 1 {
 		return fmt.Errorf("field 'Title' must have at least 1 elements")
 	}
@@ -505,6 +562,9 @@ func (v *CreateEventSeriesRequest) Validate() error {
 
 // ValidateUpdateEventSeriesRequest validates the UpdateEventSeriesRequest struct
 func (v *UpdateEventSeriesRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("UpdateEventSeriesRequest is nil")
+	}
 	if v.Title != nil {
 		if len((*v.Title)) < 1 {
 			return fmt.Errorf("field 'Title' must have at least 1 elements")
@@ -566,6 +626,9 @@ func (v *UpdateEventSeriesRequest) Validate() error {
 
 // ValidateLocationFilter validates the LocationFilter struct
 func (v *LocationFilter) Validate() error {
+	if v == nil {
+		return fmt.Errorf("LocationFilter is nil")
+	}
 	if v.Locality != nil {
 		if len((*v.Locality)) < 0 {
 			return fmt.Errorf("field 'Locality' must have at least 0 elements")
@@ -601,6 +664,9 @@ func (v *LocationFilter) Validate() error {
 
 // ValidateSearchRequest validates the SearchRequest struct
 func (v *SearchRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("SearchRequest is nil")
+	}
 	if v.Query != nil {
 		if len((*v.Query)) < 0 {
 			return fmt.Errorf("field 'Query' must have at least 0 elements")
@@ -616,6 +682,9 @@ func (v *SearchRequest) Validate() error {
 
 // ValidateFindUserRequest validates the FindUserRequest struct
 func (v *FindUserRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("FindUserRequest is nil")
+	}
 	if len(v.Handle) < 1 {
 		return fmt.Errorf("field 'Handle' must have at least 1 elements")
 	}
@@ -633,6 +702,9 @@ func (v *FindUserRequest) Validate() error {
 
 // ValidateSearchUsersRequest validates the SearchUsersRequest struct
 func (v *SearchUsersRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("SearchUsersRequest is nil")
+	}
 	if len(v.Query) < 1 {
 		return fmt.Errorf("field 'Query' must have at least 1 elements")
 	}
@@ -644,6 +716,9 @@ func (v *SearchUsersRequest) Validate() error {
 
 // ValidatePeer validates the Peer struct
 func (v *Peer) Validate() error {
+	if v == nil {
+		return fmt.Errorf("Peer is nil")
+	}
 	if len(v.BaseUrl) < 0 {
 		return fmt.Errorf("field 'BaseUrl' must have at least 0 elements")
 	}
@@ -661,6 +736,9 @@ func (v *Peer) Validate() error {
 
 // ValidateAddPeerRequest validates the AddPeerRequest struct
 func (v *AddPeerRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("AddPeerRequest is nil")
+	}
 	if len(v.Address) < 3 {
 		return fmt.Errorf("field 'Address' must have at least 3 elements")
 	}
@@ -684,6 +762,9 @@ func (v *AddPeerRequest) Validate() error {
 
 // ValidateFederatedEvent validates the FederatedEvent struct
 func (v *FederatedEvent) Validate() error {
+	if v == nil {
+		return fmt.Errorf("FederatedEvent is nil")
+	}
 	if len(v.CanonicalUrl) < 1 {
 		return fmt.Errorf("field 'CanonicalUrl' must have at least 1 elements")
 	}
@@ -719,6 +800,9 @@ func (v *FederatedEvent) Validate() error {
 
 // ValidateEventBatch validates the EventBatch struct
 func (v *EventBatch) Validate() error {
+	if v == nil {
+		return fmt.Errorf("EventBatch is nil")
+	}
 	if len(v.BatchId) < 1 {
 		return fmt.Errorf("field 'BatchId' must have at least 1 elements")
 	}
@@ -730,6 +814,9 @@ func (v *EventBatch) Validate() error {
 
 // ValidateSignedDelivery validates the SignedDelivery struct
 func (v *SignedDelivery) Validate() error {
+	if v == nil {
+		return fmt.Errorf("SignedDelivery is nil")
+	}
 	if len(v.SenderAddress) < 3 {
 		return fmt.Errorf("field 'SenderAddress' must have at least 3 elements")
 	}
@@ -759,6 +846,9 @@ func (v *SignedDelivery) Validate() error {
 
 // ValidatePeeringBody validates the PeeringBody struct
 func (v *PeeringBody) Validate() error {
+	if v == nil {
+		return fmt.Errorf("PeeringBody is nil")
+	}
 	if len(v.BaseUrl) < 1 {
 		return fmt.Errorf("field 'BaseUrl' must have at least 1 elements")
 	}
@@ -776,6 +866,9 @@ func (v *PeeringBody) Validate() error {
 
 // ValidateSignedPeeringRequest validates the SignedPeeringRequest struct
 func (v *SignedPeeringRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("SignedPeeringRequest is nil")
+	}
 	if len(v.SenderAddress) < 3 {
 		return fmt.Errorf("field 'SenderAddress' must have at least 3 elements")
 	}
@@ -829,6 +922,9 @@ func (v *SignedPeeringRequest) Validate() error {
 
 // ValidateListRemoteEventsRequest validates the ListRemoteEventsRequest struct
 func (v *ListRemoteEventsRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("ListRemoteEventsRequest is nil")
+	}
 	if v.Query != nil {
 		if len((*v.Query)) < 0 {
 			return fmt.Errorf("field 'Query' must have at least 0 elements")
@@ -844,6 +940,9 @@ func (v *ListRemoteEventsRequest) Validate() error {
 
 // ValidateWebhook validates the Webhook struct
 func (v *Webhook) Validate() error {
+	if v == nil {
+		return fmt.Errorf("Webhook is nil")
+	}
 	if len(v.Url) < 1 {
 		return fmt.Errorf("field 'Url' must have at least 1 elements")
 	}
@@ -861,6 +960,9 @@ func (v *Webhook) Validate() error {
 
 // ValidateCreateWebhookRequest validates the CreateWebhookRequest struct
 func (v *CreateWebhookRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("CreateWebhookRequest is nil")
+	}
 	if len(v.Url) < 1 {
 		return fmt.Errorf("field 'Url' must have at least 1 elements")
 	}
@@ -878,6 +980,9 @@ func (v *CreateWebhookRequest) Validate() error {
 
 // ValidateUpdateWebhookRequest validates the UpdateWebhookRequest struct
 func (v *UpdateWebhookRequest) Validate() error {
+	if v == nil {
+		return fmt.Errorf("UpdateWebhookRequest is nil")
+	}
 	if v.Url != nil {
 		if len((*v.Url)) < 1 {
 			return fmt.Errorf("field 'Url' must have at least 1 elements")

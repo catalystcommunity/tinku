@@ -89,9 +89,11 @@ type Config struct {
 	LinkkeysRPTCPAddress   string
 	LinkkeysRPFingerprints []string
 	LinkkeysPKIAPIKey      string
-	// LinkkeysApplicationID names tinku in Rp/sign-request. Linkkeys
-	// v0.16.7 keys standing consent by (user, RP domain, application), so
-	// a change makes every person consent again. Empty means
+	// LinkkeysApplicationID is the application ID of the RP API-key
+	// account. From linkkeys v0.16.11 the RP takes the application from
+	// that account, and login refuses an assertion for another
+	// application. Consent is kept for each application, so a change
+	// makes every person consent again. Empty means
 	// FederationApplicationID, which is the same ID that tinku's
 	// application keys are enrolled under.
 	LinkkeysApplicationID string

@@ -64,17 +64,33 @@ func (f *fakeApplicationKeysTransport) Call(_ context.Context, _, op string, pay
 	f.lastPayload = payload
 	switch op {
 	case "start-key-challenge":
-		return api.EncodeStartApplicationKeyChallengeResponse(f.challenge), nil
+		return api.EncodeStartApplicationKeyChallengeResponse(f.challenge)
 	case "renew-attestation":
-		return api.EncodeRenewApplicationKeyAttestationResponse(f.renewal), nil
+		return api.EncodeRenewApplicationKeyAttestationResponse(f.renewal)
 	case "add-key":
-		return api.EncodeAddApplicationKeyResponse(f.addition), nil
+		return api.EncodeAddApplicationKeyResponse(f.addition)
 	default:
 		panic("fakeApplicationKeysTransport: unexpected op " + op)
 	}
 }
 
+// CallReply is for an op with a declared error arm. The ApplicationKeys ops
+// declare none, so the client never calls it.
+func (f *fakeApplicationKeysTransport) CallReply(_ context.Context, _, op string, _ []byte) (api.WireReply, error) {
+	panic("fakeApplicationKeysTransport: unexpected CallReply for " + op)
+}
+
 var _ api.Transport = (*fakeApplicationKeysTransport)(nil)
+
+// at reads an RFC 3339 test time.
+func at(t *testing.T, text string) time.Time {
+	t.Helper()
+	v, err := time.Parse(time.RFC3339, text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
 
 func TestEnrollerRenewKeyBuildsAndSubmitsASelfSignedRenewal(t *testing.T) {
 	kr := newTestKeyring(t, "tinku@example.test")
@@ -85,16 +101,20 @@ func TestEnrollerRenewKeyBuildsAndSubmitsASelfSignedRenewal(t *testing.T) {
 	attestation := api.ApplicationKeyAttestation{
 		SubjectUserId: instance.SubjectUserID, SubjectDomain: instance.SubjectDomain,
 		ApplicationId: instance.ApplicationID, InstanceId: instance.InstanceID,
-		KeyId: targetKeyID, KeyUsage: "sign", Algorithm: "ed25519",
-		AttestedAt: "2026-01-01T00:00:00Z", AttestationExpiresAt: "2026-01-02T00:00:00Z",
-		KeyCreatedAt: "2025-01-01T00:00:00Z", KeyExpiresAt: "2027-01-01T00:00:00Z",
+		KeyId: targetKeyID, KeyUsage: api.KeyUsageSign, Algorithm: api.KeyAlgorithmEd25519,
+		AttestedAt: at(t, "2026-01-01T00:00:00Z"), AttestationExpiresAt: at(t, "2026-01-02T00:00:00Z"),
+		KeyCreatedAt: at(t, "2025-01-01T00:00:00Z"), KeyExpiresAt: at(t, "2027-01-01T00:00:00Z"),
+	}
+	encodedAttestation, err := api.EncodeApplicationKeyAttestation(attestation)
+	if err != nil {
+		t.Fatal(err)
 	}
 	fake := &fakeApplicationKeysTransport{
 		challenge: api.StartApplicationKeyChallengeResponse{
-			ChallengeId: "challenge-1", Challenge: &challengeBytes, ExpiresAt: "2026-01-01T00:05:00Z",
+			ChallengeId: "challenge-1", Challenge: &challengeBytes, ExpiresAt: at(t, "2026-01-01T00:05:00Z"),
 		},
 		renewal: api.RenewApplicationKeyAttestationResponse{
-			Attestation: api.SignedApplicationKeyAttestation{Attestation: api.EncodeApplicationKeyAttestation(attestation)},
+			Attestation: api.SignedApplicationKeyAttestation{Attestation: encodedAttestation},
 			Signed:      true,
 		},
 	}

@@ -39,13 +39,14 @@ services:
   # Uncomment once the TINKU_LINKKEYS_* settings below are filled in for a
   # local relying party. Until then dev auth is how you log in.
   # linkkeys-rp:
-  #   image: containers.catalystsquad.com/public/linkkeys:0.16.7
+  #   image: containers.catalystsquad.com/public/linkkeys:0.16.11
   #   container_name: tinku-linkkeys-rp-dev
   #   environment:
   #     ENABLE_RP_ENDPOINTS: "true"
   #   # tinku-api calls the RP over CSIL-RPC on TLS
   #   # (TINKU_LINKKEYS_RP_TCP_ADDRESS, TINKU_LINKKEYS_RP_FINGERPRINTS).
-  #   # Use linkkeys 0.16.7 or later: sign-in names the application.
+  #   # Use linkkeys 0.16.11 or later. The API-key account must be an
+  #   # application account with the application ID `tinku`.
   #   networks:
   #     - tinku
 

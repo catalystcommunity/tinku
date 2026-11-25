@@ -94,7 +94,7 @@ func (e *Enroller) RenewKey(ctx context.Context, keyID string) (api.SignedApplic
 		InstanceId:    e.Instance.InstanceID,
 		Purpose:       regularrp.PurposeRenew,
 		KeyUsage:      regularrp.KeyUsageSign,
-		Algorithm:     "ed25519",
+		Algorithm:     api.KeyAlgorithmEd25519,
 	})
 	if err != nil {
 		return api.SignedApplicationKeyAttestation{}, false, fmt.Errorf("federation: starting a renewal challenge for %q: %w", keyID, err)
@@ -113,8 +113,8 @@ func (e *Enroller) RenewKey(ctx context.Context, keyID string) (api.SignedApplic
 		KeyId:         keyID,
 		ChallengeId:   challenge.ChallengeId,
 		Challenge:     *challenge.Challenge,
-		RequestedAt:   now.Format(time.RFC3339),
-		ExpiresAt:     now.Add(e.requestedKeyLifetime()).Format(time.RFC3339),
+		RequestedAt:   wholeSeconds(now),
+		ExpiresAt:     wholeSeconds(now.Add(e.requestedKeyLifetime())),
 	}
 	signed, err := regularrp.SignRenewal(renewal, nil, &signer)
 	if err != nil {
@@ -154,7 +154,7 @@ func (e *Enroller) SubmitAddition(ctx context.Context, newKeyID string) (api.Sig
 		InstanceId:    e.Instance.InstanceID,
 		Purpose:       regularrp.PurposeAdd,
 		KeyUsage:      regularrp.KeyUsageSign,
-		Algorithm:     "ed25519",
+		Algorithm:     api.KeyAlgorithmEd25519,
 	})
 	if err != nil {
 		return api.SignedApplicationKeyAttestation{}, fmt.Errorf("federation: starting an addition challenge for %q: %w", newKeyID, err)
@@ -172,14 +172,14 @@ func (e *Enroller) SubmitAddition(ctx context.Context, newKeyID string) (api.Sig
 		InstanceId:                  e.Instance.InstanceID,
 		KeyId:                       newKeyID,
 		KeyUsage:                    regularrp.KeyUsageSign,
-		Algorithm:                   "ed25519",
+		Algorithm:                   api.KeyAlgorithmEd25519,
 		PublicKey:                   publicKey,
 		Fingerprint:                 regularrp.Fingerprint(publicKey),
 		RequestedKeyLifetimeSeconds: int64(e.requestedKeyLifetime().Seconds()),
 		ChallengeId:                 challenge.ChallengeId,
 		Challenge:                   *challenge.Challenge,
-		RequestedAt:                 now.Format(time.RFC3339),
-		ExpiresAt:                   now.Add(e.requestedKeyLifetime()).Format(time.RFC3339),
+		RequestedAt:                 wholeSeconds(now),
+		ExpiresAt:                   wholeSeconds(now.Add(e.requestedKeyLifetime())),
 	}
 	signed, err := regularrp.SignAddition(addition, quorum, &newSigner)
 	if err != nil {
@@ -247,10 +247,15 @@ func (e *Enroller) renewalPass(ctx context.Context, expiry map[string]attestatio
 		if err != nil {
 			continue
 		}
-		attestedAt, aerr1 := time.Parse(time.RFC3339, attestation.AttestedAt)
-		expiresAt, aerr2 := time.Parse(time.RFC3339, attestation.AttestationExpiresAt)
-		if aerr1 == nil && aerr2 == nil {
-			expiry[key.KeyID] = attestationWindow{attestedAt: attestedAt, expiresAt: expiresAt}
+		if !attestation.AttestedAt.IsZero() && !attestation.AttestationExpiresAt.IsZero() {
+			expiry[key.KeyID] = attestationWindow{attestedAt: attestation.AttestedAt, expiresAt: attestation.AttestationExpiresAt}
 		}
 	}
+}
+
+// wholeSeconds is t as a signed linkkeys time: UTC, with no fraction of a
+// second. Linkkeys signs a time as whole Unix seconds and refuses a
+// fraction, so a time with nanoseconds does not survive the signature.
+func wholeSeconds(t time.Time) time.Time {
+	return t.UTC().Truncate(time.Second)
 }

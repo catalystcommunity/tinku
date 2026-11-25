@@ -33,9 +33,11 @@ import { AsyncApiClient, type AsyncServiceTransport } from "@tinku/client";
 // One example carrier: CSIL-RPC over an HTTP POST. The library owns the envelope;
 // the carrier owns only the transport. Swap `fetch` for any HTTP client.
 class HttpRpcCarrier implements AsyncServiceTransport {
-  constructor(private readonly baseUrl: string) {}
+  private readonly baseUrl: string;
 
-  async call(service: string, op: string, req: Uint8Array): Promise<Uint8Array> {
+  constructor(baseUrl: string) { this.baseUrl = baseUrl; }
+
+  private async exchange(service: string, op: string, req: Uint8Array): Promise<RpcResponse> {
     const envelope = new RpcRequest(service, op, req).encode();
     const http = await fetch(this.baseUrl.replace(/\/+$/, "") + "/csil/v1/rpc", {
       method: "POST",
@@ -50,12 +52,15 @@ class HttpRpcCarrier implements AsyncServiceTransport {
     const resp = RpcResponse.decode(
       new Uint8Array(await http.arrayBuffer()),
     ).intoTransportError();
-    // A typed application error rides as a status-0 `ServiceError` variant — distinct
-    // from a transport failure. Surface it so the typed client decodes success only.
-    if (resp.variant === "ServiceError") {
-      throw new Error(`csil-rpc ${service}/${op}: ServiceError`);
-    }
-    return resp.payload;
+    return resp;
+  }
+
+  async call(service: string, op: string, req: Uint8Array): Promise<Uint8Array> {
+    return (await this.exchange(service, op, req)).payload;
+  }
+
+  callReply(service: string, op: string, req: Uint8Array): Promise<RpcResponse> {
+    return this.exchange(service, op, req);
   }
 }
 

@@ -4,10 +4,13 @@
 // certificate fingerprints, through the regular-rp Go SDK. Federation uses
 // the same SDK transport for application keys (cmd/serve.go).
 //
-// Linkkeys v0.16.7 keys standing consent by (user, RP domain, application).
-// Every sign-request therefore names tinku's application ID and sends
-// tinku's own claim request: the RP's RP_CLAIMS_CONFIG is empty on the
-// shared instances, and an app that sends no request gets no claims.
+// Linkkeys keys standing consent by (user, RP domain, application). From
+// v0.16.11 the application is the RP API-key account, not a request field:
+// the account must be an application account whose application ID is
+// tinku's. The client checks that every verified assertion names that
+// application. Every sign-request sends tinku's own claim request: the RP's
+// RP_CLAIMS_CONFIG is empty on the shared instances, and an app that sends
+// no request gets no claims.
 package linkkeys
 
 import (
@@ -37,8 +40,8 @@ const (
 // display_name is optional. A person without one signs in as usual.
 func ClaimRequest() *api.ClaimRequest {
 	return &api.ClaimRequest{
-		Required: []api.RequestedClaim{{ClaimType: ClaimHandle, Datatype: "text"}},
-		Optional: []api.RequestedClaim{{ClaimType: ClaimDisplayName, Datatype: "text"}},
+		Required: []api.RequestedClaim{{ClaimType: ClaimHandle, Datatype: api.ClaimValueTypeText}},
+		Optional: []api.RequestedClaim{{ClaimType: ClaimDisplayName, Datatype: api.ClaimValueTypeText}},
 	}
 }
 
@@ -48,8 +51,9 @@ type Assertion struct {
 	Domain           string
 	Audience         string
 	Nonce            string
-	IssuedAt         string
-	ExpiresAt        string
+	IssuedAt         time.Time
+	ExpiresAt        time.Time
+	ApplicationID    string
 	AuthorizedClaims []string
 	DisplayName      string
 }
@@ -73,9 +77,10 @@ type Config struct {
 	Fingerprints []string
 	// APIKey is the RP API key.
 	APIKey string
-	// ApplicationID names tinku under the RP API-key account. The IDP keys
-	// standing consent by it. Keep it stable: a change makes every person
-	// consent again. Use the same value as the federation application ID.
+	// ApplicationID is the application ID of the RP API-key account. The
+	// RP takes the application from the account, and the IDP keys standing
+	// consent by it. The client refuses an assertion for any other
+	// application. Use the same value as the federation application ID.
 	ApplicationID string
 	// APIBase is the identity domain's https API base. userinfo-fetch
 	// redeems the token there.
@@ -134,14 +139,13 @@ func ValidApplicationID(id string) error {
 }
 
 // SignRequest asks the RP to sign an auth request bound to callbackURL and
-// nonce. It names tinku's application and sends tinku's claim request. The
-// result is base64url and goes on the IDP authorize URL as `signed_request`.
+// nonce. It sends tinku's claim request. The RP names the application from
+// the API-key account. The result is base64url and goes on the IDP
+// authorize URL as `signed_request`.
 func (c *Client) SignRequest(ctx context.Context, callbackURL, nonce string) (string, error) {
-	appID := c.applicationID
 	out, err := c.rp.SignRequest(ctx, api.RpSignRequest{
 		CallbackUrl:     callbackURL,
 		Nonce:           nonce,
-		ApplicationId:   &appID,
 		RequestedClaims: ClaimRequest(),
 	})
 	if err != nil {
@@ -163,8 +167,8 @@ func (c *Client) DecryptToken(ctx context.Context, encryptedToken string) (strin
 
 // VerifyAssertion checks a signed assertion against expectedDomain's
 // published keys. It returns the assertion only when the signature is
-// correct. The RP checks the signature only: the caller must still check
-// the domain, the audience, the nonce and the times.
+// correct and the assertion is for tinku's application. The caller must
+// still check the domain, the audience, the nonce and the times.
 func (c *Client) VerifyAssertion(ctx context.Context, signedAssertion, expectedDomain string) (*Assertion, error) {
 	out, err := c.rp.VerifyAssertion(ctx, api.RpVerifyRequest{
 		SignedAssertion: signedAssertion,
@@ -177,6 +181,10 @@ func (c *Client) VerifyAssertion(ctx context.Context, signedAssertion, expectedD
 		return nil, fmt.Errorf("linkkeys: assertion did not verify against %s", expectedDomain)
 	}
 	a := out.Assertion
+	if a.Application.ApplicationId != c.applicationID {
+		return nil, fmt.Errorf("linkkeys: the assertion is for application %q, not %q: set the RP account's application ID to %q",
+			a.Application.ApplicationId, c.applicationID, c.applicationID)
+	}
 	result := &Assertion{
 		UserID:           a.UserId,
 		Domain:           a.Domain,
@@ -184,6 +192,7 @@ func (c *Client) VerifyAssertion(ctx context.Context, signedAssertion, expectedD
 		Nonce:            a.Nonce,
 		IssuedAt:         a.IssuedAt,
 		ExpiresAt:        a.ExpiresAt,
+		ApplicationID:    a.Application.ApplicationId,
 		AuthorizedClaims: a.AuthorizedClaims,
 	}
 	if a.DisplayName != nil {

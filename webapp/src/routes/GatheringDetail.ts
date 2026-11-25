@@ -771,8 +771,9 @@ export class GatheringDetailPage extends TinkuElement {
           // ordinal would mean nothing there and is left off.
           ordinal: r.freq === "weekly" ? undefined : r.ordinal,
         },
-        startsOn: instantFromWallClock(`${r.startsOn}T00:00`, r.timezone),
-        endsOn: r.endsOn ? instantFromWallClock(`${r.endsOn}T23:59`, r.timezone) : undefined,
+        // Calendar days (CSIL `date`), read by the server in `timezone`.
+        startsOn: r.startsOn,
+        endsOn: r.endsOn || undefined,
         startTime: r.startTime,
         durationMinutes: r.durationMinutes,
         timezone: r.timezone,

@@ -359,12 +359,13 @@ The full flow uses a linkkeys relying party:
 
 1. The client calls `auth.begin-login` with a domain.
 2. The API makes a nonce. The relying party signs a request that holds it.
-   The request names the application (`tinku`) and asks for claims:
+   The relying party takes the application from its API-key account. The
+   request asks for claims:
    `handle` is required and `display_name` is optional.
 3. The API gives the identity-provider URL to the client.
 4. The identity provider sends the browser to `GET /auth/callback`.
 5. The API decrypts the token and verifies the assertion, the domain, the
-   audience, the nonce, and the times.
+   application, the audience, the nonce, and the times.
 6. The API gets the released claims with `userinfo-fetch`. A login without
    a `handle` fails.
 7. The API makes a user record and a session. It sets the session cookie.
@@ -390,11 +391,13 @@ TINKU_SESSION_NONCE_SECRET=<a fixed random value>
 Without them, `auth.begin-login` refuses and the reads still work. Use
 `--dev-auth` for local work.
 
-Linkkeys v0.16.7 and later keep consent for each application. The API
-sends `TINKU_LINKKEYS_APPLICATION_ID`, else `TINKU_FEDERATION_APPLICATION_ID`
-(`tinku`). Do not change it: each person must then consent again. Give the
-RP API-key account a display name that people know. The consent screen
-shows it.
+Linkkeys keeps consent for each application. From linkkeys v0.16.11 the
+relying party takes the application from the API-key account. Make that
+account an application account whose application ID is
+`TINKU_LINKKEYS_APPLICATION_ID`, else `TINKU_FEDERATION_APPLICATION_ID`
+(`tinku`). The API refuses an assertion for a different application. Do not
+change the ID: each person must then consent again. Give the RP API-key
+account a display name that people know. The consent screen shows it.
 
 `TINKU_SESSION_NONCE_SECRET` must be the same on every replica. The API
 makes a random value at start if you do not set one. Logins then fail after

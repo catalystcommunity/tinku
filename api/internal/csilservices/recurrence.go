@@ -51,10 +51,14 @@ func occurrenceTimes(s *store.EventSeries, from, through time.Time) ([]time.Time
 	}
 
 	// The rule's window: never before the series begins, never after it ends.
-	windowStart := maxTime(from, s.StartsOn)
+	// Both bounds are calendar days in the series' own timezone, and ends_on
+	// includes the whole of its last day.
+	windowStart := maxTime(from, s.StartsOn.Midnight(loc))
 	windowEnd := through
-	if s.EndsOn != nil && s.EndsOn.Before(windowEnd) {
-		windowEnd = *s.EndsOn
+	if s.EndsOn != nil {
+		if last := s.EndsOn.AddDays(1).Midnight(loc).Add(-time.Nanosecond); last.Before(windowEnd) {
+			windowEnd = last
+		}
 	}
 	if windowEnd.Before(windowStart) {
 		return nil, nil
@@ -68,7 +72,7 @@ func occurrenceTimes(s *store.EventSeries, from, through time.Time) ([]time.Time
 	// Anchor every period count at the series' own start date, so which
 	// periods a rule with interval > 1 selects does not shift when the
 	// horizon is later extended from a different `from`.
-	anchor := s.StartsOn.In(loc)
+	anchor := s.StartsOn.Midnight(loc)
 	var times []time.Time
 
 	switch s.Recurrence.Freq {

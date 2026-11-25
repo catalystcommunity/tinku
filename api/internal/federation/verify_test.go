@@ -75,7 +75,7 @@ func usableKeySet(kr *LocalKeyring, extra ...regularrp.VerifiedApplicationKey) r
 		}
 		set.Keys = append(set.Keys, regularrp.VerifiedApplicationKey{
 			Attestation: api.ApplicationKeyAttestation{
-				KeyId: k.KeyID, KeyUsage: regularrp.KeyUsageSign, Algorithm: "ed25519",
+				KeyId: k.KeyID, KeyUsage: regularrp.KeyUsageSign, Algorithm: api.KeyAlgorithmEd25519,
 				PublicKey: append([]byte{}, k.PublicKey[:]...),
 			},
 			Status: regularrp.KeyStatus{Kind: regularrp.KeyStatusUsable},
@@ -90,7 +90,7 @@ func revokedKeySet(kr *LocalKeyring, keyID string) regularrp.VerifiedApplication
 	set := usableKeySet(kr)
 	for i := range set.Keys {
 		if set.Keys[i].Attestation.KeyId == keyID {
-			set.Keys[i].Status = regularrp.KeyStatus{Kind: regularrp.KeyStatusRevoked, RevokedAt: "2020-01-01T00:00:00Z"}
+			set.Keys[i].Status = regularrp.KeyStatus{Kind: regularrp.KeyStatusRevoked, RevokedAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)}
 		}
 	}
 	set.RevokedKeyIDs[keyID] = true

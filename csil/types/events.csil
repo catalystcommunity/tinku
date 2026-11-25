@@ -23,10 +23,11 @@
 ;;
 ;; # Times are UTC
 ;;
-;; Every instant here — starts_at, ends_at, starts_on, ends_on — is UTC. A
-;; `timezone` is for display and for entry, never an offset folded into a
-;; stored time. The one exception is EventSeries.start_time, which is not an
-;; instant at all; see the note on that field.
+;; Every instant here — starts_at, ends_at — is UTC. A `timezone` is for
+;; display and for entry, never an offset folded into a stored time. The
+;; series rule is not an instant: starts_on and ends_on are calendar days
+;; (CSIL `date`) and start_time is a clock time, all read in the series'
+;; `timezone`; see the note on start_time.
 ;;
 ;; # The start-time lock
 ;;
@@ -209,14 +210,14 @@ EventSeries = {
 
     recurrence: RecurrenceRule,
 
-    ;;; First date the rule may produce an occurrence on, as a UTC instant
-    ;;; at midnight of the local date.
-    starts_on: timestamp,
+    ;;; First calendar day the rule may produce an occurrence on, in
+    ;;; `timezone`. A day, not an instant: it is part of the rule.
+    starts_on: date,
 
-    ;;; Last date the rule may produce an occurrence on. Absent means the
-    ;;; series is open-ended, and the api keeps a bounded horizon
-    ;;; materialized rather than an infinite one.
-    ? ends_on: timestamp,
+    ;;; Last calendar day the rule may produce an occurrence on, in
+    ;;; `timezone`, inclusive. Absent means the series is open-ended, and the
+    ;;; api keeps a bounded horizon materialized rather than an infinite one.
+    ? ends_on: date,
 
     ;;; Local clock time each occurrence begins, "HH:MM" on a 24-hour clock,
     ;;; interpreted in `timezone`.
@@ -395,8 +396,8 @@ CreateEventSeriesRequest = {
     ? online_url: text .size (0..2000),
     ? location: Location,
     recurrence: RecurrenceRule,
-    starts_on: timestamp,
-    ? ends_on: timestamp,
+    starts_on: date,
+    ? ends_on: date,
     start_time: text .size (5..5) .regex "^([01][0-9]|2[0-3]):[0-5][0-9]$",
     duration_minutes: uint,
     timezone: text .size (1..64)
@@ -413,8 +414,8 @@ UpdateEventSeriesRequest = {
     ? online_url: text .size (0..2000),
     ? location: Location,
     ? recurrence: RecurrenceRule,
-    ? starts_on: timestamp,
-    ? ends_on: timestamp,
+    ? starts_on: date,
+    ? ends_on: date,
     ? start_time: text .size (5..5) .regex "^([01][0-9]|2[0-3]):[0-5][0-9]$",
     ? duration_minutes: uint,
     ? timezone: text .size (1..64)

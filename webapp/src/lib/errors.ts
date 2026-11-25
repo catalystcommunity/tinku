@@ -3,7 +3,7 @@
 // treats them differently: a ServiceError is an answer (this greeting does
 // not exist, you are not logged in), while a transport error means the call
 // did not arrive at a handler at all.
-import type { ServiceError } from "~/gen/types.gen";
+import type { ServiceErrorType } from "~/gen/types.gen";
 
 /** Application error codes, mirroring api/internal/csilservices/errors.go. */
 export const ErrorCode = {
@@ -23,7 +23,7 @@ export class TinkuServiceError extends Error {
   readonly field?: string;
   readonly resourceType?: string;
 
-  constructor(serviceError: ServiceError) {
+  constructor(serviceError: ServiceErrorType) {
     super(serviceError.message);
     this.name = "TinkuServiceError";
     this.code = serviceError.code;

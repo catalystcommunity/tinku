@@ -2,8 +2,20 @@
 // Source: <csil spec>
 // Target: typescript-codec
 
-import type { AddGatheringOwnerRequest, AddPeerRequest, AdminList, AdminUser, AdoptGatheringRequest, AttendEventRequest, Attendee, AttendeeList, BeginLoginRequest, BeginLoginResponse, CreateEventRequest, CreateEventSeriesRequest, CreateGatheringRequest, CreateGreetingRequest, CreateOrganizationRequest, CreateWebhookRequest, DeleteEventRequest, DeleteEventSeriesRequest, DeleteGatheringRequest, DeleteOrganizationRequest, DeleteWebhookRequest, DeliveryReceipt, DevLoginRequest, Empty, Event, EventBatch, EventID, EventList, EventRole, EventRoleAssignment, EventRoleList, EventSeries, EventSeriesID, EventSeriesList, ExpandEventSeriesRequest, FederatedEvent, FederationIdentity, FindUserRequest, Gathering, GatheringID, GatheringList, GatheringMember, GatheringMemberList, GatheringOffer, GatheringOfferID, GatheringOfferList, GatheringOfferStatus, GeoCircle, GetEventRequest, GetEventSeriesRequest, GetGatheringRequest, GetGreetingRequest, GetOrganizationRequest, Greeting, GreetingID, GreetingList, InstanceSettings, JoinGatheringRequest, LeaveGatheringRequest, ListAttendeesRequest, ListEventRolesRequest, ListEventSeriesRequest, ListEventsRequest, ListGatheringMembersRequest, ListGatheringOffersRequest, ListGatheringsRequest, ListOrganizationMembersRequest, ListOrganizationsRequest, ListOriginVolumeRequest, ListPeersRequest, ListRemoteEventsRequest, ListWebhooksRequest, Location, LocationFilter, OfferGatheringRequest, Organization, OrganizationID, OrganizationList, OrganizationMember, OrganizationMemberList, OrganizationRole, Origin, OriginVolume, OriginVolumeList, OwnerKind, OwnerRef, OwnerRefInput, Page, Peer, PeerList, PeerStatus, PeeringBody, PeeringReceipt, PublishDecision, PublishSetting, PublishSource, RecurrenceFreq, RecurrenceRule, RemoteEvent, RemoteEventList, RemoveEventRoleRequest, RemoveGatheringOwnerRequest, RemoveOrganizationMemberRequest, RemovePeerRequest, RespondToGatheringOfferRequest, ResumePeerRequest, SearchKind, SearchRequest, SearchResults, SearchUsersRequest, ServiceError, SetAdminRequest, SetEventRoleRequest, SetOrganizationMemberRequest, SetOriginRateLimitRequest, SetPeerRateLimitRequest, SetPeerStatusRequest, SignedDelivery, SignedPeeringRequest, UnattendEventRequest, UpdateEventRequest, UpdateEventSeriesRequest, UpdateGatheringRequest, UpdateInstanceSettingsRequest, UpdateOrganizationRequest, UpdateWebhookRequest, UserID, UserKind, UserProfile, UserRef, UserRefList, ViewerContext, Webhook, WebhookID, WebhookList, WebhookOwnerKind, WebhookScope, WebhookWithSecret, Weekday, WithdrawGatheringOfferRequest } from "./types.gen.ts";
+import { isCalendarDate } from "./types.gen.ts";
+import type { AddGatheringOwnerRequest, AddPeerRequest, AdminList, AdminUser, AdoptGatheringRequest, AttendEventRequest, Attendee, AttendeeList, BeginLoginRequest, BeginLoginResponse, CreateEventRequest, CreateEventSeriesRequest, CreateGatheringRequest, CreateGreetingRequest, CreateOrganizationRequest, CreateWebhookRequest, DeleteEventRequest, DeleteEventSeriesRequest, DeleteGatheringRequest, DeleteOrganizationRequest, DeleteWebhookRequest, DeliveryReceipt, DevLoginRequest, Empty, Event, EventBatch, EventID, EventList, EventRole, EventRoleAssignment, EventRoleList, EventSeries, EventSeriesID, EventSeriesList, ExpandEventSeriesRequest, FederatedEvent, FederationIdentity, FindUserRequest, Gathering, GatheringID, GatheringList, GatheringMember, GatheringMemberList, GatheringOffer, GatheringOfferID, GatheringOfferList, GatheringOfferStatus, GeoCircle, GetEventRequest, GetEventSeriesRequest, GetGatheringRequest, GetGreetingRequest, GetOrganizationRequest, Greeting, GreetingID, GreetingList, InstanceSettings, JoinGatheringRequest, LeaveGatheringRequest, ListAttendeesRequest, ListEventRolesRequest, ListEventSeriesRequest, ListEventsRequest, ListGatheringMembersRequest, ListGatheringOffersRequest, ListGatheringsRequest, ListOrganizationMembersRequest, ListOrganizationsRequest, ListOriginVolumeRequest, ListPeersRequest, ListRemoteEventsRequest, ListWebhooksRequest, Location, LocationFilter, OfferGatheringRequest, Organization, OrganizationID, OrganizationList, OrganizationMember, OrganizationMemberList, OrganizationRole, Origin, OriginVolume, OriginVolumeList, OwnerKind, OwnerRef, OwnerRefInput, Page, Peer, PeerList, PeerStatus, PeeringBody, PeeringReceipt, PublishDecision, PublishSetting, PublishSource, RecurrenceFreq, RecurrenceRule, RemoteEvent, RemoteEventList, RemoveEventRoleRequest, RemoveGatheringOwnerRequest, RemoveOrganizationMemberRequest, RemovePeerRequest, RespondToGatheringOfferRequest, ResumePeerRequest, SearchKind, SearchRequest, SearchResults, SearchUsersRequest, ServiceErrorType, SetAdminRequest, SetEventRoleRequest, SetOrganizationMemberRequest, SetOriginRateLimitRequest, SetPeerRateLimitRequest, SetPeerStatusRequest, SignedDelivery, SignedPeeringRequest, UnattendEventRequest, UpdateEventRequest, UpdateEventSeriesRequest, UpdateGatheringRequest, UpdateInstanceSettingsRequest, UpdateOrganizationRequest, UpdateWebhookRequest, UserID, UserKind, UserProfile, UserRef, UserRefList, ViewerContext, Webhook, WebhookID, WebhookList, WebhookOwnerKind, WebhookScope, WebhookWithSecret, Weekday, WithdrawGatheringOfferRequest } from "./types.gen.ts";
 
+
+export function encodeDate(value: string): CborTag {
+  if (!isCalendarDate(value)) throw new Error("expected YYYY-MM-DD");
+  return { tag: 1004, value };
+}
+
+export function decodeDate(value: CborValue): string {
+  const text = asTagged(value, 1004);
+  if (!isCalendarDate(text)) throw new Error("expected YYYY-MM-DD");
+  return text;
+}
 /** A CBOR semantic tag wrapping an inner value (e.g. tag 0 timestamp, tag 4 decimal). */
 export type CborTag = { readonly tag: number; readonly value: CborValue };
 
@@ -73,9 +85,13 @@ function encInto(v: CborValue, out: number[]): void {
     head(4, v.length, out);
     for (const x of v) encInto(x, out);
   } else if (v instanceof Map) {
-    head(5, v.size, out);
-    for (const [k, val] of v) {
-      encInto(k, out);
+    // RFC 8949 section 4.2.1: entries go in bytewise order of the encoded keys, so
+    // every peer emits the same bytes and a decoder can check the order in one pass.
+    const entries = Array.from(v, ([k, val]): [Uint8Array, CborValue] => [encodeValue(k), val]);
+    entries.sort(([a], [b]) => csilCompareBytes(a, b));
+    head(5, entries.length, out);
+    for (const [k, val] of entries) {
+      for (const b of k) out.push(b);
       encInto(val, out);
     }
   } else {
@@ -89,6 +105,34 @@ export function encodeValue(value: CborValue): Uint8Array {
   const out: number[] = [];
   encInto(value, out);
   return Uint8Array.from(out);
+}
+
+function csilCompareBytes(a: Uint8Array, b: Uint8Array): number {
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return a.length - b.length;
+}
+
+// A record accepts its fields in any order, so the decoder only marks a map whose
+// keys are out of canonical order; a dynamic-map reader refuses a marked map.
+const csilUnorderedMaps = new WeakSet<Map<CborValue, CborValue>>();
+
+// A key with a longer head than needed is a second byte form of the same key, so
+// the order and duplicate checks on raw bytes would miss it.
+function csilShortestHead(b: Uint8Array, at: number): boolean {
+  const major = b[at] >> 5;
+  const low = b[at] & 0x1f;
+  if (major === 7 || low < 24) return true;
+  if (low === 24) return b[at + 1] >= 24;
+  if (low === 25) return b[at + 1] !== 0;
+  if (low === 26) return b[at + 1] !== 0 || b[at + 2] !== 0;
+  return b[at + 1] !== 0 || b[at + 2] !== 0 || b[at + 3] !== 0 || b[at + 4] !== 0;
+}
+
+function csilKeyLabel(key: CborValue): string {
+  return typeof key === "string" ? JSON.stringify(key) : String(key);
 }
 
 type Cursor = { b: Uint8Array; pos: number };
@@ -132,8 +176,24 @@ function smallInt(arg: bigint): number | bigint {
   return arg <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(arg) : arg;
 }
 
+/** Widen an IEEE 754 half-precision value (RFC 8949 Appendix D) exactly to binary64. */
+function csilHalfToFloat64(half: number): number {
+  const exp = (half >> 10) & 0x1f;
+  const mant = half & 0x3ff;
+  let magnitude: number;
+  if (exp === 0) magnitude = mant * 2 ** -24;
+  else if (exp === 31) magnitude = mant === 0 ? Infinity : NaN;
+  else magnitude = (mant + 1024) * 2 ** (exp - 25);
+  return half & 0x8000 ? -magnitude : magnitude;
+}
+
 function readFloat(st: Cursor, low: number): number {
   const bits = readArg(st, low);
+  if (low === 25) {
+    const view = new DataView(new ArrayBuffer(2));
+    view.setUint16(0, Number(bits), false);
+    return csilHalfToFloat64(view.getUint16(0, false));
+  }
   if (low === 26) {
     const view = new DataView(new ArrayBuffer(4));
     view.setUint32(0, Number(bits), false);
@@ -163,7 +223,7 @@ function decInto(st: Cursor, depth: number): CborValue {
       st.pos += 1;
       return null;
     }
-    if (low === 26 || low === 27) return readFloat(st, low);
+    if (low === 25 || low === 26 || low === 27) return readFloat(st, low);
     throw new Error("malformed CBOR simple value");
   }
   const arg = readArg(st, low);
@@ -199,8 +259,21 @@ function decInto(st: Cursor, depth: number): CborValue {
       if (arg > BigInt(st.b.length - st.pos)) throw new Error("CBOR map length exceeds remaining input");
       const n = Number(arg);
       const m = new Map<CborValue, CborValue>();
+      // Raw key bytes catch a repeated byte-string key and a key encoded twice in
+      // different widths, which a JS `Map` cannot tell apart from distinct keys.
+      const seen = new Set<string>();
+      let prev: Uint8Array | null = null;
       for (let i = 0; i < n; i++) {
+        const start = st.pos;
         const k = decInto(st, depth + 1);
+        if (!csilShortestHead(st.b, start)) throw new Error("csil cbor: map key is not in shortest form");
+        const raw = st.b.subarray(start, st.pos);
+        let id = "";
+        for (const b of raw) id += String.fromCharCode(b);
+        if (seen.has(id) || m.has(k)) throw new Error(`csil cbor: duplicate key ${csilKeyLabel(k)}`);
+        seen.add(id);
+        if (prev !== null && csilCompareBytes(prev, raw) > 0) csilUnorderedMaps.add(m);
+        prev = raw;
         const val = decInto(st, depth + 1);
         m.set(k, val);
       }
@@ -266,6 +339,13 @@ export function asMap(value: CborValue): Map<CborValue, CborValue> {
   throw new Error("expected a map");
 }
 
+/** A `{ * K => V }` map: its keys must arrive in canonical order (RFC 8949 section 4.2.1). */
+export function asDynamicMap(value: CborValue): Map<CborValue, CborValue> {
+  const m = asMap(value);
+  if (csilUnorderedMaps.has(m)) throw new Error("csil cbor: map keys are not in canonical order");
+  return m;
+}
+
 /** A decoded integer may surface as `bigint` (see `decInto`'s large-value path), so a
  * numeric literal's expected `number` is compared against the `bigint`-normalized form
  * rather than failing on a type mismatch that isn't a value mismatch. */
@@ -278,6 +358,32 @@ export function asLiteral<T extends CborValue>(value: CborValue, expected: T): T
 /** Validate a decoded scalar against a literal-enum's declared vocabulary, erroring
  * on an unknown value. The caller reads through `asNumber`/`asString`/`asBool`, which
  * already normalize a decoded `bigint` to `number`, so a plain membership check suffices. */
+/** CBOR orders unsigned integer keys first, then negative keys by magnitude. */
+export function enumNumberMap(entries: [bigint, CborValue][]): Map<CborValue, CborValue> {
+  return new Map(entries.sort(([a], [b]) => {
+    if (a === b) return 0;
+    if ((a < 0n) !== (b < 0n)) return a < 0n ? 1 : -1;
+    if (a < 0n) return a > b ? -1 : 1;
+    return a < b ? -1 : 1;
+  }));
+}
+
+export function enumToNumber(label: string, entries: readonly (readonly [string, bigint])[]): bigint {
+  for (const [name, number] of entries) {
+    if (name === label) return number;
+  }
+  throw new Error("unknown enum label");
+}
+
+export function enumFromNumber(value: CborValue, entries: readonly (readonly [string, bigint])[]): string {
+  if (typeof value === "bigint" || (typeof value === "number" && Number.isSafeInteger(value))) {
+    for (const [name, number] of entries) {
+      if (BigInt(value) === number) return name;
+    }
+  }
+  throw new Error("unknown enum number");
+}
+
 export function asEnumMember<T extends number | string | boolean | null>(
   value: T,
   members: readonly T[],
@@ -322,7 +428,92 @@ function asTagged(value: CborValue, tag: number): CborValue {
 
 /** Decode a tag-0 (RFC 3339, UTC) timestamp into a `Date`. */
 export function asTimestamp(value: CborValue): Date {
-  return new Date(asString(asTagged(value, 0)));
+  return csilTsFromText(asString(asTagged(value, 0)));
+}
+
+// `Date` parsing accepts many shapes the wire contract forbids (a space for `T`, no
+// offset, leap seconds rolled over), so the grammar is checked by hand. `[0-9]` stays
+// ASCII-only, and `$` without the `m` flag matches only at the true end of input.
+const CSIL_TS_PATTERN =
+  /^([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt]([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,9}))?(?:[Zz]|([+-])([0-9]{2}):([0-9]{2}))$/;
+
+/** Parse canonical tag-0 text strictly. `Date` holds milliseconds, so a nonzero digit
+ * past the third fraction digit is an error rather than a silent rounding. */
+export function csilTsFromText(text: string): Date {
+  const m = CSIL_TS_PATTERN.exec(text);
+  if (m === null) throw new Error(`invalid RFC 3339 timestamp ${JSON.stringify(text)}`);
+  const [year, month, day, hour, minute, second] = m.slice(1, 7).map(Number);
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const monthDays = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > monthDays[month - 1]) {
+    throw new Error(`invalid calendar date in timestamp ${JSON.stringify(text)}`);
+  }
+  if (hour > 23 || minute > 59 || second > 59) {
+    throw new Error(`invalid time of day in timestamp ${JSON.stringify(text)}`);
+  }
+  const fraction = m[7] ?? "";
+  if (/[1-9]/.test(fraction.slice(3))) {
+    throw new Error(`timestamp ${JSON.stringify(text)} is finer than milliseconds`);
+  }
+  let offsetMinutes = 0;
+  if (m[8] !== undefined) {
+    const offsetHour = Number(m[9]);
+    const offsetMinute = Number(m[10]);
+    if (offsetHour > 23 || offsetMinute > 59) {
+      throw new Error(`invalid offset in timestamp ${JSON.stringify(text)}`);
+    }
+    offsetMinutes = (m[8] === "-" ? -1 : 1) * (offsetHour * 60 + offsetMinute);
+  }
+  // `Date.UTC` maps years 0-99 to 1900-1999, so the year is set on its own.
+  const local = new Date(0);
+  local.setUTCFullYear(year, month - 1, day);
+  local.setUTCHours(hour, minute, second, Number(fraction.padEnd(3, "0").slice(0, 3)));
+  const instant = new Date(local.getTime() - offsetMinutes * 60000);
+  const utcYear = instant.getUTCFullYear();
+  if (utcYear < 1 || utcYear > 9999) {
+    throw new Error(`timestamp ${JSON.stringify(text)} is outside years 0001-9999 in UTC`);
+  }
+  return instant;
+}
+
+const CSIL_EPOCH_FIRST = -62135596800;
+const CSIL_EPOCH_LAST = 253402300799;
+
+/** Decode tag-1 epoch seconds (`cddl_time`) into a `Date`. A `Date` holds
+ * milliseconds, so a float fraction is rounded to three digits by the shared rule. */
+export function asCddlTime(value: CborValue): Date {
+  const inner = asTagged(value, 1);
+  // An integer past 2^53 decodes as a `bigint`; every one of those is out of range.
+  if (typeof inner === "bigint") throw new Error("cddl_time is outside years 0001-9999");
+  if (typeof inner !== "number") throw new Error("cddl_time content must be a number");
+  if (!Number.isFinite(inner)) throw new Error("cddl_time must be finite");
+  if (inner < CSIL_EPOCH_FIRST - 1 || inner > CSIL_EPOCH_LAST + 1) {
+    throw new Error("cddl_time is outside years 0001-9999");
+  }
+  // An integer and a float with the same value decode to the same `number`, and the
+  // rule gives an integer a zero fraction, so one path serves both.
+  let seconds = Math.floor(inner);
+  let units = Math.floor((inner - seconds) * 1000 + 0.5);
+  if (units === 1000) {
+    seconds += 1;
+    units = 0;
+  }
+  if (seconds < CSIL_EPOCH_FIRST || seconds > CSIL_EPOCH_LAST) {
+    throw new Error("cddl_time is outside years 0001-9999");
+  }
+  return new Date(seconds * 1000 + units);
+}
+
+/** A `Date` as tag-1 content: whole seconds as an integer, else a binary64 float. */
+export function csilEpochFromDate(d: Date): number {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) throw new Error("expected a valid Date");
+  const millis = d.getTime();
+  const seconds = Math.floor(millis / 1000);
+  if (seconds < CSIL_EPOCH_FIRST || seconds > CSIL_EPOCH_LAST) {
+    throw new Error("cddl_time is outside years 0001-9999");
+  }
+  const units = millis - seconds * 1000;
+  return units === 0 ? seconds : seconds + units / 1000;
 }
 
 /** Decode a tag-4 decimal fraction into its `[exponent, mantissa]` payload. */
@@ -337,6 +528,11 @@ export function asDecimalPayload(value: CborValue): [number | bigint, number | b
 
 /** A `Date` rendered as the canonical tag-0 text: RFC 3339, UTC, `Z` offset. */
 export function csilTsToText(d: Date): string {
+  // An Invalid Date or a year outside 0001-9999 has no canonical text, and
+  // `toISOString` would write an expanded `+YYYYYY` year for the latter.
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) throw new Error("expected a valid Date");
+  const year = d.getUTCFullYear();
+  if (year < 1 || year > 9999) throw new Error("timestamp is outside years 0001-9999");
   return d.toISOString().replace(/\.000Z$/, "Z");
 }
 
@@ -346,7 +542,7 @@ export function toEmptyCborValue(v: Empty): CborValue {
 }
 
 export function fromEmptyCborValue(value: CborValue): Empty {
-  void value;
+  asMap(value);
   return {} as Empty;
 }
 
@@ -373,6 +569,7 @@ export function toViewerContextCborValue(v: ViewerContext): CborValue {
 }
 
 export function fromViewerContextCborValue(value: CborValue): ViewerContext {
+  asMap(value);
   return {
     isAdmin: asBool(requireKey(value, "is_admin")),
     isOwner: asBool(requireKey(value, "is_owner")),
@@ -402,6 +599,7 @@ export function toPageCborValue(v: Page): CborValue {
 }
 
 export function fromPageCborValue(value: CborValue): Page {
+  asMap(value);
   return {
     limit: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asNumber(csilV))(mapGet(value, "limit")),
     offset: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asNumber(csilV))(mapGet(value, "offset")),
@@ -425,6 +623,7 @@ export function toPublishDecisionCborValue(v: PublishDecision): CborValue {
 }
 
 export function fromPublishDecisionCborValue(value: CborValue): PublishDecision {
+  asMap(value);
   return {
     publishing: asBool(requireKey(value, "publishing")),
     source: (asEnumMember(asString(requireKey(value, "source")), ["instance", "organization", "gathering"]) as "instance" | "organization" | "gathering"),
@@ -449,6 +648,7 @@ export function toOriginCborValue(v: Origin): CborValue {
 }
 
 export function fromOriginCborValue(value: CborValue): Origin {
+  asMap(value);
   return {
     domain: asString(requireKey(value, "domain")),
     isExternal: asBool(requireKey(value, "is_external")),
@@ -464,7 +664,7 @@ export function fromOriginCbor(bytes: Uint8Array): Origin {
   return fromOriginCborValue(decode(bytes));
 }
 
-export function toServiceErrorCborValue(v: ServiceError): CborValue {
+export function toServiceErrorTypeCborValue(v: ServiceErrorType): CborValue {
   const csilMap = new Map<CborValue, CborValue>();
   csilMap.set("code", v.code);
   if (v.field !== undefined) csilMap.set("field", v.field);
@@ -473,7 +673,8 @@ export function toServiceErrorCborValue(v: ServiceError): CborValue {
   return csilMap;
 }
 
-export function fromServiceErrorCborValue(value: CborValue): ServiceError {
+export function fromServiceErrorTypeCborValue(value: CborValue): ServiceErrorType {
+  asMap(value);
   return {
     code: asNumber(requireKey(value, "code")),
     message: asString(requireKey(value, "message")),
@@ -482,12 +683,12 @@ export function fromServiceErrorCborValue(value: CborValue): ServiceError {
   };
 }
 
-export function toServiceErrorCbor(v: ServiceError): Uint8Array {
-  return encodeValue(toServiceErrorCborValue(v));
+export function toServiceErrorTypeCbor(v: ServiceErrorType): Uint8Array {
+  return encodeValue(toServiceErrorTypeCborValue(v));
 }
 
-export function fromServiceErrorCbor(bytes: Uint8Array): ServiceError {
-  return fromServiceErrorCborValue(decode(bytes));
+export function fromServiceErrorTypeCbor(bytes: Uint8Array): ServiceErrorType {
+  return fromServiceErrorTypeCborValue(decode(bytes));
 }
 
 export function toBeginLoginRequestCborValue(v: BeginLoginRequest): CborValue {
@@ -497,6 +698,7 @@ export function toBeginLoginRequestCborValue(v: BeginLoginRequest): CborValue {
 }
 
 export function fromBeginLoginRequestCborValue(value: CborValue): BeginLoginRequest {
+  asMap(value);
   return {
     domain: asString(requireKey(value, "domain")),
   };
@@ -517,6 +719,7 @@ export function toBeginLoginResponseCborValue(v: BeginLoginResponse): CborValue 
 }
 
 export function fromBeginLoginResponseCborValue(value: CborValue): BeginLoginResponse {
+  asMap(value);
   return {
     redirectUrl: asString(requireKey(value, "redirect_url")),
   };
@@ -542,6 +745,7 @@ export function toUserProfileCborValue(v: UserProfile): CborValue {
 }
 
 export function fromUserProfileCborValue(value: CborValue): UserProfile {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     linkkeysDomain: asString(requireKey(value, "linkkeys_domain")),
@@ -568,6 +772,7 @@ export function toDevLoginRequestCborValue(v: DevLoginRequest): CborValue {
 }
 
 export function fromDevLoginRequestCborValue(value: CborValue): DevLoginRequest {
+  asMap(value);
   return {
     handle: asString(requireKey(value, "handle")),
     domain: asString(requireKey(value, "domain")),
@@ -593,6 +798,7 @@ export function toGreetingCborValue(v: Greeting): CborValue {
 }
 
 export function fromGreetingCborValue(value: CborValue): Greeting {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     authorId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "author_id")),
@@ -617,6 +823,7 @@ export function toGreetingListCborValue(v: GreetingList): CborValue {
 }
 
 export function fromGreetingListCborValue(value: CborValue): GreetingList {
+  asMap(value);
   return {
     greetings: asArray(requireKey(value, "greetings")).map((csilE) => fromGreetingCborValue(csilE)),
   };
@@ -637,6 +844,7 @@ export function toCreateGreetingRequestCborValue(v: CreateGreetingRequest): Cbor
 }
 
 export function fromCreateGreetingRequestCborValue(value: CborValue): CreateGreetingRequest {
+  asMap(value);
   return {
     message: asString(requireKey(value, "message")),
   };
@@ -657,6 +865,7 @@ export function toGetGreetingRequestCborValue(v: GetGreetingRequest): CborValue 
 }
 
 export function fromGetGreetingRequestCborValue(value: CborValue): GetGreetingRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
   };
@@ -689,6 +898,7 @@ export function toOrganizationCborValue(v: Organization): CborValue {
 }
 
 export function fromOrganizationCborValue(value: CborValue): Organization {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     slug: asString(requireKey(value, "slug")),
@@ -726,6 +936,7 @@ export function toOrganizationMemberCborValue(v: OrganizationMember): CborValue 
 }
 
 export function fromOrganizationMemberCborValue(value: CborValue): OrganizationMember {
+  asMap(value);
   return {
     userId: asString(requireKey(value, "user_id")),
     handle: asString(requireKey(value, "handle")),
@@ -753,6 +964,7 @@ export function toCreateOrganizationRequestCborValue(v: CreateOrganizationReques
 }
 
 export function fromCreateOrganizationRequestCborValue(value: CborValue): CreateOrganizationRequest {
+  asMap(value);
   return {
     name: asString(requireKey(value, "name")),
     blurb: asString(requireKey(value, "blurb")),
@@ -779,6 +991,7 @@ export function toUpdateOrganizationRequestCborValue(v: UpdateOrganizationReques
 }
 
 export function fromUpdateOrganizationRequestCborValue(value: CborValue): UpdateOrganizationRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     name: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "name")),
@@ -803,6 +1016,7 @@ export function toGetOrganizationRequestCborValue(v: GetOrganizationRequest): Cb
 }
 
 export function fromGetOrganizationRequestCborValue(value: CborValue): GetOrganizationRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
   };
@@ -823,6 +1037,7 @@ export function toDeleteOrganizationRequestCborValue(v: DeleteOrganizationReques
 }
 
 export function fromDeleteOrganizationRequestCborValue(value: CborValue): DeleteOrganizationRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
   };
@@ -845,6 +1060,7 @@ export function toListOrganizationsRequestCborValue(v: ListOrganizationsRequest)
 }
 
 export function fromListOrganizationsRequestCborValue(value: CborValue): ListOrganizationsRequest {
+  asMap(value);
   return {
     mine: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asBool(csilV))(mapGet(value, "mine")),
     query: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "query")),
@@ -868,6 +1084,7 @@ export function toOrganizationListCborValue(v: OrganizationList): CborValue {
 }
 
 export function fromOrganizationListCborValue(value: CborValue): OrganizationList {
+  asMap(value);
   return {
     organizations: asArray(requireKey(value, "organizations")).map((csilE) => fromOrganizationCborValue(csilE)),
     total: asNumber(requireKey(value, "total")),
@@ -891,6 +1108,7 @@ export function toOrganizationMemberListCborValue(v: OrganizationMemberList): Cb
 }
 
 export function fromOrganizationMemberListCborValue(value: CborValue): OrganizationMemberList {
+  asMap(value);
   return {
     organizationId: asString(requireKey(value, "organization_id")),
     members: asArray(requireKey(value, "members")).map((csilE) => fromOrganizationMemberCborValue(csilE)),
@@ -914,6 +1132,7 @@ export function toListOrganizationMembersRequestCborValue(v: ListOrganizationMem
 }
 
 export function fromListOrganizationMembersRequestCborValue(value: CborValue): ListOrganizationMembersRequest {
+  asMap(value);
   return {
     organizationId: asString(requireKey(value, "organization_id")),
     page: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromPageCborValue(csilV))(mapGet(value, "page")),
@@ -937,6 +1156,7 @@ export function toSetOrganizationMemberRequestCborValue(v: SetOrganizationMember
 }
 
 export function fromSetOrganizationMemberRequestCborValue(value: CborValue): SetOrganizationMemberRequest {
+  asMap(value);
   return {
     organizationId: asString(requireKey(value, "organization_id")),
     userId: asString(requireKey(value, "user_id")),
@@ -960,6 +1180,7 @@ export function toRemoveOrganizationMemberRequestCborValue(v: RemoveOrganization
 }
 
 export function fromRemoveOrganizationMemberRequestCborValue(value: CborValue): RemoveOrganizationMemberRequest {
+  asMap(value);
   return {
     organizationId: asString(requireKey(value, "organization_id")),
     userId: asString(requireKey(value, "user_id")),
@@ -985,6 +1206,7 @@ export function toOwnerRefCborValue(v: OwnerRef): CborValue {
 }
 
 export function fromOwnerRefCborValue(value: CborValue): OwnerRef {
+  asMap(value);
   return {
     kind: (asEnumMember(asString(requireKey(value, "kind")), ["user", "organization"]) as "user" | "organization"),
     id: asString(requireKey(value, "id")),
@@ -1010,6 +1232,7 @@ export function toOwnerRefInputCborValue(v: OwnerRefInput): CborValue {
 }
 
 export function fromOwnerRefInputCborValue(value: CborValue): OwnerRefInput {
+  asMap(value);
   return {
     kind: (asEnumMember(asString(requireKey(value, "kind")), ["user", "organization"]) as "user" | "organization"),
     id: asString(requireKey(value, "id")),
@@ -1046,6 +1269,7 @@ export function toGatheringCborValue(v: Gathering): CborValue {
 }
 
 export function fromGatheringCborValue(value: CborValue): Gathering {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     slug: asString(requireKey(value, "slug")),
@@ -1085,6 +1309,7 @@ export function toGatheringMemberCborValue(v: GatheringMember): CborValue {
 }
 
 export function fromGatheringMemberCborValue(value: CborValue): GatheringMember {
+  asMap(value);
   return {
     userId: asString(requireKey(value, "user_id")),
     handle: asString(requireKey(value, "handle")),
@@ -1112,6 +1337,7 @@ export function toCreateGatheringRequestCborValue(v: CreateGatheringRequest): Cb
 }
 
 export function fromCreateGatheringRequestCborValue(value: CborValue): CreateGatheringRequest {
+  asMap(value);
   return {
     name: asString(requireKey(value, "name")),
     blurb: asString(requireKey(value, "blurb")),
@@ -1139,6 +1365,7 @@ export function toUpdateGatheringRequestCborValue(v: UpdateGatheringRequest): Cb
 }
 
 export function fromUpdateGatheringRequestCborValue(value: CborValue): UpdateGatheringRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     name: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "name")),
@@ -1163,6 +1390,7 @@ export function toGetGatheringRequestCborValue(v: GetGatheringRequest): CborValu
 }
 
 export function fromGetGatheringRequestCborValue(value: CborValue): GetGatheringRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
   };
@@ -1183,6 +1411,7 @@ export function toDeleteGatheringRequestCborValue(v: DeleteGatheringRequest): Cb
 }
 
 export function fromDeleteGatheringRequestCborValue(value: CborValue): DeleteGatheringRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
   };
@@ -1205,6 +1434,7 @@ export function toListGatheringsRequestCborValue(v: ListGatheringsRequest): Cbor
 }
 
 export function fromListGatheringsRequestCborValue(value: CborValue): ListGatheringsRequest {
+  asMap(value);
   return {
     mine: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asBool(csilV))(mapGet(value, "mine")),
     ownedByOrganization: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "owned_by_organization")),
@@ -1228,6 +1458,7 @@ export function toGatheringListCborValue(v: GatheringList): CborValue {
 }
 
 export function fromGatheringListCborValue(value: CborValue): GatheringList {
+  asMap(value);
   return {
     gatherings: asArray(requireKey(value, "gatherings")).map((csilE) => fromGatheringCborValue(csilE)),
     total: asNumber(requireKey(value, "total")),
@@ -1250,6 +1481,7 @@ export function toListGatheringMembersRequestCborValue(v: ListGatheringMembersRe
 }
 
 export function fromListGatheringMembersRequestCborValue(value: CborValue): ListGatheringMembersRequest {
+  asMap(value);
   return {
     gatheringId: asString(requireKey(value, "gathering_id")),
     page: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromPageCborValue(csilV))(mapGet(value, "page")),
@@ -1273,6 +1505,7 @@ export function toGatheringMemberListCborValue(v: GatheringMemberList): CborValu
 }
 
 export function fromGatheringMemberListCborValue(value: CborValue): GatheringMemberList {
+  asMap(value);
   return {
     gatheringId: asString(requireKey(value, "gathering_id")),
     members: asArray(requireKey(value, "members")).map((csilE) => fromGatheringMemberCborValue(csilE)),
@@ -1295,6 +1528,7 @@ export function toJoinGatheringRequestCborValue(v: JoinGatheringRequest): CborVa
 }
 
 export function fromJoinGatheringRequestCborValue(value: CborValue): JoinGatheringRequest {
+  asMap(value);
   return {
     gatheringId: asString(requireKey(value, "gathering_id")),
   };
@@ -1315,6 +1549,7 @@ export function toLeaveGatheringRequestCborValue(v: LeaveGatheringRequest): Cbor
 }
 
 export function fromLeaveGatheringRequestCborValue(value: CborValue): LeaveGatheringRequest {
+  asMap(value);
   return {
     gatheringId: asString(requireKey(value, "gathering_id")),
   };
@@ -1336,6 +1571,7 @@ export function toAddGatheringOwnerRequestCborValue(v: AddGatheringOwnerRequest)
 }
 
 export function fromAddGatheringOwnerRequestCborValue(value: CborValue): AddGatheringOwnerRequest {
+  asMap(value);
   return {
     gatheringId: asString(requireKey(value, "gathering_id")),
     owner: fromOwnerRefInputCborValue(requireKey(value, "owner")),
@@ -1358,6 +1594,7 @@ export function toRemoveGatheringOwnerRequestCborValue(v: RemoveGatheringOwnerRe
 }
 
 export function fromRemoveGatheringOwnerRequestCborValue(value: CborValue): RemoveGatheringOwnerRequest {
+  asMap(value);
   return {
     gatheringId: asString(requireKey(value, "gathering_id")),
     owner: fromOwnerRefInputCborValue(requireKey(value, "owner")),
@@ -1389,6 +1626,7 @@ export function toGatheringOfferCborValue(v: GatheringOffer): CborValue {
 }
 
 export function fromGatheringOfferCborValue(value: CborValue): GatheringOffer {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     gatheringId: asString(requireKey(value, "gathering_id")),
@@ -1421,6 +1659,7 @@ export function toOfferGatheringRequestCborValue(v: OfferGatheringRequest): Cbor
 }
 
 export function fromOfferGatheringRequestCborValue(value: CborValue): OfferGatheringRequest {
+  asMap(value);
   return {
     gatheringId: asString(requireKey(value, "gathering_id")),
     organizationId: asString(requireKey(value, "organization_id")),
@@ -1445,6 +1684,7 @@ export function toListGatheringOffersRequestCborValue(v: ListGatheringOffersRequ
 }
 
 export function fromListGatheringOffersRequestCborValue(value: CborValue): ListGatheringOffersRequest {
+  asMap(value);
   return {
     organizationId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "organization_id")),
     gatheringId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "gathering_id")),
@@ -1468,6 +1708,7 @@ export function toGatheringOfferListCborValue(v: GatheringOfferList): CborValue 
 }
 
 export function fromGatheringOfferListCborValue(value: CborValue): GatheringOfferList {
+  asMap(value);
   return {
     offers: asArray(requireKey(value, "offers")).map((csilE) => fromGatheringOfferCborValue(csilE)),
     total: asNumber(requireKey(value, "total")),
@@ -1490,6 +1731,7 @@ export function toRespondToGatheringOfferRequestCborValue(v: RespondToGatheringO
 }
 
 export function fromRespondToGatheringOfferRequestCborValue(value: CborValue): RespondToGatheringOfferRequest {
+  asMap(value);
   return {
     offerId: asString(requireKey(value, "offer_id")),
     accept: asBool(requireKey(value, "accept")),
@@ -1511,6 +1753,7 @@ export function toWithdrawGatheringOfferRequestCborValue(v: WithdrawGatheringOff
 }
 
 export function fromWithdrawGatheringOfferRequestCborValue(value: CborValue): WithdrawGatheringOfferRequest {
+  asMap(value);
   return {
     offerId: asString(requireKey(value, "offer_id")),
   };
@@ -1532,6 +1775,7 @@ export function toAdoptGatheringRequestCborValue(v: AdoptGatheringRequest): Cbor
 }
 
 export function fromAdoptGatheringRequestCborValue(value: CborValue): AdoptGatheringRequest {
+  asMap(value);
   return {
     gatheringId: asString(requireKey(value, "gathering_id")),
     organizationId: asString(requireKey(value, "organization_id")),
@@ -1557,6 +1801,7 @@ export function toRecurrenceRuleCborValue(v: RecurrenceRule): CborValue {
 }
 
 export function fromRecurrenceRuleCborValue(value: CborValue): RecurrenceRule {
+  asMap(value);
   return {
     freq: (asEnumMember(asString(requireKey(value, "freq")), ["weekly", "monthly", "quarterly", "yearly"]) as "weekly" | "monthly" | "quarterly" | "yearly"),
     interval: asNumber(requireKey(value, "interval")),
@@ -1588,6 +1833,7 @@ export function toLocationCborValue(v: Location): CborValue {
 }
 
 export function fromLocationCborValue(value: CborValue): Location {
+  asMap(value);
   return {
     name: asString(requireKey(value, "name")),
     address: asString(requireKey(value, "address")),
@@ -1633,6 +1879,7 @@ export function toEventCborValue(v: Event): CborValue {
 }
 
 export function fromEventCborValue(value: CborValue): Event {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     gatheringId: asString(requireKey(value, "gathering_id")),
@@ -1670,11 +1917,11 @@ export function toEventSeriesCborValue(v: EventSeries): CborValue {
   csilMap.set("title", v.title);
   csilMap.set("origin", toOriginCborValue(v.origin));
   csilMap.set("viewer", toViewerContextCborValue(v.viewer));
-  if (v.endsOn !== undefined) csilMap.set("ends_on", { tag: 0, value: csilTsToText(v.endsOn) });
+  if (v.endsOn !== undefined) csilMap.set("ends_on", encodeDate(v.endsOn));
   if (v.location !== undefined) csilMap.set("location", toLocationCborValue(v.location));
   csilMap.set("timezone", v.timezone);
   csilMap.set("is_online", v.isOnline);
-  csilMap.set("starts_on", { tag: 0, value: csilTsToText(v.startsOn) });
+  csilMap.set("starts_on", encodeDate(v.startsOn));
   csilMap.set("created_at", { tag: 0, value: csilTsToText(v.createdAt) });
   if (v.onlineUrl !== undefined) csilMap.set("online_url", v.onlineUrl);
   csilMap.set("recurrence", toRecurrenceRuleCborValue(v.recurrence));
@@ -1690,6 +1937,7 @@ export function toEventSeriesCborValue(v: EventSeries): CborValue {
 }
 
 export function fromEventSeriesCborValue(value: CborValue): EventSeries {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     gatheringId: asString(requireKey(value, "gathering_id")),
@@ -1700,8 +1948,8 @@ export function fromEventSeriesCborValue(value: CborValue): EventSeries {
     onlineUrl: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "online_url")),
     location: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromLocationCborValue(csilV))(mapGet(value, "location")),
     recurrence: fromRecurrenceRuleCborValue(requireKey(value, "recurrence")),
-    startsOn: asTimestamp(requireKey(value, "starts_on")),
-    endsOn: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asTimestamp(csilV))(mapGet(value, "ends_on")),
+    startsOn: decodeDate(requireKey(value, "starts_on")),
+    endsOn: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : decodeDate(csilV))(mapGet(value, "ends_on")),
     startTime: asString(requireKey(value, "start_time")),
     durationMinutes: asNumber(requireKey(value, "duration_minutes")),
     timezone: asString(requireKey(value, "timezone")),
@@ -1736,6 +1984,7 @@ export function toEventRoleAssignmentCborValue(v: EventRoleAssignment): CborValu
 }
 
 export function fromEventRoleAssignmentCborValue(value: CborValue): EventRoleAssignment {
+  asMap(value);
   return {
     eventId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "event_id")),
     seriesId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "series_id")),
@@ -1767,6 +2016,7 @@ export function toAttendeeCborValue(v: Attendee): CborValue {
 }
 
 export function fromAttendeeCborValue(value: CborValue): Attendee {
+  asMap(value);
   return {
     userId: asString(requireKey(value, "user_id")),
     handle: asString(requireKey(value, "handle")),
@@ -1800,6 +2050,7 @@ export function toCreateEventRequestCborValue(v: CreateEventRequest): CborValue 
 }
 
 export function fromCreateEventRequestCborValue(value: CborValue): CreateEventRequest {
+  asMap(value);
   return {
     gatheringId: asString(requireKey(value, "gathering_id")),
     title: asString(requireKey(value, "title")),
@@ -1838,6 +2089,7 @@ export function toUpdateEventRequestCborValue(v: UpdateEventRequest): CborValue 
 }
 
 export function fromUpdateEventRequestCborValue(value: CborValue): UpdateEventRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     title: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "title")),
@@ -1867,6 +2119,7 @@ export function toGetEventRequestCborValue(v: GetEventRequest): CborValue {
 }
 
 export function fromGetEventRequestCborValue(value: CborValue): GetEventRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
   };
@@ -1887,6 +2140,7 @@ export function toDeleteEventRequestCborValue(v: DeleteEventRequest): CborValue 
 }
 
 export function fromDeleteEventRequestCborValue(value: CborValue): DeleteEventRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
   };
@@ -1914,6 +2168,7 @@ export function toListEventsRequestCborValue(v: ListEventsRequest): CborValue {
 }
 
 export function fromListEventsRequestCborValue(value: CborValue): ListEventsRequest {
+  asMap(value);
   return {
     gatheringId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "gathering_id")),
     ownedByOrganization: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "owned_by_organization")),
@@ -1942,6 +2197,7 @@ export function toEventListCborValue(v: EventList): CborValue {
 }
 
 export function fromEventListCborValue(value: CborValue): EventList {
+  asMap(value);
   return {
     events: asArray(requireKey(value, "events")).map((csilE) => fromEventCborValue(csilE)),
     total: asNumber(requireKey(value, "total")),
@@ -1959,11 +2215,11 @@ export function fromEventListCbor(bytes: Uint8Array): EventList {
 export function toCreateEventSeriesRequestCborValue(v: CreateEventSeriesRequest): CborValue {
   const csilMap = new Map<CborValue, CborValue>();
   csilMap.set("title", v.title);
-  if (v.endsOn !== undefined) csilMap.set("ends_on", { tag: 0, value: csilTsToText(v.endsOn) });
+  if (v.endsOn !== undefined) csilMap.set("ends_on", encodeDate(v.endsOn));
   if (v.location !== undefined) csilMap.set("location", toLocationCborValue(v.location));
   csilMap.set("timezone", v.timezone);
   csilMap.set("is_online", v.isOnline);
-  csilMap.set("starts_on", { tag: 0, value: csilTsToText(v.startsOn) });
+  csilMap.set("starts_on", encodeDate(v.startsOn));
   if (v.onlineUrl !== undefined) csilMap.set("online_url", v.onlineUrl);
   csilMap.set("recurrence", toRecurrenceRuleCborValue(v.recurrence));
   csilMap.set("start_time", v.startTime);
@@ -1975,6 +2231,7 @@ export function toCreateEventSeriesRequestCborValue(v: CreateEventSeriesRequest)
 }
 
 export function fromCreateEventSeriesRequestCborValue(value: CborValue): CreateEventSeriesRequest {
+  asMap(value);
   return {
     gatheringId: asString(requireKey(value, "gathering_id")),
     title: asString(requireKey(value, "title")),
@@ -1984,8 +2241,8 @@ export function fromCreateEventSeriesRequestCborValue(value: CborValue): CreateE
     onlineUrl: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "online_url")),
     location: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromLocationCborValue(csilV))(mapGet(value, "location")),
     recurrence: fromRecurrenceRuleCborValue(requireKey(value, "recurrence")),
-    startsOn: asTimestamp(requireKey(value, "starts_on")),
-    endsOn: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asTimestamp(csilV))(mapGet(value, "ends_on")),
+    startsOn: decodeDate(requireKey(value, "starts_on")),
+    endsOn: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : decodeDate(csilV))(mapGet(value, "ends_on")),
     startTime: asString(requireKey(value, "start_time")),
     durationMinutes: asNumber(requireKey(value, "duration_minutes")),
     timezone: asString(requireKey(value, "timezone")),
@@ -2004,11 +2261,11 @@ export function toUpdateEventSeriesRequestCborValue(v: UpdateEventSeriesRequest)
   const csilMap = new Map<CborValue, CborValue>();
   csilMap.set("id", v.id);
   if (v.title !== undefined) csilMap.set("title", v.title);
-  if (v.endsOn !== undefined) csilMap.set("ends_on", { tag: 0, value: csilTsToText(v.endsOn) });
+  if (v.endsOn !== undefined) csilMap.set("ends_on", encodeDate(v.endsOn));
   if (v.location !== undefined) csilMap.set("location", toLocationCborValue(v.location));
   if (v.timezone !== undefined) csilMap.set("timezone", v.timezone);
   if (v.isOnline !== undefined) csilMap.set("is_online", v.isOnline);
-  if (v.startsOn !== undefined) csilMap.set("starts_on", { tag: 0, value: csilTsToText(v.startsOn) });
+  if (v.startsOn !== undefined) csilMap.set("starts_on", encodeDate(v.startsOn));
   if (v.onlineUrl !== undefined) csilMap.set("online_url", v.onlineUrl);
   if (v.recurrence !== undefined) csilMap.set("recurrence", toRecurrenceRuleCborValue(v.recurrence));
   if (v.startTime !== undefined) csilMap.set("start_time", v.startTime);
@@ -2019,6 +2276,7 @@ export function toUpdateEventSeriesRequestCborValue(v: UpdateEventSeriesRequest)
 }
 
 export function fromUpdateEventSeriesRequestCborValue(value: CborValue): UpdateEventSeriesRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     title: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "title")),
@@ -2028,8 +2286,8 @@ export function fromUpdateEventSeriesRequestCborValue(value: CborValue): UpdateE
     onlineUrl: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "online_url")),
     location: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromLocationCborValue(csilV))(mapGet(value, "location")),
     recurrence: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromRecurrenceRuleCborValue(csilV))(mapGet(value, "recurrence")),
-    startsOn: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asTimestamp(csilV))(mapGet(value, "starts_on")),
-    endsOn: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asTimestamp(csilV))(mapGet(value, "ends_on")),
+    startsOn: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : decodeDate(csilV))(mapGet(value, "starts_on")),
+    endsOn: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : decodeDate(csilV))(mapGet(value, "ends_on")),
     startTime: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "start_time")),
     durationMinutes: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asNumber(csilV))(mapGet(value, "duration_minutes")),
     timezone: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "timezone")),
@@ -2051,6 +2309,7 @@ export function toGetEventSeriesRequestCborValue(v: GetEventSeriesRequest): Cbor
 }
 
 export function fromGetEventSeriesRequestCborValue(value: CborValue): GetEventSeriesRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
   };
@@ -2071,6 +2330,7 @@ export function toDeleteEventSeriesRequestCborValue(v: DeleteEventSeriesRequest)
 }
 
 export function fromDeleteEventSeriesRequestCborValue(value: CborValue): DeleteEventSeriesRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
   };
@@ -2092,6 +2352,7 @@ export function toListEventSeriesRequestCborValue(v: ListEventSeriesRequest): Cb
 }
 
 export function fromListEventSeriesRequestCborValue(value: CborValue): ListEventSeriesRequest {
+  asMap(value);
   return {
     gatheringId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "gathering_id")),
     page: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromPageCborValue(csilV))(mapGet(value, "page")),
@@ -2114,6 +2375,7 @@ export function toEventSeriesListCborValue(v: EventSeriesList): CborValue {
 }
 
 export function fromEventSeriesListCborValue(value: CborValue): EventSeriesList {
+  asMap(value);
   return {
     series: asArray(requireKey(value, "series")).map((csilE) => fromEventSeriesCborValue(csilE)),
     total: asNumber(requireKey(value, "total")),
@@ -2136,6 +2398,7 @@ export function toExpandEventSeriesRequestCborValue(v: ExpandEventSeriesRequest)
 }
 
 export function fromExpandEventSeriesRequestCborValue(value: CborValue): ExpandEventSeriesRequest {
+  asMap(value);
   return {
     seriesId: asString(requireKey(value, "series_id")),
     through: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asTimestamp(csilV))(mapGet(value, "through")),
@@ -2157,6 +2420,7 @@ export function toAttendEventRequestCborValue(v: AttendEventRequest): CborValue 
 }
 
 export function fromAttendEventRequestCborValue(value: CborValue): AttendEventRequest {
+  asMap(value);
   return {
     eventId: asString(requireKey(value, "event_id")),
   };
@@ -2177,6 +2441,7 @@ export function toUnattendEventRequestCborValue(v: UnattendEventRequest): CborVa
 }
 
 export function fromUnattendEventRequestCborValue(value: CborValue): UnattendEventRequest {
+  asMap(value);
   return {
     eventId: asString(requireKey(value, "event_id")),
   };
@@ -2198,6 +2463,7 @@ export function toListAttendeesRequestCborValue(v: ListAttendeesRequest): CborVa
 }
 
 export function fromListAttendeesRequestCborValue(value: CborValue): ListAttendeesRequest {
+  asMap(value);
   return {
     eventId: asString(requireKey(value, "event_id")),
     page: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromPageCborValue(csilV))(mapGet(value, "page")),
@@ -2221,6 +2487,7 @@ export function toAttendeeListCborValue(v: AttendeeList): CborValue {
 }
 
 export function fromAttendeeListCborValue(value: CborValue): AttendeeList {
+  asMap(value);
   return {
     eventId: asString(requireKey(value, "event_id")),
     attendees: asArray(requireKey(value, "attendees")).map((csilE) => fromAttendeeCborValue(csilE)),
@@ -2246,6 +2513,7 @@ export function toSetEventRoleRequestCborValue(v: SetEventRoleRequest): CborValu
 }
 
 export function fromSetEventRoleRequestCborValue(value: CborValue): SetEventRoleRequest {
+  asMap(value);
   return {
     eventId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "event_id")),
     seriesId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "series_id")),
@@ -2272,6 +2540,7 @@ export function toRemoveEventRoleRequestCborValue(v: RemoveEventRoleRequest): Cb
 }
 
 export function fromRemoveEventRoleRequestCborValue(value: CborValue): RemoveEventRoleRequest {
+  asMap(value);
   return {
     eventId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "event_id")),
     seriesId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "series_id")),
@@ -2296,6 +2565,7 @@ export function toListEventRolesRequestCborValue(v: ListEventRolesRequest): Cbor
 }
 
 export function fromListEventRolesRequestCborValue(value: CborValue): ListEventRolesRequest {
+  asMap(value);
   return {
     eventId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "event_id")),
     seriesId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "series_id")),
@@ -2317,6 +2587,7 @@ export function toEventRoleListCborValue(v: EventRoleList): CborValue {
 }
 
 export function fromEventRoleListCborValue(value: CborValue): EventRoleList {
+  asMap(value);
   return {
     roles: asArray(requireKey(value, "roles")).map((csilE) => fromEventRoleAssignmentCborValue(csilE)),
   };
@@ -2339,6 +2610,7 @@ export function toGeoCircleCborValue(v: GeoCircle): CborValue {
 }
 
 export function fromGeoCircleCborValue(value: CborValue): GeoCircle {
+  asMap(value);
   return {
     latitude: asNumber(requireKey(value, "latitude")),
     longitude: asNumber(requireKey(value, "longitude")),
@@ -2364,6 +2636,7 @@ export function toLocationFilterCborValue(v: LocationFilter): CborValue {
 }
 
 export function fromLocationFilterCborValue(value: CborValue): LocationFilter {
+  asMap(value);
   return {
     locality: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "locality")),
     region: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "region")),
@@ -2395,6 +2668,7 @@ export function toSearchRequestCborValue(v: SearchRequest): CborValue {
 }
 
 export function fromSearchRequestCborValue(value: CborValue): SearchRequest {
+  asMap(value);
   return {
     query: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "query")),
     kinds: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asArray(csilV).map((csilE) => (asEnumMember(asString(csilE), ["organization", "gathering", "event", "series", "remote-event"]) as "organization" | "gathering" | "event" | "series" | "remote-event")))(mapGet(value, "kinds")),
@@ -2432,6 +2706,7 @@ export function toSearchResultsCborValue(v: SearchResults): CborValue {
 }
 
 export function fromSearchResultsCborValue(value: CborValue): SearchResults {
+  asMap(value);
   return {
     organizations: asArray(requireKey(value, "organizations")).map((csilE) => fromOrganizationCborValue(csilE)),
     gatherings: asArray(requireKey(value, "gatherings")).map((csilE) => fromGatheringCborValue(csilE)),
@@ -2465,6 +2740,7 @@ export function toAdminUserCborValue(v: AdminUser): CborValue {
 }
 
 export function fromAdminUserCborValue(value: CborValue): AdminUser {
+  asMap(value);
   return {
     userId: asString(requireKey(value, "user_id")),
     handle: asString(requireKey(value, "handle")),
@@ -2489,6 +2765,7 @@ export function toAdminListCborValue(v: AdminList): CborValue {
 }
 
 export function fromAdminListCborValue(value: CborValue): AdminList {
+  asMap(value);
   return {
     admins: asArray(requireKey(value, "admins")).map((csilE) => fromAdminUserCborValue(csilE)),
   };
@@ -2510,6 +2787,7 @@ export function toSetAdminRequestCborValue(v: SetAdminRequest): CborValue {
 }
 
 export function fromSetAdminRequestCborValue(value: CborValue): SetAdminRequest {
+  asMap(value);
   return {
     userId: asString(requireKey(value, "user_id")),
     granted: asBool(requireKey(value, "granted")),
@@ -2532,6 +2810,7 @@ export function toFindUserRequestCborValue(v: FindUserRequest): CborValue {
 }
 
 export function fromFindUserRequestCborValue(value: CborValue): FindUserRequest {
+  asMap(value);
   return {
     handle: asString(requireKey(value, "handle")),
     domain: asString(requireKey(value, "domain")),
@@ -2557,6 +2836,7 @@ export function toUserRefCborValue(v: UserRef): CborValue {
 }
 
 export function fromUserRefCborValue(value: CborValue): UserRef {
+  asMap(value);
   return {
     userId: asString(requireKey(value, "user_id")),
     handle: asString(requireKey(value, "handle")),
@@ -2581,6 +2861,7 @@ export function toUserRefListCborValue(v: UserRefList): CborValue {
 }
 
 export function fromUserRefListCborValue(value: CborValue): UserRefList {
+  asMap(value);
   return {
     users: asArray(requireKey(value, "users")).map((csilE) => fromUserRefCborValue(csilE)),
   };
@@ -2602,6 +2883,7 @@ export function toSearchUsersRequestCborValue(v: SearchUsersRequest): CborValue 
 }
 
 export function fromSearchUsersRequestCborValue(value: CborValue): SearchUsersRequest {
+  asMap(value);
   return {
     query: asString(requireKey(value, "query")),
     page: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromPageCborValue(csilV))(mapGet(value, "page")),
@@ -2628,6 +2910,7 @@ export function toInstanceSettingsCborValue(v: InstanceSettings): CborValue {
 }
 
 export function fromInstanceSettingsCborValue(value: CborValue): InstanceSettings {
+  asMap(value);
   return {
     publishDefault: (asEnumMember(asString(requireKey(value, "publish_default")), ["unset", "in", "out"]) as "unset" | "in" | "out"),
     organizationOverrideAllowed: asBool(requireKey(value, "organization_override_allowed")),
@@ -2658,6 +2941,7 @@ export function toUpdateInstanceSettingsRequestCborValue(v: UpdateInstanceSettin
 }
 
 export function fromUpdateInstanceSettingsRequestCborValue(value: CborValue): UpdateInstanceSettingsRequest {
+  asMap(value);
   return {
     publishDefault: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : (asEnumMember(asString(csilV), ["unset", "in", "out"]) as "unset" | "in" | "out"))(mapGet(value, "publish_default")),
     organizationOverrideAllowed: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asBool(csilV))(mapGet(value, "organization_override_allowed")),
@@ -2705,6 +2989,7 @@ export function toPeerCborValue(v: Peer): CborValue {
 }
 
 export function fromPeerCborValue(value: CborValue): Peer {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     address: asString(requireKey(value, "address")),
@@ -2748,6 +3033,7 @@ export function toPeerListCborValue(v: PeerList): CborValue {
 }
 
 export function fromPeerListCborValue(value: CborValue): PeerList {
+  asMap(value);
   return {
     peers: asArray(requireKey(value, "peers")).map((csilE) => fromPeerCborValue(csilE)),
     total: asNumber(requireKey(value, "total")),
@@ -2769,6 +3055,7 @@ export function toListPeersRequestCborValue(v: ListPeersRequest): CborValue {
 }
 
 export function fromListPeersRequestCborValue(value: CborValue): ListPeersRequest {
+  asMap(value);
   return {
     page: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromPageCborValue(csilV))(mapGet(value, "page")),
   };
@@ -2791,6 +3078,7 @@ export function toAddPeerRequestCborValue(v: AddPeerRequest): CborValue {
 }
 
 export function fromAddPeerRequestCborValue(value: CborValue): AddPeerRequest {
+  asMap(value);
   return {
     address: asString(requireKey(value, "address")),
     baseUrl: asString(requireKey(value, "base_url")),
@@ -2819,6 +3107,7 @@ export function toSetPeerStatusRequestCborValue(v: SetPeerStatusRequest): CborVa
 }
 
 export function fromSetPeerStatusRequestCborValue(value: CborValue): SetPeerStatusRequest {
+  asMap(value);
   return {
     peerId: asString(requireKey(value, "peer_id")),
     inboundStatus: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : (asEnumMember(asString(csilV), ["none", "pending", "approved", "blocked"]) as "none" | "pending" | "approved" | "blocked"))(mapGet(value, "inbound_status")),
@@ -2845,6 +3134,7 @@ export function toResumePeerRequestCborValue(v: ResumePeerRequest): CborValue {
 }
 
 export function fromResumePeerRequestCborValue(value: CborValue): ResumePeerRequest {
+  asMap(value);
   return {
     peerId: asString(requireKey(value, "peer_id")),
   };
@@ -2866,6 +3156,7 @@ export function toSetPeerRateLimitRequestCborValue(v: SetPeerRateLimitRequest): 
 }
 
 export function fromSetPeerRateLimitRequestCborValue(value: CborValue): SetPeerRateLimitRequest {
+  asMap(value);
   return {
     peerId: asString(requireKey(value, "peer_id")),
     rateLimitPerMinute: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asNumber(csilV))(mapGet(value, "rate_limit_per_minute")),
@@ -2887,6 +3178,7 @@ export function toRemovePeerRequestCborValue(v: RemovePeerRequest): CborValue {
 }
 
 export function fromRemovePeerRequestCborValue(value: CborValue): RemovePeerRequest {
+  asMap(value);
   return {
     peerId: asString(requireKey(value, "peer_id")),
   };
@@ -2918,6 +3210,7 @@ export function toFederatedEventCborValue(v: FederatedEvent): CborValue {
 }
 
 export function fromFederatedEventCborValue(value: CborValue): FederatedEvent {
+  asMap(value);
   return {
     remoteId: asString(requireKey(value, "remote_id")),
     canonicalUrl: asString(requireKey(value, "canonical_url")),
@@ -2952,6 +3245,7 @@ export function toEventBatchCborValue(v: EventBatch): CborValue {
 }
 
 export function fromEventBatchCborValue(value: CborValue): EventBatch {
+  asMap(value);
   return {
     originDomain: asString(requireKey(value, "origin_domain")),
     batchId: asString(requireKey(value, "batch_id")),
@@ -2979,6 +3273,7 @@ export function toSignedDeliveryCborValue(v: SignedDelivery): CborValue {
 }
 
 export function fromSignedDeliveryCborValue(value: CborValue): SignedDelivery {
+  asMap(value);
   return {
     senderAddress: asString(requireKey(value, "sender_address")),
     algorithm: asString(requireKey(value, "algorithm")),
@@ -3006,6 +3301,7 @@ export function toDeliveryReceiptCborValue(v: DeliveryReceipt): CborValue {
 }
 
 export function fromDeliveryReceiptCborValue(value: CborValue): DeliveryReceipt {
+  asMap(value);
   return {
     accepted: asNumber(requireKey(value, "accepted")),
     rejected: asNumber(requireKey(value, "rejected")),
@@ -3031,6 +3327,7 @@ export function toPeeringBodyCborValue(v: PeeringBody): CborValue {
 }
 
 export function fromPeeringBodyCborValue(value: CborValue): PeeringBody {
+  asMap(value);
   return {
     baseUrl: asString(requireKey(value, "base_url")),
     note: asString(requireKey(value, "note")),
@@ -3061,6 +3358,7 @@ export function toSignedPeeringRequestCborValue(v: SignedPeeringRequest): CborVa
 }
 
 export function fromSignedPeeringRequestCborValue(value: CborValue): SignedPeeringRequest {
+  asMap(value);
   return {
     senderAddress: asString(requireKey(value, "sender_address")),
     algorithm: asString(requireKey(value, "algorithm")),
@@ -3089,6 +3387,7 @@ export function toPeeringReceiptCborValue(v: PeeringReceipt): CborValue {
 }
 
 export function fromPeeringReceiptCborValue(value: CborValue): PeeringReceipt {
+  asMap(value);
   return {
     status: (asEnumMember(asString(requireKey(value, "status")), ["none", "pending", "approved", "blocked"]) as "none" | "pending" | "approved" | "blocked"),
   };
@@ -3124,6 +3423,7 @@ export function toRemoteEventCborValue(v: RemoteEvent): CborValue {
 }
 
 export function fromRemoteEventCborValue(value: CborValue): RemoteEvent {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     peerAddress: asString(requireKey(value, "peer_address")),
@@ -3160,6 +3460,7 @@ export function toRemoteEventListCborValue(v: RemoteEventList): CborValue {
 }
 
 export function fromRemoteEventListCborValue(value: CborValue): RemoteEventList {
+  asMap(value);
   return {
     events: asArray(requireKey(value, "events")).map((csilE) => fromRemoteEventCborValue(csilE)),
     total: asNumber(requireKey(value, "total")),
@@ -3184,6 +3485,7 @@ export function toListRemoteEventsRequestCborValue(v: ListRemoteEventsRequest): 
 }
 
 export function fromListRemoteEventsRequestCborValue(value: CborValue): ListRemoteEventsRequest {
+  asMap(value);
   return {
     query: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "query")),
     startsAfter: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asTimestamp(csilV))(mapGet(value, "starts_after")),
@@ -3213,6 +3515,7 @@ export function toFederationIdentityCborValue(v: FederationIdentity): CborValue 
 }
 
 export function fromFederationIdentityCborValue(value: CborValue): FederationIdentity {
+  asMap(value);
   return {
     address: asString(requireKey(value, "address")),
     enabled: asBool(requireKey(value, "enabled")),
@@ -3251,6 +3554,7 @@ export function toOriginVolumeCborValue(v: OriginVolume): CborValue {
 }
 
 export function fromOriginVolumeCborValue(value: CborValue): OriginVolume {
+  asMap(value);
   return {
     peerId: asString(requireKey(value, "peer_id")),
     peerAddress: asString(requireKey(value, "peer_address")),
@@ -3285,6 +3589,7 @@ export function toSetOriginRateLimitRequestCborValue(v: SetOriginRateLimitReques
 }
 
 export function fromSetOriginRateLimitRequestCborValue(value: CborValue): SetOriginRateLimitRequest {
+  asMap(value);
   return {
     peerId: asString(requireKey(value, "peer_id")),
     organizationName: asString(requireKey(value, "organization_name")),
@@ -3308,6 +3613,7 @@ export function toOriginVolumeListCborValue(v: OriginVolumeList): CborValue {
 }
 
 export function fromOriginVolumeListCborValue(value: CborValue): OriginVolumeList {
+  asMap(value);
   return {
     origins: asArray(requireKey(value, "origins")).map((csilE) => fromOriginVolumeCborValue(csilE)),
     total: asNumber(requireKey(value, "total")),
@@ -3330,6 +3636,7 @@ export function toListOriginVolumeRequestCborValue(v: ListOriginVolumeRequest): 
 }
 
 export function fromListOriginVolumeRequestCborValue(value: CborValue): ListOriginVolumeRequest {
+  asMap(value);
   return {
     peerId: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "peer_id")),
     page: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : fromPageCborValue(csilV))(mapGet(value, "page")),
@@ -3363,6 +3670,7 @@ export function toWebhookCborValue(v: Webhook): CborValue {
 }
 
 export function fromWebhookCborValue(value: CborValue): Webhook {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     ownerKind: (asEnumMember(asString(requireKey(value, "owner_kind")), ["organization", "gathering"]) as "organization" | "gathering"),
@@ -3396,6 +3704,7 @@ export function toWebhookWithSecretCborValue(v: WebhookWithSecret): CborValue {
 }
 
 export function fromWebhookWithSecretCborValue(value: CborValue): WebhookWithSecret {
+  asMap(value);
   return {
     webhook: fromWebhookCborValue(requireKey(value, "webhook")),
     secret: asString(requireKey(value, "secret")),
@@ -3422,6 +3731,7 @@ export function toCreateWebhookRequestCborValue(v: CreateWebhookRequest): CborVa
 }
 
 export function fromCreateWebhookRequestCborValue(value: CborValue): CreateWebhookRequest {
+  asMap(value);
   return {
     ownerKind: (asEnumMember(asString(requireKey(value, "owner_kind")), ["organization", "gathering"]) as "organization" | "gathering"),
     ownerId: asString(requireKey(value, "owner_id")),
@@ -3452,6 +3762,7 @@ export function toUpdateWebhookRequestCborValue(v: UpdateWebhookRequest): CborVa
 }
 
 export function fromUpdateWebhookRequestCborValue(value: CborValue): UpdateWebhookRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
     url: ((csilV: CborValue | undefined) => csilV === undefined ? undefined : asString(csilV))(mapGet(value, "url")),
@@ -3477,6 +3788,7 @@ export function toDeleteWebhookRequestCborValue(v: DeleteWebhookRequest): CborVa
 }
 
 export function fromDeleteWebhookRequestCborValue(value: CborValue): DeleteWebhookRequest {
+  asMap(value);
   return {
     id: asString(requireKey(value, "id")),
   };
@@ -3498,6 +3810,7 @@ export function toListWebhooksRequestCborValue(v: ListWebhooksRequest): CborValu
 }
 
 export function fromListWebhooksRequestCborValue(value: CborValue): ListWebhooksRequest {
+  asMap(value);
   return {
     ownerKind: (asEnumMember(asString(requireKey(value, "owner_kind")), ["organization", "gathering"]) as "organization" | "gathering"),
     ownerId: asString(requireKey(value, "owner_id")),
@@ -3520,6 +3833,7 @@ export function toWebhookListCborValue(v: WebhookList): CborValue {
 }
 
 export function fromWebhookListCborValue(value: CborValue): WebhookList {
+  asMap(value);
   return {
     webhooks: asArray(requireKey(value, "webhooks")).map((csilE) => fromWebhookCborValue(csilE)),
     limit: asNumber(requireKey(value, "limit")),
@@ -3534,3 +3848,1173 @@ export function fromWebhookListCbor(bytes: Uint8Array): WebhookList {
   return fromWebhookListCborValue(decode(bytes));
 }
 
+export interface RpcReply { variant: string; payload: Uint8Array }
+
+export class ServiceErrorTypeRefusal extends Error {
+  readonly value: ServiceErrorType;
+
+  constructor(value: ServiceErrorType) {
+    super("ServiceError");
+    this.value = value;
+  }
+}
+
+export async function encodeAuthServiceBeginLoginReply(handler: () => Promise<BeginLoginResponse> | BeginLoginResponse): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "BeginLoginResponse", payload: encodeValue(toBeginLoginResponseCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeAuthServiceWhoamiReply(handler: () => Promise<UserProfile> | UserProfile): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "UserProfile", payload: encodeValue(toUserProfileCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeDevAuthServiceDevLoginReply(handler: () => Promise<UserProfile> | UserProfile): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "UserProfile", payload: encodeValue(toUserProfileCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGreetingServiceGetGreetingReply(handler: () => Promise<Greeting> | Greeting): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Greeting", payload: encodeValue(toGreetingCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGreetingServiceCreateGreetingReply(handler: () => Promise<Greeting> | Greeting): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Greeting", payload: encodeValue(toGreetingCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeOrganizationServiceListOrganizationsReply(handler: () => Promise<OrganizationList> | OrganizationList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "OrganizationList", payload: encodeValue(toOrganizationListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeOrganizationServiceGetOrganizationReply(handler: () => Promise<Organization> | Organization): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Organization", payload: encodeValue(toOrganizationCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeOrganizationServiceCreateOrganizationReply(handler: () => Promise<Organization> | Organization): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Organization", payload: encodeValue(toOrganizationCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeOrganizationServiceUpdateOrganizationReply(handler: () => Promise<Organization> | Organization): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Organization", payload: encodeValue(toOrganizationCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeOrganizationServiceDeleteOrganizationReply(handler: () => Promise<Empty> | Empty): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Empty", payload: encodeValue(toEmptyCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeOrganizationServiceListOrganizationMembersReply(handler: () => Promise<OrganizationMemberList> | OrganizationMemberList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "OrganizationMemberList", payload: encodeValue(toOrganizationMemberListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeOrganizationServiceSetOrganizationMemberReply(handler: () => Promise<OrganizationMemberList> | OrganizationMemberList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "OrganizationMemberList", payload: encodeValue(toOrganizationMemberListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeOrganizationServiceRemoveOrganizationMemberReply(handler: () => Promise<OrganizationMemberList> | OrganizationMemberList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "OrganizationMemberList", payload: encodeValue(toOrganizationMemberListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceListGatheringsReply(handler: () => Promise<GatheringList> | GatheringList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "GatheringList", payload: encodeValue(toGatheringListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceGetGatheringReply(handler: () => Promise<Gathering> | Gathering): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Gathering", payload: encodeValue(toGatheringCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceCreateGatheringReply(handler: () => Promise<Gathering> | Gathering): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Gathering", payload: encodeValue(toGatheringCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceUpdateGatheringReply(handler: () => Promise<Gathering> | Gathering): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Gathering", payload: encodeValue(toGatheringCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceDeleteGatheringReply(handler: () => Promise<Empty> | Empty): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Empty", payload: encodeValue(toEmptyCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceListGatheringMembersReply(handler: () => Promise<GatheringMemberList> | GatheringMemberList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "GatheringMemberList", payload: encodeValue(toGatheringMemberListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceJoinGatheringReply(handler: () => Promise<Gathering> | Gathering): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Gathering", payload: encodeValue(toGatheringCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceLeaveGatheringReply(handler: () => Promise<Gathering> | Gathering): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Gathering", payload: encodeValue(toGatheringCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceAddGatheringOwnerReply(handler: () => Promise<Gathering> | Gathering): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Gathering", payload: encodeValue(toGatheringCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceRemoveGatheringOwnerReply(handler: () => Promise<Gathering> | Gathering): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Gathering", payload: encodeValue(toGatheringCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceOfferGatheringReply(handler: () => Promise<GatheringOffer> | GatheringOffer): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "GatheringOffer", payload: encodeValue(toGatheringOfferCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceListGatheringOffersReply(handler: () => Promise<GatheringOfferList> | GatheringOfferList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "GatheringOfferList", payload: encodeValue(toGatheringOfferListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceRespondToGatheringOfferReply(handler: () => Promise<GatheringOffer> | GatheringOffer): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "GatheringOffer", payload: encodeValue(toGatheringOfferCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceWithdrawGatheringOfferReply(handler: () => Promise<Empty> | Empty): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Empty", payload: encodeValue(toEmptyCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeGatheringServiceAdoptGatheringReply(handler: () => Promise<Gathering> | Gathering): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Gathering", payload: encodeValue(toGatheringCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceListEventsReply(handler: () => Promise<EventList> | EventList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "EventList", payload: encodeValue(toEventListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceGetEventReply(handler: () => Promise<Event> | Event): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Event", payload: encodeValue(toEventCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceCreateEventReply(handler: () => Promise<Event> | Event): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Event", payload: encodeValue(toEventCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceUpdateEventReply(handler: () => Promise<Event> | Event): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Event", payload: encodeValue(toEventCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceDeleteEventReply(handler: () => Promise<Empty> | Empty): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Empty", payload: encodeValue(toEmptyCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceAttendEventReply(handler: () => Promise<Event> | Event): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Event", payload: encodeValue(toEventCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceUnattendEventReply(handler: () => Promise<Event> | Event): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Event", payload: encodeValue(toEventCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceListAttendeesReply(handler: () => Promise<AttendeeList> | AttendeeList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "AttendeeList", payload: encodeValue(toAttendeeListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceListEventSeriesReply(handler: () => Promise<EventSeriesList> | EventSeriesList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "EventSeriesList", payload: encodeValue(toEventSeriesListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceGetEventSeriesReply(handler: () => Promise<EventSeries> | EventSeries): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "EventSeries", payload: encodeValue(toEventSeriesCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceCreateEventSeriesReply(handler: () => Promise<EventSeries> | EventSeries): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "EventSeries", payload: encodeValue(toEventSeriesCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceUpdateEventSeriesReply(handler: () => Promise<EventSeries> | EventSeries): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "EventSeries", payload: encodeValue(toEventSeriesCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceDeleteEventSeriesReply(handler: () => Promise<Empty> | Empty): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Empty", payload: encodeValue(toEmptyCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceExpandEventSeriesReply(handler: () => Promise<EventList> | EventList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "EventList", payload: encodeValue(toEventListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceSetEventRoleReply(handler: () => Promise<EventRoleList> | EventRoleList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "EventRoleList", payload: encodeValue(toEventRoleListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceRemoveEventRoleReply(handler: () => Promise<EventRoleList> | EventRoleList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "EventRoleList", payload: encodeValue(toEventRoleListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeEventServiceListEventRolesReply(handler: () => Promise<EventRoleList> | EventRoleList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "EventRoleList", payload: encodeValue(toEventRoleListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeSearchServiceSearchReply(handler: () => Promise<SearchResults> | SearchResults): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "SearchResults", payload: encodeValue(toSearchResultsCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeAdminServiceListAdminsReply(handler: () => Promise<AdminList> | AdminList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "AdminList", payload: encodeValue(toAdminListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeAdminServiceSetAdminReply(handler: () => Promise<AdminList> | AdminList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "AdminList", payload: encodeValue(toAdminListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeAdminServiceFindUserReply(handler: () => Promise<UserRef> | UserRef): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "UserRef", payload: encodeValue(toUserRefCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeAdminServiceSearchUsersReply(handler: () => Promise<UserRefList> | UserRefList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "UserRefList", payload: encodeValue(toUserRefListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeAdminServiceGetInstanceSettingsReply(handler: () => Promise<InstanceSettings> | InstanceSettings): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "InstanceSettings", payload: encodeValue(toInstanceSettingsCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeAdminServiceUpdateInstanceSettingsReply(handler: () => Promise<InstanceSettings> | InstanceSettings): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "InstanceSettings", payload: encodeValue(toInstanceSettingsCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceFederationIdentityReply(handler: () => Promise<FederationIdentity> | FederationIdentity): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "FederationIdentity", payload: encodeValue(toFederationIdentityCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceListPeersReply(handler: () => Promise<PeerList> | PeerList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "PeerList", payload: encodeValue(toPeerListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceAddPeerReply(handler: () => Promise<Peer> | Peer): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Peer", payload: encodeValue(toPeerCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceSetPeerStatusReply(handler: () => Promise<Peer> | Peer): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Peer", payload: encodeValue(toPeerCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceResumePeerReply(handler: () => Promise<Peer> | Peer): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Peer", payload: encodeValue(toPeerCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceRemovePeerReply(handler: () => Promise<Empty> | Empty): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Empty", payload: encodeValue(toEmptyCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceDeliverEventsReply(handler: () => Promise<DeliveryReceipt> | DeliveryReceipt): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "DeliveryReceipt", payload: encodeValue(toDeliveryReceiptCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceRequestPeeringReply(handler: () => Promise<PeeringReceipt> | PeeringReceipt): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "PeeringReceipt", payload: encodeValue(toPeeringReceiptCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceListRemoteEventsReply(handler: () => Promise<RemoteEventList> | RemoteEventList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "RemoteEventList", payload: encodeValue(toRemoteEventListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceSetPeerRateLimitReply(handler: () => Promise<Peer> | Peer): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Peer", payload: encodeValue(toPeerCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceListOriginVolumeReply(handler: () => Promise<OriginVolumeList> | OriginVolumeList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "OriginVolumeList", payload: encodeValue(toOriginVolumeListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeFederationServiceSetOriginRateLimitReply(handler: () => Promise<OriginVolume> | OriginVolume): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "OriginVolume", payload: encodeValue(toOriginVolumeCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeWebhookServiceListWebhooksReply(handler: () => Promise<WebhookList> | WebhookList): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "WebhookList", payload: encodeValue(toWebhookListCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeWebhookServiceCreateWebhookReply(handler: () => Promise<WebhookWithSecret> | WebhookWithSecret): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "WebhookWithSecret", payload: encodeValue(toWebhookWithSecretCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeWebhookServiceUpdateWebhookReply(handler: () => Promise<Webhook> | Webhook): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Webhook", payload: encodeValue(toWebhookCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export async function encodeWebhookServiceDeleteWebhookReply(handler: () => Promise<Empty> | Empty): Promise<RpcReply> {
+  try {
+    const value = await handler();
+    return { variant: "Empty", payload: encodeValue(toEmptyCborValue(value)) };
+  } catch (error) {
+    if (error instanceof ServiceErrorTypeRefusal) return { variant: "ServiceError", payload: encodeValue(toServiceErrorTypeCborValue(error.value)) };
+    throw error;
+  }
+}
+
+export function resolveRpcReply(service: string, op: string, variant: string | null | undefined, payload: Uint8Array): Uint8Array {
+  if (service === "AuthService" && op === "begin-login") {
+    switch (variant) {
+      case "BeginLoginResponse": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "AuthService" && op === "whoami") {
+    switch (variant) {
+      case "UserProfile": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "DevAuthService" && op === "dev-login") {
+    switch (variant) {
+      case "UserProfile": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GreetingService" && op === "get-greeting") {
+    switch (variant) {
+      case "Greeting": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GreetingService" && op === "create-greeting") {
+    switch (variant) {
+      case "Greeting": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "OrganizationService" && op === "list-organizations") {
+    switch (variant) {
+      case "OrganizationList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "OrganizationService" && op === "get-organization") {
+    switch (variant) {
+      case "Organization": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "OrganizationService" && op === "create-organization") {
+    switch (variant) {
+      case "Organization": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "OrganizationService" && op === "update-organization") {
+    switch (variant) {
+      case "Organization": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "OrganizationService" && op === "delete-organization") {
+    switch (variant) {
+      case "Empty": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "OrganizationService" && op === "list-organization-members") {
+    switch (variant) {
+      case "OrganizationMemberList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "OrganizationService" && op === "set-organization-member") {
+    switch (variant) {
+      case "OrganizationMemberList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "OrganizationService" && op === "remove-organization-member") {
+    switch (variant) {
+      case "OrganizationMemberList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "list-gatherings") {
+    switch (variant) {
+      case "GatheringList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "get-gathering") {
+    switch (variant) {
+      case "Gathering": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "create-gathering") {
+    switch (variant) {
+      case "Gathering": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "update-gathering") {
+    switch (variant) {
+      case "Gathering": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "delete-gathering") {
+    switch (variant) {
+      case "Empty": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "list-gathering-members") {
+    switch (variant) {
+      case "GatheringMemberList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "join-gathering") {
+    switch (variant) {
+      case "Gathering": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "leave-gathering") {
+    switch (variant) {
+      case "Gathering": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "add-gathering-owner") {
+    switch (variant) {
+      case "Gathering": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "remove-gathering-owner") {
+    switch (variant) {
+      case "Gathering": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "offer-gathering") {
+    switch (variant) {
+      case "GatheringOffer": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "list-gathering-offers") {
+    switch (variant) {
+      case "GatheringOfferList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "respond-to-gathering-offer") {
+    switch (variant) {
+      case "GatheringOffer": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "withdraw-gathering-offer") {
+    switch (variant) {
+      case "Empty": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "GatheringService" && op === "adopt-gathering") {
+    switch (variant) {
+      case "Gathering": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "list-events") {
+    switch (variant) {
+      case "EventList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "get-event") {
+    switch (variant) {
+      case "Event": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "create-event") {
+    switch (variant) {
+      case "Event": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "update-event") {
+    switch (variant) {
+      case "Event": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "delete-event") {
+    switch (variant) {
+      case "Empty": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "attend-event") {
+    switch (variant) {
+      case "Event": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "unattend-event") {
+    switch (variant) {
+      case "Event": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "list-attendees") {
+    switch (variant) {
+      case "AttendeeList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "list-event-series") {
+    switch (variant) {
+      case "EventSeriesList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "get-event-series") {
+    switch (variant) {
+      case "EventSeries": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "create-event-series") {
+    switch (variant) {
+      case "EventSeries": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "update-event-series") {
+    switch (variant) {
+      case "EventSeries": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "delete-event-series") {
+    switch (variant) {
+      case "Empty": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "expand-event-series") {
+    switch (variant) {
+      case "EventList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "set-event-role") {
+    switch (variant) {
+      case "EventRoleList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "remove-event-role") {
+    switch (variant) {
+      case "EventRoleList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "EventService" && op === "list-event-roles") {
+    switch (variant) {
+      case "EventRoleList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "SearchService" && op === "search") {
+    switch (variant) {
+      case "SearchResults": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "AdminService" && op === "list-admins") {
+    switch (variant) {
+      case "AdminList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "AdminService" && op === "set-admin") {
+    switch (variant) {
+      case "AdminList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "AdminService" && op === "find-user") {
+    switch (variant) {
+      case "UserRef": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "AdminService" && op === "search-users") {
+    switch (variant) {
+      case "UserRefList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "AdminService" && op === "get-instance-settings") {
+    switch (variant) {
+      case "InstanceSettings": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "AdminService" && op === "update-instance-settings") {
+    switch (variant) {
+      case "InstanceSettings": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "federation-identity") {
+    switch (variant) {
+      case "FederationIdentity": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "list-peers") {
+    switch (variant) {
+      case "PeerList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "add-peer") {
+    switch (variant) {
+      case "Peer": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "set-peer-status") {
+    switch (variant) {
+      case "Peer": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "resume-peer") {
+    switch (variant) {
+      case "Peer": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "remove-peer") {
+    switch (variant) {
+      case "Empty": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "deliver-events") {
+    switch (variant) {
+      case "DeliveryReceipt": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "request-peering") {
+    switch (variant) {
+      case "PeeringReceipt": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "list-remote-events") {
+    switch (variant) {
+      case "RemoteEventList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "set-peer-rate-limit") {
+    switch (variant) {
+      case "Peer": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "list-origin-volume") {
+    switch (variant) {
+      case "OriginVolumeList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "FederationService" && op === "set-origin-rate-limit") {
+    switch (variant) {
+      case "OriginVolume": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "WebhookService" && op === "list-webhooks") {
+    switch (variant) {
+      case "WebhookList": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "WebhookService" && op === "create-webhook") {
+    switch (variant) {
+      case "WebhookWithSecret": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "WebhookService" && op === "update-webhook") {
+    switch (variant) {
+      case "Webhook": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  if (service === "WebhookService" && op === "delete-webhook") {
+    switch (variant) {
+      case "Empty": return payload;
+      case "ServiceError": { const tree = decode(payload); throw new ServiceErrorTypeRefusal(fromServiceErrorTypeCborValue(tree)); }
+      default: throw new Error(`invalid RPC reply variant ${variant}`);
+    }
+  }
+  return payload;
+}

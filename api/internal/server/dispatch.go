@@ -23,6 +23,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -61,40 +62,51 @@ type Services struct {
 type typedHandler func(ctx context.Context, payload []byte) transport.HandlerOutcome
 
 // routeFallible wires an op whose CSIL declaration carries a `/ ServiceError`
-// arm. An *AppError becomes that declared arm — a typed reply at transport
-// status 0. Any other error becomes a transport-level internal failure with
-// no detail, because nothing else is known to be safe to show a caller. See
-// the csilservices package comment for the whole contract.
+// arm. reply is the generated `csil.Encode<Service><Op>Reply`: it names the
+// reply variant from the schema, so no variant string is written here and
+// none can drift from the schema.
+//
+// An *AppError becomes that declared arm — a typed reply at transport status
+// 0. Any other error becomes a transport-level internal failure with no
+// detail, because nothing else is known to be safe to show a caller. A reply
+// that cannot be encoded (csil.RPCEncodeError) is also an internal failure.
+// See the csilservices package comment for the whole contract.
 func routeFallible[Req any, Resp any](
 	decode func([]byte) (Req, error),
 	fn func(context.Context, Req) (Resp, error),
-	encode func(Resp) []byte,
-	variant string,
+	reply func(Resp, error) (string, []byte, error),
 ) typedHandler {
 	return func(ctx context.Context, payload []byte) transport.HandlerOutcome {
 		req, err := decode(payload)
 		if err != nil {
-			return transport.Transport(transport.StatusMalformedEnvelope, "decode "+variant+" request: "+err.Error())
+			return transport.Transport(transport.StatusMalformedEnvelope, "decode request: "+err.Error())
 		}
 		resp, err := fn(ctx, req)
+		if appErr, ok := csilservices.AsAppError(err); ok {
+			err = &csil.RPCApplicationError[csil.ServiceError]{Value: appErr.ServiceError()}
+		}
+		variant, body, err := reply(resp, err)
 		if err != nil {
-			if appErr, ok := csilservices.AsAppError(err); ok {
-				return transport.Reply("ServiceError", csil.EncodeServiceError(appErr.ServiceError()))
+			var encErr *csil.RPCEncodeError
+			if errors.As(err, &encErr) {
+				log.WithError(err).Error("reply could not be encoded")
+			} else {
+				log.WithError(err).Error("unhandled error from service method")
 			}
-			log.WithError(err).WithField("variant", variant).Error("unhandled error from service method")
 			return transport.Transport(transport.StatusInternal, "internal error")
 		}
-		return transport.Reply(variant, encode(resp))
+		return transport.Reply(variant, body)
 	}
 }
 
 // routeInfallible wires an op with NO declared error arm: there is no typed
 // channel for a failure, so every error becomes a transport-level internal
-// failure regardless of its type.
+// failure regardless of its type. csilgen makes no reply encoder for such an
+// op, so the variant is written here.
 func routeInfallible[Req any, Resp any](
 	decode func([]byte) (Req, error),
 	fn func(context.Context, Req) (Resp, error),
-	encode func(Resp) []byte,
+	encode func(Resp) ([]byte, error),
 	variant string,
 ) typedHandler {
 	return func(ctx context.Context, payload []byte) transport.HandlerOutcome {
@@ -108,7 +120,12 @@ func routeInfallible[Req any, Resp any](
 				Error("unhandled error from service method (op has no declared error arm)")
 			return transport.Transport(transport.StatusInternal, "internal error")
 		}
-		return transport.Reply(variant, encode(resp))
+		body, err := encode(resp)
+		if err != nil {
+			log.WithError(err).WithField("variant", variant).Error("reply could not be encoded")
+			return transport.Transport(transport.StatusInternal, "internal error")
+		}
+		return transport.Reply(variant, body)
 	}
 }
 
@@ -117,79 +134,79 @@ func routeInfallible[Req any, Resp any](
 func buildRoutes(svcs Services) map[string]map[string]typedHandler {
 	routes := map[string]map[string]typedHandler{
 		"auth": {
-			"begin-login": routeFallible(csil.DecodeBeginLoginRequest, svcs.Auth.BeginLogin, csil.EncodeBeginLoginResponse, "BeginLoginResponse"),
+			"begin-login": routeFallible(csil.DecodeBeginLoginRequest, svcs.Auth.BeginLogin, csil.EncodeAuthBeginLoginReply),
 			"logout":      routeInfallible(csil.DecodeEmpty, svcs.Auth.Logout, csil.EncodeEmpty, "Empty"),
-			"whoami":      routeFallible(csil.DecodeEmpty, svcs.Auth.Whoami, csil.EncodeUserProfile, "UserProfile"),
+			"whoami":      routeFallible(csil.DecodeEmpty, svcs.Auth.Whoami, csil.EncodeAuthWhoamiReply),
 		},
 		"greeting": {
 			"list-greetings":  routeInfallible(csil.DecodeEmpty, svcs.Greeting.ListGreetings, csil.EncodeGreetingList, "GreetingList"),
-			"get-greeting":    routeFallible(csil.DecodeGetGreetingRequest, svcs.Greeting.GetGreeting, csil.EncodeGreeting, "Greeting"),
-			"create-greeting": routeFallible(csil.DecodeCreateGreetingRequest, svcs.Greeting.CreateGreeting, csil.EncodeGreeting, "Greeting"),
+			"get-greeting":    routeFallible(csil.DecodeGetGreetingRequest, svcs.Greeting.GetGreeting, csil.EncodeGreetingGetGreetingReply),
+			"create-greeting": routeFallible(csil.DecodeCreateGreetingRequest, svcs.Greeting.CreateGreeting, csil.EncodeGreetingCreateGreetingReply),
 		},
 		"organization": {
-			"list-organizations":         routeFallible(csil.DecodeListOrganizationsRequest, svcs.Organization.ListOrganizations, csil.EncodeOrganizationList, "OrganizationList"),
-			"get-organization":           routeFallible(csil.DecodeGetOrganizationRequest, svcs.Organization.GetOrganization, csil.EncodeOrganization, "Organization"),
-			"create-organization":        routeFallible(csil.DecodeCreateOrganizationRequest, svcs.Organization.CreateOrganization, csil.EncodeOrganization, "Organization"),
-			"update-organization":        routeFallible(csil.DecodeUpdateOrganizationRequest, svcs.Organization.UpdateOrganization, csil.EncodeOrganization, "Organization"),
-			"delete-organization":        routeFallible(csil.DecodeDeleteOrganizationRequest, svcs.Organization.DeleteOrganization, csil.EncodeEmpty, "Empty"),
-			"list-organization-members":  routeFallible(csil.DecodeListOrganizationMembersRequest, svcs.Organization.ListOrganizationMembers, csil.EncodeOrganizationMemberList, "OrganizationMemberList"),
-			"set-organization-member":    routeFallible(csil.DecodeSetOrganizationMemberRequest, svcs.Organization.SetOrganizationMember, csil.EncodeOrganizationMemberList, "OrganizationMemberList"),
-			"remove-organization-member": routeFallible(csil.DecodeRemoveOrganizationMemberRequest, svcs.Organization.RemoveOrganizationMember, csil.EncodeOrganizationMemberList, "OrganizationMemberList"),
+			"list-organizations":         routeFallible(csil.DecodeListOrganizationsRequest, svcs.Organization.ListOrganizations, csil.EncodeOrganizationListOrganizationsReply),
+			"get-organization":           routeFallible(csil.DecodeGetOrganizationRequest, svcs.Organization.GetOrganization, csil.EncodeOrganizationGetOrganizationReply),
+			"create-organization":        routeFallible(csil.DecodeCreateOrganizationRequest, svcs.Organization.CreateOrganization, csil.EncodeOrganizationCreateOrganizationReply),
+			"update-organization":        routeFallible(csil.DecodeUpdateOrganizationRequest, svcs.Organization.UpdateOrganization, csil.EncodeOrganizationUpdateOrganizationReply),
+			"delete-organization":        routeFallible(csil.DecodeDeleteOrganizationRequest, svcs.Organization.DeleteOrganization, csil.EncodeOrganizationDeleteOrganizationReply),
+			"list-organization-members":  routeFallible(csil.DecodeListOrganizationMembersRequest, svcs.Organization.ListOrganizationMembers, csil.EncodeOrganizationListOrganizationMembersReply),
+			"set-organization-member":    routeFallible(csil.DecodeSetOrganizationMemberRequest, svcs.Organization.SetOrganizationMember, csil.EncodeOrganizationSetOrganizationMemberReply),
+			"remove-organization-member": routeFallible(csil.DecodeRemoveOrganizationMemberRequest, svcs.Organization.RemoveOrganizationMember, csil.EncodeOrganizationRemoveOrganizationMemberReply),
 		},
 		"gathering": {
-			"list-gatherings":        routeFallible(csil.DecodeListGatheringsRequest, svcs.Gathering.ListGatherings, csil.EncodeGatheringList, "GatheringList"),
-			"get-gathering":          routeFallible(csil.DecodeGetGatheringRequest, svcs.Gathering.GetGathering, csil.EncodeGathering, "Gathering"),
-			"create-gathering":       routeFallible(csil.DecodeCreateGatheringRequest, svcs.Gathering.CreateGathering, csil.EncodeGathering, "Gathering"),
-			"update-gathering":       routeFallible(csil.DecodeUpdateGatheringRequest, svcs.Gathering.UpdateGathering, csil.EncodeGathering, "Gathering"),
-			"delete-gathering":       routeFallible(csil.DecodeDeleteGatheringRequest, svcs.Gathering.DeleteGathering, csil.EncodeEmpty, "Empty"),
-			"list-gathering-members": routeFallible(csil.DecodeListGatheringMembersRequest, svcs.Gathering.ListGatheringMembers, csil.EncodeGatheringMemberList, "GatheringMemberList"),
-			"join-gathering":         routeFallible(csil.DecodeJoinGatheringRequest, svcs.Gathering.JoinGathering, csil.EncodeGathering, "Gathering"),
-			"leave-gathering":        routeFallible(csil.DecodeLeaveGatheringRequest, svcs.Gathering.LeaveGathering, csil.EncodeGathering, "Gathering"),
-			"add-gathering-owner":    routeFallible(csil.DecodeAddGatheringOwnerRequest, svcs.Gathering.AddGatheringOwner, csil.EncodeGathering, "Gathering"),
-			"remove-gathering-owner": routeFallible(csil.DecodeRemoveGatheringOwnerRequest, svcs.Gathering.RemoveGatheringOwner, csil.EncodeGathering, "Gathering"),
+			"list-gatherings":        routeFallible(csil.DecodeListGatheringsRequest, svcs.Gathering.ListGatherings, csil.EncodeGatheringListGatheringsReply),
+			"get-gathering":          routeFallible(csil.DecodeGetGatheringRequest, svcs.Gathering.GetGathering, csil.EncodeGatheringGetGatheringReply),
+			"create-gathering":       routeFallible(csil.DecodeCreateGatheringRequest, svcs.Gathering.CreateGathering, csil.EncodeGatheringCreateGatheringReply),
+			"update-gathering":       routeFallible(csil.DecodeUpdateGatheringRequest, svcs.Gathering.UpdateGathering, csil.EncodeGatheringUpdateGatheringReply),
+			"delete-gathering":       routeFallible(csil.DecodeDeleteGatheringRequest, svcs.Gathering.DeleteGathering, csil.EncodeGatheringDeleteGatheringReply),
+			"list-gathering-members": routeFallible(csil.DecodeListGatheringMembersRequest, svcs.Gathering.ListGatheringMembers, csil.EncodeGatheringListGatheringMembersReply),
+			"join-gathering":         routeFallible(csil.DecodeJoinGatheringRequest, svcs.Gathering.JoinGathering, csil.EncodeGatheringJoinGatheringReply),
+			"leave-gathering":        routeFallible(csil.DecodeLeaveGatheringRequest, svcs.Gathering.LeaveGathering, csil.EncodeGatheringLeaveGatheringReply),
+			"add-gathering-owner":    routeFallible(csil.DecodeAddGatheringOwnerRequest, svcs.Gathering.AddGatheringOwner, csil.EncodeGatheringAddGatheringOwnerReply),
+			"remove-gathering-owner": routeFallible(csil.DecodeRemoveGatheringOwnerRequest, svcs.Gathering.RemoveGatheringOwner, csil.EncodeGatheringRemoveGatheringOwnerReply),
 			// Moving a gathering under an organization: offered and
 			// accepted by two sides, or adopted by an administrator.
-			"offer-gathering":            routeFallible(csil.DecodeOfferGatheringRequest, svcs.Gathering.OfferGathering, csil.EncodeGatheringOffer, "GatheringOffer"),
-			"list-gathering-offers":      routeFallible(csil.DecodeListGatheringOffersRequest, svcs.Gathering.ListGatheringOffers, csil.EncodeGatheringOfferList, "GatheringOfferList"),
-			"respond-to-gathering-offer": routeFallible(csil.DecodeRespondToGatheringOfferRequest, svcs.Gathering.RespondToGatheringOffer, csil.EncodeGatheringOffer, "GatheringOffer"),
-			"withdraw-gathering-offer":   routeFallible(csil.DecodeWithdrawGatheringOfferRequest, svcs.Gathering.WithdrawGatheringOffer, csil.EncodeEmpty, "Empty"),
-			"adopt-gathering":            routeFallible(csil.DecodeAdoptGatheringRequest, svcs.Gathering.AdoptGathering, csil.EncodeGathering, "Gathering"),
+			"offer-gathering":            routeFallible(csil.DecodeOfferGatheringRequest, svcs.Gathering.OfferGathering, csil.EncodeGatheringOfferGatheringReply),
+			"list-gathering-offers":      routeFallible(csil.DecodeListGatheringOffersRequest, svcs.Gathering.ListGatheringOffers, csil.EncodeGatheringListGatheringOffersReply),
+			"respond-to-gathering-offer": routeFallible(csil.DecodeRespondToGatheringOfferRequest, svcs.Gathering.RespondToGatheringOffer, csil.EncodeGatheringRespondToGatheringOfferReply),
+			"withdraw-gathering-offer":   routeFallible(csil.DecodeWithdrawGatheringOfferRequest, svcs.Gathering.WithdrawGatheringOffer, csil.EncodeGatheringWithdrawGatheringOfferReply),
+			"adopt-gathering":            routeFallible(csil.DecodeAdoptGatheringRequest, svcs.Gathering.AdoptGathering, csil.EncodeGatheringAdoptGatheringReply),
 		},
 		"webhook": {
-			"list-webhooks":  routeFallible(csil.DecodeListWebhooksRequest, svcs.Webhook.ListWebhooks, csil.EncodeWebhookList, "WebhookList"),
-			"create-webhook": routeFallible(csil.DecodeCreateWebhookRequest, svcs.Webhook.CreateWebhook, csil.EncodeWebhookWithSecret, "WebhookWithSecret"),
-			"update-webhook": routeFallible(csil.DecodeUpdateWebhookRequest, svcs.Webhook.UpdateWebhook, csil.EncodeWebhook, "Webhook"),
-			"delete-webhook": routeFallible(csil.DecodeDeleteWebhookRequest, svcs.Webhook.DeleteWebhook, csil.EncodeEmpty, "Empty"),
+			"list-webhooks":  routeFallible(csil.DecodeListWebhooksRequest, svcs.Webhook.ListWebhooks, csil.EncodeWebhookListWebhooksReply),
+			"create-webhook": routeFallible(csil.DecodeCreateWebhookRequest, svcs.Webhook.CreateWebhook, csil.EncodeWebhookCreateWebhookReply),
+			"update-webhook": routeFallible(csil.DecodeUpdateWebhookRequest, svcs.Webhook.UpdateWebhook, csil.EncodeWebhookUpdateWebhookReply),
+			"delete-webhook": routeFallible(csil.DecodeDeleteWebhookRequest, svcs.Webhook.DeleteWebhook, csil.EncodeWebhookDeleteWebhookReply),
 		},
 		"event": {
-			"list-events":         routeFallible(csil.DecodeListEventsRequest, svcs.Event.ListEvents, csil.EncodeEventList, "EventList"),
-			"get-event":           routeFallible(csil.DecodeGetEventRequest, svcs.Event.GetEvent, csil.EncodeEvent, "Event"),
-			"create-event":        routeFallible(csil.DecodeCreateEventRequest, svcs.Event.CreateEvent, csil.EncodeEvent, "Event"),
-			"update-event":        routeFallible(csil.DecodeUpdateEventRequest, svcs.Event.UpdateEvent, csil.EncodeEvent, "Event"),
-			"delete-event":        routeFallible(csil.DecodeDeleteEventRequest, svcs.Event.DeleteEvent, csil.EncodeEmpty, "Empty"),
-			"attend-event":        routeFallible(csil.DecodeAttendEventRequest, svcs.Event.AttendEvent, csil.EncodeEvent, "Event"),
-			"unattend-event":      routeFallible(csil.DecodeUnattendEventRequest, svcs.Event.UnattendEvent, csil.EncodeEvent, "Event"),
-			"list-attendees":      routeFallible(csil.DecodeListAttendeesRequest, svcs.Event.ListAttendees, csil.EncodeAttendeeList, "AttendeeList"),
-			"list-event-series":   routeFallible(csil.DecodeListEventSeriesRequest, svcs.Event.ListEventSeries, csil.EncodeEventSeriesList, "EventSeriesList"),
-			"get-event-series":    routeFallible(csil.DecodeGetEventSeriesRequest, svcs.Event.GetEventSeries, csil.EncodeEventSeries, "EventSeries"),
-			"create-event-series": routeFallible(csil.DecodeCreateEventSeriesRequest, svcs.Event.CreateEventSeries, csil.EncodeEventSeries, "EventSeries"),
-			"update-event-series": routeFallible(csil.DecodeUpdateEventSeriesRequest, svcs.Event.UpdateEventSeries, csil.EncodeEventSeries, "EventSeries"),
-			"delete-event-series": routeFallible(csil.DecodeDeleteEventSeriesRequest, svcs.Event.DeleteEventSeries, csil.EncodeEmpty, "Empty"),
-			"expand-event-series": routeFallible(csil.DecodeExpandEventSeriesRequest, svcs.Event.ExpandEventSeries, csil.EncodeEventList, "EventList"),
-			"set-event-role":      routeFallible(csil.DecodeSetEventRoleRequest, svcs.Event.SetEventRole, csil.EncodeEventRoleList, "EventRoleList"),
-			"remove-event-role":   routeFallible(csil.DecodeRemoveEventRoleRequest, svcs.Event.RemoveEventRole, csil.EncodeEventRoleList, "EventRoleList"),
-			"list-event-roles":    routeFallible(csil.DecodeListEventRolesRequest, svcs.Event.ListEventRoles, csil.EncodeEventRoleList, "EventRoleList"),
+			"list-events":         routeFallible(csil.DecodeListEventsRequest, svcs.Event.ListEvents, csil.EncodeEventListEventsReply),
+			"get-event":           routeFallible(csil.DecodeGetEventRequest, svcs.Event.GetEvent, csil.EncodeEventGetEventReply),
+			"create-event":        routeFallible(csil.DecodeCreateEventRequest, svcs.Event.CreateEvent, csil.EncodeEventCreateEventReply),
+			"update-event":        routeFallible(csil.DecodeUpdateEventRequest, svcs.Event.UpdateEvent, csil.EncodeEventUpdateEventReply),
+			"delete-event":        routeFallible(csil.DecodeDeleteEventRequest, svcs.Event.DeleteEvent, csil.EncodeEventDeleteEventReply),
+			"attend-event":        routeFallible(csil.DecodeAttendEventRequest, svcs.Event.AttendEvent, csil.EncodeEventAttendEventReply),
+			"unattend-event":      routeFallible(csil.DecodeUnattendEventRequest, svcs.Event.UnattendEvent, csil.EncodeEventUnattendEventReply),
+			"list-attendees":      routeFallible(csil.DecodeListAttendeesRequest, svcs.Event.ListAttendees, csil.EncodeEventListAttendeesReply),
+			"list-event-series":   routeFallible(csil.DecodeListEventSeriesRequest, svcs.Event.ListEventSeries, csil.EncodeEventListEventSeriesReply),
+			"get-event-series":    routeFallible(csil.DecodeGetEventSeriesRequest, svcs.Event.GetEventSeries, csil.EncodeEventGetEventSeriesReply),
+			"create-event-series": routeFallible(csil.DecodeCreateEventSeriesRequest, svcs.Event.CreateEventSeries, csil.EncodeEventCreateEventSeriesReply),
+			"update-event-series": routeFallible(csil.DecodeUpdateEventSeriesRequest, svcs.Event.UpdateEventSeries, csil.EncodeEventUpdateEventSeriesReply),
+			"delete-event-series": routeFallible(csil.DecodeDeleteEventSeriesRequest, svcs.Event.DeleteEventSeries, csil.EncodeEventDeleteEventSeriesReply),
+			"expand-event-series": routeFallible(csil.DecodeExpandEventSeriesRequest, svcs.Event.ExpandEventSeries, csil.EncodeEventExpandEventSeriesReply),
+			"set-event-role":      routeFallible(csil.DecodeSetEventRoleRequest, svcs.Event.SetEventRole, csil.EncodeEventSetEventRoleReply),
+			"remove-event-role":   routeFallible(csil.DecodeRemoveEventRoleRequest, svcs.Event.RemoveEventRole, csil.EncodeEventRemoveEventRoleReply),
+			"list-event-roles":    routeFallible(csil.DecodeListEventRolesRequest, svcs.Event.ListEventRoles, csil.EncodeEventListEventRolesReply),
 		},
 		"search": {
-			"search": routeFallible(csil.DecodeSearchRequest, svcs.Search.Search, csil.EncodeSearchResults, "SearchResults"),
+			"search": routeFallible(csil.DecodeSearchRequest, svcs.Search.Search, csil.EncodeSearchSearchReply),
 		},
 		"admin": {
-			"list-admins":              routeFallible(csil.DecodeEmpty, svcs.Admin.ListAdmins, csil.EncodeAdminList, "AdminList"),
-			"set-admin":                routeFallible(csil.DecodeSetAdminRequest, svcs.Admin.SetAdmin, csil.EncodeAdminList, "AdminList"),
-			"find-user":                routeFallible(csil.DecodeFindUserRequest, svcs.Admin.FindUser, csil.EncodeUserRef, "UserRef"),
-			"search-users":             routeFallible(csil.DecodeSearchUsersRequest, svcs.Admin.SearchUsers, csil.EncodeUserRefList, "UserRefList"),
-			"get-instance-settings":    routeFallible(csil.DecodeEmpty, svcs.Admin.GetInstanceSettings, csil.EncodeInstanceSettings, "InstanceSettings"),
-			"update-instance-settings": routeFallible(csil.DecodeUpdateInstanceSettingsRequest, svcs.Admin.UpdateInstanceSettings, csil.EncodeInstanceSettings, "InstanceSettings"),
+			"list-admins":              routeFallible(csil.DecodeEmpty, svcs.Admin.ListAdmins, csil.EncodeAdminListAdminsReply),
+			"set-admin":                routeFallible(csil.DecodeSetAdminRequest, svcs.Admin.SetAdmin, csil.EncodeAdminSetAdminReply),
+			"find-user":                routeFallible(csil.DecodeFindUserRequest, svcs.Admin.FindUser, csil.EncodeAdminFindUserReply),
+			"search-users":             routeFallible(csil.DecodeSearchUsersRequest, svcs.Admin.SearchUsers, csil.EncodeAdminSearchUsersReply),
+			"get-instance-settings":    routeFallible(csil.DecodeEmpty, svcs.Admin.GetInstanceSettings, csil.EncodeAdminGetInstanceSettingsReply),
+			"update-instance-settings": routeFallible(csil.DecodeUpdateInstanceSettingsRequest, svcs.Admin.UpdateInstanceSettings, csil.EncodeAdminUpdateInstanceSettingsReply),
 		},
 	}
 
@@ -197,18 +214,18 @@ func buildRoutes(svcs Services) map[string]map[string]typedHandler {
 	// an account of its own to sign with.
 	if svcs.Federation != nil {
 		routes["federation"] = map[string]typedHandler{
-			"federation-identity":   routeFallible(csil.DecodeEmpty, svcs.Federation.FederationIdentity, csil.EncodeFederationIdentity, "FederationIdentity"),
-			"list-peers":            routeFallible(csil.DecodeListPeersRequest, svcs.Federation.ListPeers, csil.EncodePeerList, "PeerList"),
-			"add-peer":              routeFallible(csil.DecodeAddPeerRequest, svcs.Federation.AddPeer, csil.EncodePeer, "Peer"),
-			"set-peer-status":       routeFallible(csil.DecodeSetPeerStatusRequest, svcs.Federation.SetPeerStatus, csil.EncodePeer, "Peer"),
-			"resume-peer":           routeFallible(csil.DecodeResumePeerRequest, svcs.Federation.ResumePeer, csil.EncodePeer, "Peer"),
-			"remove-peer":           routeFallible(csil.DecodeRemovePeerRequest, svcs.Federation.RemovePeer, csil.EncodeEmpty, "Empty"),
-			"deliver-events":        routeFallible(csil.DecodeSignedDelivery, svcs.Federation.DeliverEvents, csil.EncodeDeliveryReceipt, "DeliveryReceipt"),
-			"request-peering":       routeFallible(csil.DecodeSignedPeeringRequest, svcs.Federation.RequestPeering, csil.EncodePeeringReceipt, "PeeringReceipt"),
-			"list-remote-events":    routeFallible(csil.DecodeListRemoteEventsRequest, svcs.Federation.ListRemoteEvents, csil.EncodeRemoteEventList, "RemoteEventList"),
-			"set-peer-rate-limit":   routeFallible(csil.DecodeSetPeerRateLimitRequest, svcs.Federation.SetPeerRateLimit, csil.EncodePeer, "Peer"),
-			"list-origin-volume":    routeFallible(csil.DecodeListOriginVolumeRequest, svcs.Federation.ListOriginVolume, csil.EncodeOriginVolumeList, "OriginVolumeList"),
-			"set-origin-rate-limit": routeFallible(csil.DecodeSetOriginRateLimitRequest, svcs.Federation.SetOriginRateLimit, csil.EncodeOriginVolume, "OriginVolume"),
+			"federation-identity":   routeFallible(csil.DecodeEmpty, svcs.Federation.FederationIdentity, csil.EncodeFederationFederationIdentityReply),
+			"list-peers":            routeFallible(csil.DecodeListPeersRequest, svcs.Federation.ListPeers, csil.EncodeFederationListPeersReply),
+			"add-peer":              routeFallible(csil.DecodeAddPeerRequest, svcs.Federation.AddPeer, csil.EncodeFederationAddPeerReply),
+			"set-peer-status":       routeFallible(csil.DecodeSetPeerStatusRequest, svcs.Federation.SetPeerStatus, csil.EncodeFederationSetPeerStatusReply),
+			"resume-peer":           routeFallible(csil.DecodeResumePeerRequest, svcs.Federation.ResumePeer, csil.EncodeFederationResumePeerReply),
+			"remove-peer":           routeFallible(csil.DecodeRemovePeerRequest, svcs.Federation.RemovePeer, csil.EncodeFederationRemovePeerReply),
+			"deliver-events":        routeFallible(csil.DecodeSignedDelivery, svcs.Federation.DeliverEvents, csil.EncodeFederationDeliverEventsReply),
+			"request-peering":       routeFallible(csil.DecodeSignedPeeringRequest, svcs.Federation.RequestPeering, csil.EncodeFederationRequestPeeringReply),
+			"list-remote-events":    routeFallible(csil.DecodeListRemoteEventsRequest, svcs.Federation.ListRemoteEvents, csil.EncodeFederationListRemoteEventsReply),
+			"set-peer-rate-limit":   routeFallible(csil.DecodeSetPeerRateLimitRequest, svcs.Federation.SetPeerRateLimit, csil.EncodeFederationSetPeerRateLimitReply),
+			"list-origin-volume":    routeFallible(csil.DecodeListOriginVolumeRequest, svcs.Federation.ListOriginVolume, csil.EncodeFederationListOriginVolumeReply),
+			"set-origin-rate-limit": routeFallible(csil.DecodeSetOriginRateLimitRequest, svcs.Federation.SetOriginRateLimit, csil.EncodeFederationSetOriginRateLimitReply),
 		}
 	}
 
@@ -217,7 +234,7 @@ func buildRoutes(svcs Services) map[string]map[string]typedHandler {
 	// have, which is the point.
 	if svcs.DevAuth != nil {
 		routes["devauth"] = map[string]typedHandler{
-			"dev-login": routeFallible(csil.DecodeDevLoginRequest, svcs.DevAuth.DevLogin, csil.EncodeUserProfile, "UserProfile"),
+			"dev-login": routeFallible(csil.DecodeDevLoginRequest, svcs.DevAuth.DevLogin, csil.EncodeDevAuthDevLoginReply),
 		}
 	}
 	return routes
