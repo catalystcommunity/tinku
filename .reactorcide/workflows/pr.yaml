@@ -7,6 +7,11 @@ on:
     - pull_request_updated
   branches:
     - main
+# Reactorcide posts one "Reactorcide Checks" status for each event and no
+# longer posts a status named after the workflow. The main ruleset requires
+# "Tinku PR", so this workflow posts it.
+status:
+  context: Tinku PR
 jobs:
   # Cheapest first and on its own: a branch whose commits are wrong should
   # not spend a Postgres cluster finding that out.
